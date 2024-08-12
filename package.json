@@ -1,0 +1,47 @@
+{
+  "name": "forerunner",
+  "version": "0.1.0",
+  "description": "softkave internal application runner",
+  "type": "module",
+  "main": "build/src/index.js",
+  "types": "build/src/index.d.ts",
+  "files": [
+    "build/src"
+  ],
+  "license": "Apache-2.0",
+  "keywords": [],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "gts lint",
+    "clean": "gts clean",
+    "compile": "tsc",
+    "fix": "gts fix",
+    "pretest": "npm run compile",
+    "posttest": "npm run lint"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/fs-extra": "^11.0.4",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "22.2.0",
+    "gts": "^5.3.0",
+    "typescript": "~5.4.3"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^8.4.1",
+    "execa": "^9.3.0",
+    "express": "^4.19.2",
+    "fimidara": "file:.yalc/fimidara",
+    "fs-extra": "^11.2.0",
+    "lodash-es": "^4.17.21",
+    "node-fetch": "^3.3.2",
+    "node-ssh": "^13.1.0",
+    "softkave-js-utils": "^0.7.0",
+    "type-fest": "^4.15.0",
+    "vitest": "^2.0.5",
+    "zx": "^8.1.4"
+  }
+}
