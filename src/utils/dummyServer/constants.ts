@@ -1,10 +1,10 @@
 export const kDummyServerConstants = {
   paths: {
-    echo: 'echo',
-    pid: 'pid',
-    exit: 'exit',
-    fail: 'fail',
-    log: 'log',
+    echo: '/echo',
+    pid: '/pid',
+    exit: '/exit',
+    fail: '/fail',
+    log: '/log',
   },
   port: {
     min: 1,

@@ -131,3 +131,6 @@ local-*.json
 
 # certificates
 certs/
+
+# local shananigans
+testdir/

@@ -1,18 +1,17 @@
 import {faker} from '@faker-js/faker';
-import {ensureDir, readFile, remove, writeFile} from 'fs-extra';
+import {ensureDir, readFile, rm, writeFile} from 'fs-extra';
 import path from 'path';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {cleanFile} from '../cleanFile.js';
 
-const kTestLocalFsDir = '.' + path.sep + 'testdir/addIndexFile';
-const testDir = path.join(kTestLocalFsDir + '/' + faker.number.int({min: 100}));
+const testDir = '.' + path.sep + 'testdir/cleanFile';
 
 beforeAll(async () => {
   await ensureDir(testDir);
 });
 
 afterAll(async () => {
-  await remove(testDir);
+  await rm(testDir, {recursive: true, force: true});
 });
 
 describe('cleanFile', () => {

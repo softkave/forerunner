@@ -1,25 +1,26 @@
 import {faker} from '@faker-js/faker';
-import {ensureDir, readFile, remove} from 'fs-extra';
+import {ensureDir, ensureFile} from 'fs-extra';
+import {readFile, writeFile} from 'fs/promises';
 import path from 'path';
+import {waitTimeout} from 'softkave-js-utils';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {kill} from 'zx';
 import {getDummyServerCmd} from '../../utils/dummyServer/run.js';
 import {DummyServerSdk} from '../../utils/dummyServer/sdk.js';
-import {startInstance} from '../startInstance.js';
+import {startProcess} from '../startProcess.js';
 
-const kTestLocalFsDir = '.' + path.sep + 'testdir/startInstance';
-const testDir = path.join(kTestLocalFsDir + '/' + faker.number.int({min: 100}));
+const testDir = '.' + path.sep + 'testdir/startProcess';
 
 beforeAll(async () => {
   await ensureDir(testDir);
 });
 
 afterAll(async () => {
-  await remove(testDir);
+  // await remove(testDir);
 });
 
-describe('startInstance', () => {
-  test('instance started', async () => {
+describe('startProcess', () => {
+  test('instance started', {timeout: 30_000}, async () => {
     const runName = faker.lorem.word();
     const instanceName = faker.lorem.word();
     const logsFolderpath = path.join(
@@ -29,13 +30,25 @@ describe('startInstance', () => {
     const {cmd, port} = getDummyServerCmd();
     const sdk = new DummyServerSdk({port});
 
-    const {pid, logsFilepath} = await startInstance(
-      {name: instanceName, startCmd: cmd},
-      {runName, logsFolderpath, cwd: process.cwd()}
+    const cmdFilepath = path.join(
+      testDir,
+      faker.number.int({min: 10_000}).toString()
     );
+    await ensureFile(cmdFilepath);
+    await writeFile(cmdFilepath, cmd);
+
+    const {pid, logsFilepath} = await startProcess({
+      name: instanceName,
+      startCmdFilepath: cmdFilepath,
+      runName,
+      logsFolderpath,
+      cwd: process.cwd(),
+    });
     const pidNo = Number(pid);
 
     try {
+      await waitTimeout(1_000);
+
       const echoMsg = 'hello, world!';
       const echoResponse = await sdk.postEcho({message: echoMsg});
       expect(echoMsg).toBe(echoResponse);
@@ -48,7 +61,7 @@ describe('startInstance', () => {
         `"${logs}" does not contain "${logMsg}"`
       ).toBeTruthy();
     } finally {
-      kill(pidNo);
+      await kill(pidNo);
     }
   });
 });

@@ -2,11 +2,10 @@ import {faker} from '@faker-js/faker';
 import {ensureDir, remove, writeFile} from 'fs-extra';
 import path from 'path';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {getProcessIds} from '../getProcessIds.js';
+import {getPIDs} from '../getPIDs.js';
 import {ProcessIdFileParsed} from '../types.js';
 
-const kTestLocalFsDir = '.' + path.sep + 'testdir/getProcessIds';
-const testDir = path.join(kTestLocalFsDir + '/' + faker.number.int({min: 100}));
+const testDir = '.' + path.sep + 'testdir/getPIDs';
 
 beforeAll(async () => {
   await ensureDir(testDir);
@@ -16,7 +15,7 @@ afterAll(async () => {
   await remove(testDir);
 });
 
-describe('getProcessIds', () => {
+describe('getPIDs', () => {
   test('returns process ids', async () => {
     const filepath = path.join(
       testDir,
@@ -28,8 +27,8 @@ describe('getProcessIds', () => {
     ];
     await writeFile(filepath, JSON.stringify(pidList), 'utf-8');
 
-    const {pids, pidsByName} = await getProcessIds({
-      processIdFilepath: filepath,
+    const {pids, pidsByName} = await getPIDs({
+      pidsFilepath: filepath,
     });
 
     expect(pids).toEqual(expect.arrayContaining(pidList));

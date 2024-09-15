@@ -1,47 +1,67 @@
 {
-  "name": "forerunner",
-  "version": "0.1.0",
-  "description": "softkave internal application runner",
+  "name": "softkave-forerunner",
+  "version": "0.1.1",
+  "description": "softkave internal application runner & helpers",
+  "author": {
+    "email": "ywordk@gmail.com",
+    "name": "softkave"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/softkave/forerunner/tree/main/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/softkave/forerunner.git"
+  },
+  "bugs": {
+    "url": "https://github.com/softkave/forerunner/issues"
+  },
+  "keywords": [],
   "type": "module",
   "main": "build/src/index.js",
   "types": "build/src/index.d.ts",
   "files": [
-    "build/src"
+    "build/src/{*.js,**/*.js}",
+    "build/src/{*.js.map,**/*.js.map}",
+    "build/src/{*.d.ts,**/*.d.ts}",
+    "!build/src/**/__tests__/**/*",
+    "!build/src/**/testutils/**/*",
+    "!build/src/private*"
   ],
-  "license": "Apache-2.0",
-  "keywords": [],
+  "bin": "build/cmd/cmd.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
     "lint": "gts lint",
     "clean": "gts clean",
-    "compile": "tsc",
+    "compile": "npm run clean && tsc",
     "fix": "gts fix",
-    "pretest": "npm run compile",
-    "posttest": "npm run lint"
+    "posttest": "npm run lint",
+    "publish-to-npm": "npm run compile && npm publish",
+    "publish-to-local": "npm run compile && yalc publish",
+    "show-packlist": "npm run compile && npm pack --dry-run"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
+    "@faker-js/faker": "^8.4.1",
     "@types/express": "^4.17.21",
     "@types/fs-extra": "^11.0.4",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "22.2.0",
     "gts": "^5.3.0",
-    "typescript": "~5.4.3"
+    "typescript": "~5.4.3",
+    "vitest": "^2.0.5"
   },
   "dependencies": {
-    "@faker-js/faker": "^8.4.1",
-    "execa": "^9.3.0",
+    "commander": "^12.1.0",
     "express": "^4.19.2",
-    "fimidara": "file:.yalc/fimidara",
+    "fimidara": "^1.24.3",
     "fs-extra": "^11.2.0",
     "lodash-es": "^4.17.21",
     "node-fetch": "^3.3.2",
-    "node-ssh": "^13.1.0",
     "softkave-js-utils": "^0.7.0",
     "type-fest": "^4.15.0",
-    "vitest": "^2.0.5",
+    "zod": "^3.23.8",
     "zx": "^8.1.4"
   }
 }

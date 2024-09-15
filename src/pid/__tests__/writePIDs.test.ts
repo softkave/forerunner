@@ -3,10 +3,9 @@ import {ensureDir, readJson, remove} from 'fs-extra';
 import path from 'path';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ProcessIdFileParsed} from '../types.js';
-import {writeProcessIds} from '../writeProcessIds.js';
+import {writePIDs} from '../writePIDs.js';
 
-const kTestLocalFsDir = '.' + path.sep + 'testdir/writeProcessIds';
-const testDir = path.join(kTestLocalFsDir + '/' + faker.number.int({min: 100}));
+const testDir = '.' + path.sep + 'testdir/writePIDs';
 
 beforeAll(async () => {
   await ensureDir(testDir);
@@ -16,7 +15,7 @@ afterAll(async () => {
   await remove(testDir);
 });
 
-describe('writeProcessIds', () => {
+describe('writePIDs', () => {
   test('writes process ids', async () => {
     const filepath = path.join(
       testDir,
@@ -27,8 +26,8 @@ describe('writeProcessIds', () => {
       {name: faker.lorem.word(), pid: faker.number.int().toString()},
     ];
 
-    await writeProcessIds(pidList, {
-      processIdFilepath: filepath,
+    await writePIDs(pidList, {
+      pidsFilepath: filepath,
     });
 
     const parsedPidFile = await readJson(filepath);

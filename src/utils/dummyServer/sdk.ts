@@ -27,30 +27,34 @@ export class DummyServerSdk {
     this.port = props.port;
   }
 
-  async postEcho(props: {message?: string}) {
+  async postEcho(props: {message: string}) {
     const {message} = props;
     const result = await fetch(
-      `http://localhost:${this.port}/${kDummyServerConstants.paths.echo}`,
-      {method: 'post', body: message}
+      `http://localhost:${this.port}${kDummyServerConstants.paths.echo}`,
+      {
+        method: 'post',
+        body: JSON.stringify({message}),
+        headers: {'Content-Type': 'application/json'},
+      }
     );
 
     handleResponseFail(result, 'postEcho error');
-    return await result.text();
+    return ((await result.json()) as {message?: string})?.message;
   }
 
   async getPid() {
     const result = await fetch(
-      `http://localhost:${this.port}/${kDummyServerConstants.paths.pid}`,
+      `http://localhost:${this.port}${kDummyServerConstants.paths.pid}`,
       {method: 'get'}
     );
 
     handleResponseFail(result, 'getPid error');
-    return await result.text();
+    return (await result.json()) as {pid: string};
   }
 
   async postExit() {
     const result = await fetch(
-      `http://localhost:${this.port}/${kDummyServerConstants.paths.exit}`,
+      `http://localhost:${this.port}${kDummyServerConstants.paths.exit}`,
       {method: 'post'}
     );
 
@@ -59,18 +63,22 @@ export class DummyServerSdk {
 
   async postFail() {
     const result = await fetch(
-      `http://localhost:${this.port}/${kDummyServerConstants.paths.fail}`,
+      `http://localhost:${this.port}${kDummyServerConstants.paths.fail}`,
       {method: 'post'}
     );
 
     handleResponseFail(result, 'postFail error');
   }
 
-  async postLog(props: {message?: string}) {
+  async postLog(props: {message: string}) {
     const {message} = props;
     const result = await fetch(
-      `http://localhost:${this.port}/${kDummyServerConstants.paths.log}`,
-      {method: 'post', body: message}
+      `http://localhost:${this.port}${kDummyServerConstants.paths.log}`,
+      {
+        method: 'post',
+        body: JSON.stringify({message}),
+        headers: {'Content-Type': 'application/json'},
+      }
     );
 
     handleResponseFail(result, 'postLog error');

@@ -1,9 +1,10 @@
-import {IRunnerOpts} from '../runner/types.js';
-import {runExeca} from './runExeca.js';
+import {writeFile} from 'fs/promises';
+import path from 'path';
+import {IRunnerOpts} from '../run/types.js';
 
 export async function cleanFile(
   filepath: string,
   opts: Pick<IRunnerOpts, 'cwd'>
 ) {
-  await runExeca(`cat /dev/null > ${filepath}`, {cwd: opts.cwd});
+  await writeFile(path.join(opts.cwd || '', filepath), '');
 }

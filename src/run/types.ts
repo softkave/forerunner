@@ -1,17 +1,14 @@
-import {ValueOf} from 'type-fest';
+import {AnyObject} from 'softkave-js-utils';
 
 export interface IInstanceOpts {
   name: string;
-  prestartCmd?: string;
-  startCmd: string;
+  startCmdFilepath: string;
+  pidsFilepath?: string;
+  runName: string;
+  cwd: string;
+  logsFolderpath: string;
+  env?: AnyObject;
 }
-
-export const kFileEntryType = {
-  file: 'file',
-  folder: 'folder',
-} as const;
-
-export type FileEntryType = ValueOf<typeof kFileEntryType>;
 
 /** currently supports only fimidara */
 export interface IFilesOpts {
@@ -21,9 +18,6 @@ export interface IFilesOpts {
    * relative without workspace rootname */
   from: string;
   to: string;
-  /** if not provided and there's a file and folder with the same `from` name,
-   * it defaults to `file` */
-  type?: FileEntryType;
 }
 
 export interface IRunnerOpts {
@@ -31,8 +25,7 @@ export interface IRunnerOpts {
   cwd: string;
   logsFolderpath: string;
   logsFilepath?: string;
-  prestartCmd?: string;
-  processIdFilepath: string;
+  pidsFilepath: string;
   instances: Array<IInstanceOpts>;
 
   filesBasepath?: string;
@@ -41,10 +34,3 @@ export interface IRunnerOpts {
   fimidaraToken?: string;
   fimidaraBasepath?: string;
 }
-
-export interface IProcessIdItem {
-  name: string;
-  pid: string;
-}
-
-export type ProcessIdFileParsed = IProcessIdItem[];

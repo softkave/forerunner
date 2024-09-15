@@ -8,11 +8,11 @@ const handleEchoRequest: RequestHandler = (req, res) => {
 };
 
 const handleGetProcessIdRequest: RequestHandler = (req, res) => {
-  res.status(200).send(process.pid);
+  res.status(200).send({pid: process.pid});
 };
 
 const handleExitServerRequest: RequestHandler = (req, res) => {
-  res.status(200).send('');
+  res.status(200).end();
   setTimeout(() => {
     // eslint-disable-next-line no-process-exit
     process.exit();
@@ -20,7 +20,7 @@ const handleExitServerRequest: RequestHandler = (req, res) => {
 };
 
 const handleFailServerRequest: RequestHandler = (req, res) => {
-  res.status(200).send('');
+  res.status(200).end();
   setTimeout(() => {
     throw new Error('fail server!');
   });
@@ -29,22 +29,28 @@ const handleFailServerRequest: RequestHandler = (req, res) => {
 const handleLogServerRequest: RequestHandler = (req, res) => {
   const strBody = isObject(req.body) ? JSON.stringify(req.body) : req.body;
   console.log(strBody);
-  res.status(200).send('');
+  res.status(200).end();
 };
 
-export function newDummyServer(props: {port: number}) {
+export async function newDummyServer(props: {port: number}) {
   const {port} = props;
-  return new Promise<Express.Application>(resolve => {
+  await new Promise<Express.Application>(resolve => {
     const app = express();
-    const httpServer = http.createServer(app);
-    httpServer.listen(port, () => {
-      resolve(app);
-    });
+
+    app.use(express.json());
 
     app.post(kDummyServerConstants.paths.echo, handleEchoRequest);
     app.get(kDummyServerConstants.paths.pid, handleGetProcessIdRequest);
     app.post(kDummyServerConstants.paths.exit, handleExitServerRequest);
     app.post(kDummyServerConstants.paths.fail, handleFailServerRequest);
     app.post(kDummyServerConstants.paths.log, handleLogServerRequest);
+
+    http.createServer(app).listen(port, () => {
+      resolve(app);
+    });
   });
 }
+
+// process.on('exit', () => {
+//   console.log('exiting');
+// });
