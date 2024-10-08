@@ -1,6 +1,6 @@
 {
   "name": "softkave-forerunner",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "softkave internal application runner & helpers",
   "author": {
     "email": "ywordk@gmail.com",
@@ -55,7 +55,7 @@
   "dependencies": {
     "commander": "^12.1.0",
     "express": "^4.19.2",
-    "fimidara": "^1.24.4",
+    "fimidara": "^1.25.0",
     "fs-extra": "^11.2.0",
     "lodash-es": "^4.17.21",
     "node-fetch": "^3.3.2",
