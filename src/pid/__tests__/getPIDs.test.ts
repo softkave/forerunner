@@ -2,7 +2,7 @@ import {faker} from '@faker-js/faker';
 import {ensureDir, remove, writeFile} from 'fs-extra';
 import path from 'path';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {getPIDs} from '../getPIDs.js';
+import {getPIDsFromFile} from '../getPIDs.js';
 import {ProcessIdFileParsed} from '../types.js';
 
 const testDir = '.' + path.sep + 'testdir/getPIDs';
@@ -27,7 +27,7 @@ describe('getPIDs', () => {
     ];
     await writeFile(filepath, JSON.stringify(pidList), 'utf-8');
 
-    const {pids, pidsByName} = await getPIDs({
+    const {pids, pidsByName} = await getPIDsFromFile({
       pidsFilepath: filepath,
     });
 

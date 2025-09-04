@@ -134,3 +134,5 @@ certs/
 
 # local shananigans
 testdir/
+
+*.DS_Store

@@ -11,7 +11,7 @@ export class DummyServerRequestError extends Error {
   }
 }
 
-function handleResponseFail(
+function handleFailedResponse(
   response: Response,
   message = `${response.url} failed`
 ) {
@@ -38,7 +38,7 @@ export class DummyServerSdk {
       }
     );
 
-    handleResponseFail(result, 'postEcho error');
+    handleFailedResponse(result, 'postEcho error');
     return ((await result.json()) as {message?: string})?.message;
   }
 
@@ -48,7 +48,7 @@ export class DummyServerSdk {
       {method: 'get'}
     );
 
-    handleResponseFail(result, 'getPid error');
+    handleFailedResponse(result, 'getPid error');
     return (await result.json()) as {pid: string};
   }
 
@@ -58,7 +58,7 @@ export class DummyServerSdk {
       {method: 'post'}
     );
 
-    handleResponseFail(result, 'postExit error');
+    handleFailedResponse(result, 'postExit error');
   }
 
   async postFail() {
@@ -67,7 +67,7 @@ export class DummyServerSdk {
       {method: 'post'}
     );
 
-    handleResponseFail(result, 'postFail error');
+    handleFailedResponse(result, 'postFail error');
   }
 
   async postLog(props: {message: string}) {
@@ -81,6 +81,6 @@ export class DummyServerSdk {
       }
     );
 
-    handleResponseFail(result, 'postLog error');
+    handleFailedResponse(result, 'postLog error');
   }
 }

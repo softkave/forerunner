@@ -2,13 +2,13 @@ import {z} from 'zod';
 import {endPIDs} from '../pid/endPIDs.js';
 import {IFimidaraCmdDef} from './types.js';
 
-export const zForerunnerStopProcessOpts = z.object({
+export const ForerunnerStopProcessOptsSchema = z.object({
   pidsFilepath: z.string(),
   cwd: z.string(),
 });
 
 export type IForerunnerStopProcessOpts = z.infer<
-  typeof zForerunnerStopProcessOpts
+  typeof ForerunnerStopProcessOptsSchema
 >;
 
 export async function forerunnerStopProcess(opts: IForerunnerStopProcessOpts) {

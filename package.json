@@ -1,6 +1,6 @@
 {
   "name": "softkave-forerunner",
-  "version": "0.1.2",
+  "version": "0.3.0",
   "description": "softkave internal application runner & helpers",
   "author": {
     "email": "ywordk@gmail.com",
@@ -31,13 +31,13 @@
   "scripts": {
     "test": "vitest",
     "lint": "gts lint",
-    "clean": "gts clean",
+    "clean": "gts clean && rm -f tsconfig.tsbuildinfo",
     "compile": "npm run clean && tsc",
     "fix": "gts fix",
     "posttest": "npm run lint",
-    "publish-to-npm": "npm run compile && npm publish",
-    "publish-to-local": "npm run compile && yalc publish",
-    "show-packlist": "npm run compile && npm pack --dry-run"
+    "publish:npm": "npm run clean && tsc && npm publish",
+    "publish:yalc": "npm run clean && tsc && yalc publish",
+    "show:packlist": "npm run clean && tsc && npm pack --dry-run"
   },
   "engines": {
     "node": ">=22"
@@ -48,14 +48,15 @@
     "@types/fs-extra": "^11.0.4",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "22.2.0",
-    "gts": "^5.3.0",
+    "gts": "^6.0.2",
     "typescript": "~5.4.3",
-    "vitest": "^2.0.5"
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "commander": "^12.1.0",
     "express": "^4.19.2",
     "fimidara": "^1.25.0",
+    "find-process": "^2.0.0",
     "fs-extra": "^11.2.0",
     "lodash-es": "^4.17.21",
     "node-fetch": "^3.3.2",

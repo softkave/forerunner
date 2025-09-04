@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {startProcess} from '../run/startProcess.js';
 import {IFimidaraCmdDef} from './types.js';
 
-export const zForerunnerStartProcessOpts = z.object({
+export const ForerunnerStartProcessOptsSchema = z.object({
   startCmdFilepath: z.string(),
   name: z.string(),
   pidsFilepath: z.string(),
@@ -12,7 +12,7 @@ export const zForerunnerStartProcessOpts = z.object({
 });
 
 export type IForerunnerStartProcessOpts = z.infer<
-  typeof zForerunnerStartProcessOpts
+  typeof ForerunnerStartProcessOptsSchema
 >;
 
 export async function forerunnerStartProcess(

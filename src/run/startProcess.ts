@@ -62,9 +62,7 @@ export async function startProcess(instance: IInstanceOpts) {
   });
 
   bat.unref();
-
   const pid = bat.pid?.toString();
-
   if (!pid) {
     throw new Error(`Could not start process for instance ${instance.name}`);
   }
