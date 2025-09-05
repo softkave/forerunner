@@ -40,58 +40,55 @@ export async function runMongo(params: {
   logger.log('Downloading mongo');
   await downloadMongo({mongoRunConfig, logger});
 
-  logger.log('\n');
   logger.log('Generating mongo cert configs');
   await generateMongoCertConfigsMain({
     mongoRunConfig,
     overwrite: overwriteCerts,
   });
 
-  logger.log('\n');
   logger.log('Generating mongo certs');
   await generateMongoCertsMain({
+    logger,
     overwriteConfig: overwriteConfig,
     overwriteCA: overwriteCerts,
     overwriteCerts: overwriteCerts,
     mongoRunConfig,
   });
 
-  logger.log('\n');
   logger.log('Generating mongo configs');
   await generateMongodConfigsMain({mongoRunConfig, overwrite: overwriteConfig});
 
   if (addToEtcHosts) {
-    logger.log('\n');
     logger.log('Setting non localhost names in etc hosts');
     await setNonLocalhostNamesInEtcHostsMain({mongoRunConfig, logger});
   }
 
-  logger.log('\n');
   logger.log('Stopping existing mongo instances');
   await stopMongodInstancesMain({mongoRunConfig, logger});
 
-  logger.log('\n');
   logger.log('Starting mongo instances');
   await startMongodInstancesMain({mongoRunConfig, logger});
 
-  logger.log('\n');
-  logger.log('Waiting for 10 seconds');
+  logger.log('Waiting for 10 seconds for mongo instances to start');
   await waitTimeout(10_000);
 
-  logger.log('\n');
   logger.log('Setting up replica set');
   await setupReplicaSetMain({mongoRunConfig, logger});
 
-  logger.log('\n');
   logger.log('Setting up replica set first users');
 
+  logger.log('Reading mongo users');
   const mongoUsers = await readMongoUsers({
     configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
   });
+
+  logger.log('Finding admin user');
   const adminUser = await findAdminMongoUser({
     mongoUsers,
     createIfNotFound: true,
   });
+
+  logger.log('Finding cluster admin user');
   const clusterAdminUser = await findClusterAdminMongoUser({
     mongoUsers,
     createIfNotFound: true,
@@ -106,15 +103,12 @@ export async function runMongo(params: {
     user => user.username
   );
 
-  logger.log('\n');
   logger.log('Writing mongo users');
   await writeMongoUser({mongoRunConfig, users, logger});
 
-  logger.log('\n');
-  logger.log('Waiting for 5 seconds');
+  logger.log('Waiting for 5 seconds for replica set to be ready');
   await waitTimeout(5000);
 
-  logger.log('\n');
   logger.log('Setting up replica set first users');
   await setupReplicaSetFirstUsers({mongoRunConfig, logger});
 }

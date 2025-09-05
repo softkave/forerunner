@@ -1,8 +1,13 @@
 import {execSync} from 'child_process';
 import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
 import {join} from 'path';
+import {fs} from 'zx';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {CertConfig} from './types.js';
+import {
+  CertConfig,
+  CertConfigSchema,
+  GenerateCertsCLIOptions,
+} from './types.js';
 
 export class CertGenerator {
   private config: CertConfig;
@@ -181,4 +186,22 @@ subjectAltName = @alt_names
   getFullchainPath(): string {
     return join(this.config.outDir, this.config.files.fullchain);
   }
+}
+
+export async function generateCert(params: {
+  opts: GenerateCertsCLIOptions;
+  logger: IForeLogger;
+}) {
+  // Read and parse config file
+  if (params.opts.cwd) {
+    process.chdir(params.opts.cwd);
+  }
+  const configContent = await fs.promises.readFile(params.opts.config, 'utf-8');
+  const config = CertConfigSchema.parse(JSON.parse(configContent));
+
+  // Generate certificate
+  const certGenerator = new CertGenerator({config, logger: params.logger});
+  await certGenerator.generate(params.opts.force);
+
+  params.logger.log('✅ Certificate generation completed successfully');
 }

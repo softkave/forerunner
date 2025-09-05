@@ -55,10 +55,12 @@ export function getMongodConfigFilePath(
   mongoRunConfig: MongoRunConfig,
   instanceNumber: number
 ) {
-  const dir = path.join(
-    mongoRunConfig.workingDir,
-    'mongo-configs',
-    `mongod-${instanceNumber}.conf`
+  const dir = path.resolve(
+    path.join(
+      mongoRunConfig.workingDir,
+      'mongo-configs',
+      `mongod-${instanceNumber}.conf`
+    )
   );
 
   return dir;

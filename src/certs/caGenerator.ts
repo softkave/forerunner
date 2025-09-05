@@ -1,8 +1,10 @@
 import {execSync} from 'child_process';
+import console from 'console';
 import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
 import {join} from 'path';
+import {fs} from 'zx';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {CAConfig} from './types.js';
+import {CAConfig, CAConfigSchema, GenerateCertsCLIOptions} from './types.js';
 
 export class CAGenerator {
   private config: CAConfig;
@@ -111,4 +113,23 @@ keyUsage = critical, digitalSignature, cRLSign, keyCertSign
   getKeyPath(): string {
     return join(this.config.outDir, this.config.files.key);
   }
+}
+
+export async function generateCA(params: {
+  opts: GenerateCertsCLIOptions;
+  logger: IForeLogger;
+}) {
+  // Read and parse config file
+  if (params.opts.cwd) {
+    process.chdir(params.opts.cwd);
+  }
+  console.log('cwd', process.cwd());
+  const configContent = await fs.promises.readFile(params.opts.config, 'utf-8');
+  const config = CAConfigSchema.parse(JSON.parse(configContent));
+
+  // Generate CA
+  const caGenerator = new CAGenerator({config, logger: params.logger});
+  await caGenerator.generate(params.opts.force);
+
+  params.logger.log('✅ CA generation completed successfully');
 }

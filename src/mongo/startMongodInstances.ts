@@ -27,10 +27,7 @@ export async function generateRunShFile(params: {
     mongoRunConfig,
     instanceNumber
   );
-  const cmd = `
-    ${mongoRunConfig.workingDir ? `cd ${mongoRunConfig.workingDir}` : ''}
-    ${mongodBinFilePath} --config ${mongodConfigFilePath}
-  `;
+  const cmd = `${mongodBinFilePath} --config ${mongodConfigFilePath}`;
   await ensureFile(startShFilepath);
   await fs.writeFile(startShFilepath, cmd, 'utf8');
   return startShFilepath;
@@ -89,12 +86,12 @@ export async function startMongodInstance(params: {
 
   logger.log('Ensuring mongod instance files...');
   await ensureMongodInstanceFiles({instanceNumber, mongoRunConfig});
-  logger.log('Starting mongod instance...');
+  logger.log('Starting mongod instance...\n');
   await startProcess({
     name: instanceRunName,
     startCmdFilepath: startShFilepath,
     pidsFilepath: instancePidFilepath,
-    cwd: instanceRunDir,
+    // cwd: instanceRunDir,
     logsFolderpath: instanceLogsDir,
     runName: instanceRunName,
   });

@@ -1,60 +1,46 @@
-import {execSync} from 'child_process';
+import {generateCA} from '../certs/caGenerator.js';
+import {generateCert} from '../certs/certGenerator.js';
+import {IForeLogger} from '../utils/foreLogger/types.js';
 import {
+  generateMongoCertConfigsMain,
   getMongoCertCAConfigFilePath,
   getMongoCertConfigFilePath,
 } from './generateMongoCertConfigs.js';
-import {
-  getWorkingMongoRunConfigFilepath,
-  MongoRunConfig,
-} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 
 export async function generateMongoCertsMain(params: {
   overwriteConfig?: boolean;
   overwriteCA?: boolean;
   overwriteCerts?: boolean;
   mongoRunConfig: MongoRunConfig;
+  logger: IForeLogger;
 }) {
-  const {overwriteConfig, overwriteCA, mongoRunConfig} = params;
+  const {overwriteConfig, overwriteCA, mongoRunConfig, logger} = params;
 
-  const workingMongoRunConfigFilepath = getWorkingMongoRunConfigFilepath({
+  await generateMongoCertConfigsMain({
     mongoRunConfig,
-  });
-  let cmd0 = `npm run mongo:generateMongoCertConfigs -- -c "${workingMongoRunConfigFilepath}"`;
-  if (overwriteConfig) {
-    cmd0 += ' --overwrite';
-  }
-  execSync(cmd0, {
-    stdio: 'inherit',
-    cwd: mongoRunConfig.workingDir,
+    overwrite: overwriteConfig,
   });
 
   const caConfig = getMongoCertCAConfigFilePath(mongoRunConfig);
-  let cmd1 = `npm run certs:ca -- -c "${caConfig}"`;
-  if (overwriteCA) {
-    cmd1 += ' --force';
-  }
-  if (mongoRunConfig.workingDir) {
-    cmd1 += ` -w ${mongoRunConfig.workingDir}`;
-  }
-  execSync(cmd1, {
-    stdio: 'inherit',
-    cwd: mongoRunConfig.workingDir,
+  await generateCA({
+    opts: {
+      config: caConfig,
+      force: overwriteCA,
+    },
+    logger,
   });
 
   const overwriteCerts = params.overwriteCerts || overwriteCA;
   const replicaCount = mongoRunConfig.replicaCount;
   for (let i = 1; i <= replicaCount; i++) {
     const certConfig = getMongoCertConfigFilePath(mongoRunConfig, i);
-    let cmd2 = `npm run certs:cert -- -c "${certConfig}"`;
-    if (overwriteCerts) {
-      cmd2 += ' --force';
-    }
-    if (mongoRunConfig.workingDir) {
-      cmd2 += ` -w ${mongoRunConfig.workingDir}`;
-    }
-    execSync(cmd2, {
-      stdio: 'inherit',
-      cwd: mongoRunConfig.workingDir,
+    await generateCert({
+      opts: {
+        config: certConfig,
+        force: overwriteCerts,
+      },
+      logger,
     });
   }
 }

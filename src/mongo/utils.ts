@@ -80,8 +80,9 @@ export async function getMongoUriForInstance(params: {
   username?: string;
   password?: string;
   mongoRunConfig: MongoRunConfig;
+  logger: IForeLogger;
 }) {
-  const {instanceNumber, mongoRunConfig} = params;
+  const {instanceNumber, mongoRunConfig, logger} = params;
   const mongodConfig = await getMongodConfigForInstance({
     instanceNumber,
     mongoRunConfig,
@@ -91,6 +92,7 @@ export async function getMongoUriForInstance(params: {
   const bindIp0 = bindIps[0];
   let host = `${bindIp0}:${mongodConfig.net.port}`;
   let uri = `mongodb://${host}`;
+  logger.log('Mongo URI:', uri);
   if (params.username && params.password) {
     uri = `mongodb://${encodeURIComponent(params.username)}:${encodeURIComponent(params.password)}@${host}`;
   }
@@ -103,8 +105,9 @@ export async function getMongoUriForReplicaSet(params: {
   password?: string;
   mongoRunConfig: MongoRunConfig;
   serverSelectionTimeoutMS?: number;
+  logger: IForeLogger;
 }) {
-  const {mongoRunConfig, serverSelectionTimeoutMS = 5000} = params;
+  const {mongoRunConfig, serverSelectionTimeoutMS = 5000, logger} = params;
   const hostnamesPerInstance = mongoRunConfig.instancesHostnames.map(
     hostnames => getFirstNonLocalhostBindIp({hostnames}) || first(hostnames)
   );
@@ -119,6 +122,7 @@ export async function getMongoUriForReplicaSet(params: {
     .join(',');
 
   let uriWithoutProtocol = `${host}?replicaSet=${mongoRunConfig.replicaSetName}&serverSelectionTimeoutMS=${serverSelectionTimeoutMS}`;
+  logger.log('Mongo URI:', uriWithoutProtocol);
   if (params.username && params.password) {
     const username = encodeURIComponent(params.username);
     const password = encodeURIComponent(params.password);
@@ -142,8 +146,8 @@ export async function getMongoClientForInstance(params: {
     username: params.username,
     password: params.password,
     mongoRunConfig: mongoRunConfig,
+    logger,
   });
-  logger.log('Mongo URI:', uri);
 
   // const caConfig = await generateCAConfigForMongo({
   //   mongoRunConfig: params.mongoRunConfig,
@@ -178,8 +182,8 @@ export async function getMongoClientForReplicaSet(params: {
     username: params.username,
     password: params.password,
     mongoRunConfig: mongoRunConfig,
+    logger,
   });
-  logger.log('Mongo URI:', uri);
 
   // const caConfig = await generateCAConfigForMongo({
   //   mongoRunConfig: mongoRunConfig,

@@ -5,7 +5,7 @@ export interface IInstanceOpts {
   startCmdFilepath: string;
   pidsFilepath?: string;
   runName: string;
-  cwd: string;
+  cwd?: string;
   logsFolderpath: string;
   env?: AnyObject;
 }
@@ -22,7 +22,7 @@ export interface IFilesOpts {
 
 export interface IRunnerOpts {
   runName: string;
-  cwd: string;
+  cwd?: string;
   logsFolderpath: string;
   logsFilepath?: string;
   pidsFilepath: string;

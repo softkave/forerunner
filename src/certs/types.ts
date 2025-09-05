@@ -63,7 +63,7 @@ export const CertConfigSchema = z.object({
 });
 
 // CLI options schema
-export const CLIOptionsSchema = z.object({
+export const GenerateCertsCLIOptionsSchema = z.object({
   force: z.boolean().optional(),
   config: z.string().min(1, 'Config file path is required'),
   cwd: z.string().optional(),
@@ -72,4 +72,6 @@ export const CLIOptionsSchema = z.object({
 
 export type CAConfig = z.infer<typeof CAConfigSchema>;
 export type CertConfig = z.infer<typeof CertConfigSchema>;
-export type CLIOptions = z.infer<typeof CLIOptionsSchema>;
+export type GenerateCertsCLIOptions = z.infer<
+  typeof GenerateCertsCLIOptionsSchema
+>;

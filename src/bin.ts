@@ -6,13 +6,9 @@ import {readFileSync} from 'fs';
 import {ConsoleForeLogger} from './utils/foreLogger/ConsoleForeLogger.js';
 
 // Import certs functionality
-import {CAGenerator} from './certs/caGenerator.js';
-import {CertGenerator} from './certs/certGenerator.js';
-import {
-  CAConfigSchema,
-  CertConfigSchema,
-  CLIOptionsSchema,
-} from './certs/types.js';
+import {generateCA} from './certs/caGenerator.js';
+import {generateCert} from './certs/certGenerator.js';
+import {GenerateCertsCLIOptionsSchema} from './certs/types.js';
 
 // Import mongo functionality
 import {setNonLocalhostNamesInEtcHostsMain} from './mongo/etcHostsMongo.js';
@@ -66,25 +62,14 @@ certsProgram
 
     try {
       // Parse and validate CLI options
-      const cliOptions = CLIOptionsSchema.parse({
+      const cliOptions = GenerateCertsCLIOptionsSchema.parse({
         force: options.force,
         config: options.config,
         cwd: options.cwd,
         silent: options.silent,
       });
 
-      // Read and parse config file
-      if (cliOptions.cwd) {
-        process.chdir(cliOptions.cwd);
-      }
-      const configContent = readFileSync(cliOptions.config, 'utf-8');
-      const config = CAConfigSchema.parse(JSON.parse(configContent));
-
-      // Generate CA
-      const caGenerator = new CAGenerator({config, logger});
-      await caGenerator.generate(cliOptions.force);
-
-      logger.log('✅ CA generation completed successfully');
+      await generateCA({opts: cliOptions, logger});
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -111,25 +96,14 @@ certsProgram
 
     try {
       // Parse and validate CLI options
-      const cliOptions = CLIOptionsSchema.parse({
+      const cliOptions = GenerateCertsCLIOptionsSchema.parse({
         force: options.force,
         config: options.config,
         cwd: options.cwd,
         silent: options.silent,
       });
 
-      // Read and parse config file
-      if (cliOptions.cwd) {
-        process.chdir(cliOptions.cwd);
-      }
-      const configContent = readFileSync(cliOptions.config, 'utf-8');
-      const config = CertConfigSchema.parse(JSON.parse(configContent));
-
-      // Generate certificate
-      const certGenerator = new CertGenerator({config, logger});
-      await certGenerator.generate(cliOptions.force);
-
-      logger.log('✅ Certificate generation completed successfully');
+      await generateCert({opts: cliOptions, logger});
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -187,6 +161,7 @@ mongoProgram
         overwriteConfig: options.overwriteConfig,
         overwriteCA: options.overwriteCA,
         overwriteCerts: options.overwriteCerts,
+        logger,
       });
       logger.log('✅ MongoDB certificates generation completed successfully');
     } catch (error) {

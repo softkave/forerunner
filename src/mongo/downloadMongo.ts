@@ -26,10 +26,8 @@ export function getMongoDownloadDir(mongoRunConfig: MongoRunConfig) {
 }
 
 export function getMongodBinFilePath(mongoRunConfig: MongoRunConfig) {
-  const dir = path.join(
-    getMongoDownloadDir(mongoRunConfig),
-    'bin',
-    kDefaultMongodBinName
+  const dir = path.resolve(
+    path.join(getMongoDownloadDir(mongoRunConfig), 'bin', kDefaultMongodBinName)
   );
 
   return dir;

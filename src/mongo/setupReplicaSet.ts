@@ -30,7 +30,8 @@ export async function setupReplicaSetFirstUsers(params: {
     createIfNotFound: true,
   });
   if (!adminUser) {
-    throw new Error('Admin user not found');
+    logger.log('Admin user not found, skipping');
+    return;
   }
 
   await setupSingleMongoUser({user: adminUser, mongoRunConfig, logger});
@@ -40,7 +41,8 @@ export async function setupReplicaSetFirstUsers(params: {
     createIfNotFound: true,
   });
   if (!clusterAdminUser) {
-    throw new Error('Cluster admin user not found');
+    logger.log('Cluster admin user not found, skipping');
+    return;
   }
 
   await setupSingleMongoUser({
