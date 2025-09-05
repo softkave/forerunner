@@ -1,6 +1,6 @@
 import {writeFile} from 'fs/promises';
 import path from 'path';
-import {IRunnerOpts} from '../run/types.js';
+import {IRunnerOpts} from '../process/types.js';
 
 export async function cleanFile(
   filepath: string,

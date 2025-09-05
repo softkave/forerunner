@@ -4,7 +4,8 @@ import assert from 'assert';
 import {execSync} from 'child_process';
 import {readFileSync, writeFileSync} from 'fs';
 import {exists} from 'fs-extra';
-import {ForeLogger, IForeLogger} from '../utils/foreLogger.js';
+import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
+import {IForeLogger} from '../utils/foreLogger/types.js';
 
 const HOSTS_FILE = '/etc/hosts';
 const BACKUP_FILE = '/etc/hosts.backup';
@@ -63,18 +64,16 @@ export function formatHostsFile(params: {entries: HostEntry[]}): string {
   return lines.join('\n') + '\n';
 }
 
-export function backupHostsFile(
-  params: {
-    hostsFilePath?: string;
-    backupFilePath?: string;
-    logger?: IForeLogger;
-    dontExitOnError?: boolean;
-  } = {}
-): void {
+export function backupHostsFile(params: {
+  hostsFilePath?: string;
+  backupFilePath?: string;
+  logger: IForeLogger;
+  dontExitOnError?: boolean;
+}): void {
   const {
     hostsFilePath = HOSTS_FILE,
     backupFilePath = BACKUP_FILE,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
     dontExitOnError = false,
   } = params;
   try {
@@ -89,18 +88,16 @@ export function backupHostsFile(
   }
 }
 
-export function restoreHostsFile(
-  params: {
-    hostsFilePath?: string;
-    backupFilePath?: string;
-    logger?: IForeLogger;
-    dontExitOnError?: boolean;
-  } = {}
-): void {
+export function restoreHostsFile(params: {
+  hostsFilePath?: string;
+  backupFilePath?: string;
+  logger: IForeLogger;
+  dontExitOnError?: boolean;
+}): void {
   const {
     hostsFilePath = HOSTS_FILE,
     backupFilePath = BACKUP_FILE,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
     dontExitOnError = false,
   } = params;
   try {
@@ -115,16 +112,14 @@ export function restoreHostsFile(
   }
 }
 
-export function readHostsFile<TDontExitOnError extends boolean>(
-  params: {
-    hostsFilePath?: string;
-    logger?: IForeLogger;
-    dontExitOnError?: TDontExitOnError;
-  } = {}
-): TDontExitOnError extends true ? string | undefined : string {
+export function readHostsFile<TDontExitOnError extends boolean>(params: {
+  hostsFilePath?: string;
+  logger: IForeLogger;
+  dontExitOnError?: TDontExitOnError;
+}): TDontExitOnError extends true ? string | undefined : string {
   const {
     hostsFilePath = HOSTS_FILE,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
     dontExitOnError = false,
   } = params;
   try {
@@ -145,13 +140,13 @@ export function readHostsFile<TDontExitOnError extends boolean>(
 export async function writeHostsFile(params: {
   content: string;
   hostsFilePath?: string;
-  logger?: IForeLogger;
+  logger: IForeLogger;
   dontExitOnError?: boolean;
 }): Promise<void> {
   const {
     content,
     hostsFilePath = HOSTS_FILE,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
     dontExitOnError = false,
   } = params;
 
@@ -184,7 +179,7 @@ export async function writeHostsFile(params: {
   } catch (error) {
     logger.error('Failed to write hosts file:', error);
     logger.onSilentFail(error);
-    restoreHostsFile({dontExitOnError});
+    restoreHostsFile({dontExitOnError, logger});
     if (!dontExitOnError) {
       process.exit(1);
     }
@@ -194,21 +189,21 @@ export async function writeHostsFile(params: {
 export function setHost(params: {
   hostsFilePath?: string;
   dontExitOnError?: boolean;
-  logger?: IForeLogger;
+  logger: IForeLogger;
   hostname: string;
   ip?: string;
 }): void {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
     hostname,
     ip = '127.0.0.1',
   } = params;
 
   logger.log(`Setting ${hostname} to ${ip}`);
 
-  const content = readHostsFile({hostsFilePath});
+  const content = readHostsFile({hostsFilePath, logger});
   assert.ok(content, 'Hosts file not found');
   const entries = parseHostsFile({content});
   let madeChange = false;
@@ -242,19 +237,19 @@ export function setHost(params: {
 export function removeHost(params: {
   hostsFilePath?: string;
   dontExitOnError?: boolean;
-  logger?: IForeLogger;
+  logger: IForeLogger;
   hostname: string;
 }): void {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
     hostname,
   } = params;
 
   logger.log(`Removing ${hostname}`);
 
-  const content = readHostsFile({hostsFilePath});
+  const content = readHostsFile({hostsFilePath, logger});
   assert.ok(content, 'Hosts file not found');
   const entries = parseHostsFile({content});
 
@@ -271,17 +266,15 @@ export function removeHost(params: {
   writeHostsFile({content: newContent, hostsFilePath, logger, dontExitOnError});
 }
 
-export function listHosts(
-  params: {
-    hostsFilePath?: string;
-    dontExitOnError?: boolean;
-    logger?: IForeLogger;
-  } = {}
-): HostEntry[] {
+export function listHosts(params: {
+  hostsFilePath?: string;
+  dontExitOnError?: boolean;
+  logger: IForeLogger;
+}): HostEntry[] {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
   } = params;
 
   const content = readHostsFile({hostsFilePath, dontExitOnError, logger});
@@ -295,17 +288,15 @@ export function listHosts(
   return entries;
 }
 
-export function listHostsAndPrint(
-  params: {
-    hostsFilePath?: string;
-    dontExitOnError?: boolean;
-    logger?: IForeLogger;
-  } = {}
-): void {
+export function listHostsAndPrint(params: {
+  hostsFilePath?: string;
+  dontExitOnError?: boolean;
+  logger: IForeLogger;
+}): void {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
-    logger = new ForeLogger({silent: true}),
+    logger = new ConsoleForeLogger({silent: true}),
   } = params;
 
   const entries = listHosts({hostsFilePath, dontExitOnError, logger});

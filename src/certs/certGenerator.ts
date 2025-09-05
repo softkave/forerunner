@@ -1,16 +1,16 @@
 import {execSync} from 'child_process';
 import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
 import {join} from 'path';
-import {ForeLogger, IForeLogger} from '../utils/foreLogger.js';
+import {IForeLogger} from '../utils/foreLogger/types.js';
 import {CertConfig} from './types.js';
 
 export class CertGenerator {
   private config: CertConfig;
   private logger: IForeLogger;
 
-  constructor(config: CertConfig, silent?: boolean) {
-    this.config = config;
-    this.logger = new ForeLogger({silent});
+  constructor(params: {config: CertConfig; logger: IForeLogger}) {
+    this.config = params.config;
+    this.logger = params.logger;
   }
 
   /**

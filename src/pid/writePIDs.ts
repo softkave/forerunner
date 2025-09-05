@@ -1,5 +1,5 @@
 import fse from 'fs-extra';
-import {IRunnerOpts} from '../run/types.js';
+import {IRunnerOpts} from '../process/types.js';
 import {IProcessIdItem} from './types.js';
 
 export async function writePIDs(

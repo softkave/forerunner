@@ -3,7 +3,7 @@
 
 import {Command} from 'commander';
 import {readFileSync} from 'fs';
-import {ForeLogger} from '../utils/foreLogger.js';
+import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {CAGenerator} from './caGenerator.js';
 import {CertGenerator} from './certGenerator.js';
 import {CAConfigSchema, CertConfigSchema, CLIOptionsSchema} from './types.js';
@@ -24,7 +24,7 @@ program
   .option('-w, --cwd <path>', 'Working directory')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
-    const logger = new ForeLogger({silent: options.silent});
+    const logger = new ConsoleForeLogger({silent: options.silent});
 
     try {
       // Parse and validate CLI options
@@ -43,7 +43,7 @@ program
       const config = CAConfigSchema.parse(JSON.parse(configContent));
 
       // Generate CA
-      const caGenerator = new CAGenerator(config);
+      const caGenerator = new CAGenerator({config, logger});
       await caGenerator.generate(cliOptions.force);
 
       logger.log('✅ CA generation completed successfully');
@@ -69,7 +69,7 @@ program
   .option('-w, --cwd <path>', 'Working directory')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
-    const logger = new ForeLogger({silent: options.silent});
+    const logger = new ConsoleForeLogger({silent: options.silent});
 
     try {
       // Parse and validate CLI options
@@ -88,7 +88,7 @@ program
       const config = CertConfigSchema.parse(JSON.parse(configContent));
 
       // Generate certificate
-      const certGenerator = new CertGenerator(config);
+      const certGenerator = new CertGenerator({config, logger});
       await certGenerator.generate(cliOptions.force);
 
       logger.log('✅ Certificate generation completed successfully');

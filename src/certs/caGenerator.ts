@@ -1,16 +1,16 @@
 import {execSync} from 'child_process';
 import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
 import {join} from 'path';
-import {ForeLogger, IForeLogger} from '../utils/foreLogger.js';
+import {IForeLogger} from '../utils/foreLogger/types.js';
 import {CAConfig} from './types.js';
 
 export class CAGenerator {
   private config: CAConfig;
   private logger: IForeLogger;
 
-  constructor(config: CAConfig, silent?: boolean) {
-    this.config = config;
-    this.logger = new ForeLogger({silent});
+  constructor(params: {config: CAConfig; logger: IForeLogger}) {
+    this.config = params.config;
+    this.logger = params.logger;
   }
 
   /**

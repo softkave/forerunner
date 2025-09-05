@@ -1,7 +1,7 @@
 import fse from 'fs-extra';
 import {keyBy} from 'lodash-es';
 import path from 'path';
-import {IRunnerOpts} from '../run/types.js';
+import {IRunnerOpts} from '../process/types.js';
 import {ProcessIdFileParsed} from './types.js';
 
 export async function getPIDsFromFile(

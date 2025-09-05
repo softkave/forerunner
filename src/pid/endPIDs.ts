@@ -1,7 +1,7 @@
 import find from 'find-process';
 import {waitTimeout} from 'softkave-js-utils';
 import {kill} from 'zx';
-import {IRunnerOpts} from '../run/types.js';
+import {IRunnerOpts} from '../process/types.js';
 import {getPIDsFromFile} from './getPIDs.js';
 
 export async function endPIDs(

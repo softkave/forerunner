@@ -27,10 +27,4 @@ export interface IRunnerOpts {
   logsFilepath?: string;
   pidsFilepath: string;
   instances: Array<IInstanceOpts>;
-
-  filesBasepath?: string;
-  files?: Array<IFilesOpts>;
-
-  fimidaraToken?: string;
-  fimidaraBasepath?: string;
 }

@@ -2,7 +2,7 @@
 /* eslint-disable n/no-process-exit */
 
 import {Command} from 'commander';
-import {ForeLogger} from '../utils/foreLogger.js';
+import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {
   backupHostsFile,
   listHostsAndPrint,
@@ -26,7 +26,7 @@ program
   .option('-f, --hosts-file <path>', 'path to hosts file', '/etc/hosts')
   .option('-s, --silent', 'silent mode')
   .action((hostname: string, ip: string, options) => {
-    const logger = new ForeLogger({silent: options.silent});
+    const logger = new ConsoleForeLogger({silent: options.silent});
 
     try {
       setHost({
@@ -48,7 +48,7 @@ program
   .option('-f, --hosts-file <path>', 'path to hosts file', '/etc/hosts')
   .option('-s, --silent', 'silent mode')
   .action((hostname: string, options) => {
-    const logger = new ForeLogger({silent: options.silent});
+    const logger = new ConsoleForeLogger({silent: options.silent});
     try {
       removeHost({
         hostname,
@@ -67,7 +67,7 @@ program
   .option('-f, --hosts-file <path>', 'path to hosts file', '/etc/hosts')
   .option('-s, --silent', 'silent mode')
   .action(options => {
-    const logger = new ForeLogger({silent: options.silent});
+    const logger = new ConsoleForeLogger({silent: options.silent});
     try {
       listHostsAndPrint({
         hostsFilePath: options.hostsFile,
@@ -90,7 +90,7 @@ program
   )
   .option('-s, --silent', 'silent mode')
   .action(options => {
-    const logger = new ForeLogger({silent: options.silent});
+    const logger = new ConsoleForeLogger({silent: options.silent});
     try {
       backupHostsFile({
         hostsFilePath: options.hostsFile,
@@ -114,7 +114,7 @@ program
   )
   .option('-s, --silent', 'silent mode')
   .action(options => {
-    const logger = new ForeLogger({silent: options.silent});
+    const logger = new ConsoleForeLogger({silent: options.silent});
     try {
       restoreHostsFile({
         hostsFilePath: options.hostsFile,
