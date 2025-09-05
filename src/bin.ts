@@ -15,6 +15,7 @@ import {
 } from './certs/types.js';
 
 // Import mongo functionality
+import {setNonLocalhostNamesInEtcHostsMain} from './mongo/etcHostsMongo.js';
 import {
   downloadMongo,
   generateMongoCertConfigsMain,
@@ -27,6 +28,7 @@ import {
   writeMongoUser,
 } from './mongo/index.js';
 import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
+import {setupMongoUsersMain} from './mongo/setupMongoUsers.js';
 
 // Import etcHosts functionality
 import {
@@ -169,6 +171,9 @@ mongoProgram
   .command('generate-certs')
   .description('Generate MongoDB certificates')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('--overwriteConfig', 'Overwrite existing config', false)
+  .option('--overwriteCA', 'Overwrite existing CA', false)
+  .option('--overwriteCerts', 'Overwrite existing certs', false)
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -177,7 +182,12 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: false,
       });
-      await generateMongoCertsMain({mongoRunConfig});
+      await generateMongoCertsMain({
+        mongoRunConfig,
+        overwriteConfig: options.overwriteConfig,
+        overwriteCA: options.overwriteCA,
+        overwriteCerts: options.overwriteCerts,
+      });
       logger.log('✅ MongoDB certificates generation completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -191,6 +201,7 @@ mongoProgram
   .command('generate-cert-configs')
   .description('Generate MongoDB certificate configurations')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-o, --overwrite', 'Overwrite existing cert configs', false)
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -199,7 +210,10 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: false,
       });
-      await generateMongoCertConfigsMain({mongoRunConfig});
+      await generateMongoCertConfigsMain({
+        mongoRunConfig,
+        overwrite: options.overwrite,
+      });
       logger.log(
         '✅ MongoDB certificate configs generation completed successfully'
       );
@@ -215,6 +229,7 @@ mongoProgram
   .command('generate-configs')
   .description('Generate MongoDB configurations')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-o, --overwrite', 'Overwrite existing config', false)
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -223,7 +238,10 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: false,
       });
-      await generateMongodConfigsMain({mongoRunConfig});
+      await generateMongodConfigsMain({
+        mongoRunConfig,
+        overwrite: options.overwrite,
+      });
       logger.log('✅ MongoDB configurations generation completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -311,10 +329,8 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: false,
       });
-      // Note: setupMongoUsersMain is not exported, so this command is disabled
-      logger.log(
-        '⚠️  MongoDB users setup command is not available in this version'
-      );
+      await setupMongoUsersMain({mongoRunConfig, logger});
+      logger.log('✅ MongoDB users setup completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -352,6 +368,39 @@ mongoProgram
   .command('run')
   .description('Run MongoDB with configuration')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-e, --addToEtcHosts', 'Add to etc hosts', false)
+  .option('--overwriteConfig', 'Overwrite existing config', false)
+  .option('--overwriteCerts', 'Overwrite existing certs', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const mongoRunConfig = await getMongoRunConfig({
+        mongoRunConfigFilepath: options.config,
+        checkExisting: true,
+      });
+      await runMongo({
+        mongoRunConfig,
+        logger,
+        addToEtcHosts: options.addToEtcHosts,
+        overwriteConfig: options.overwriteConfig,
+        overwriteCerts: options.overwriteCerts,
+      });
+      logger.log('✅ MongoDB run completed successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Setup MongoDB etc hosts
+mongoProgram
+  .command('etc-hosts')
+  .description(
+    'Setup non-localhost hostnames in /etc/hosts for MongoDB instances'
+  )
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -360,8 +409,8 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: false,
       });
-      await runMongo({mongoRunConfig, logger});
-      logger.log('✅ MongoDB run completed successfully');
+      await setNonLocalhostNamesInEtcHostsMain({mongoRunConfig, logger});
+      logger.log('✅ MongoDB etc hosts setup completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -527,9 +576,10 @@ COMMANDS:
     start                  Start MongoDB instances
     stop                   Stop MongoDB instances
     setup-replica-set      Setup MongoDB replica set
-    setup-users            Setup MongoDB users (requires config file)
+    setup-users            Setup MongoDB users
     write-users            Write MongoDB users configuration
     run                    Run MongoDB with configuration
+    etc-hosts              Setup non-localhost hostnames in /etc/hosts for MongoDB instances
 
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP

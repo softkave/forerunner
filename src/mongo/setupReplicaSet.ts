@@ -1,8 +1,7 @@
-import {Command} from 'commander';
 import {MongoClient} from 'mongodb';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 import {
   filterRegularMongoUsers,
   findAdminMongoUser,
@@ -109,21 +108,4 @@ export async function setupReplicaSetMain(params: {
     // Close the database connection on completion or error
     await client?.close();
   }
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-s, --silent', 'silent mode')
-    .parse(process.argv);
-  const options = program.opts();
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: false,
-  });
-  await setupReplicaSetMain({
-    mongoRunConfig,
-    logger: new ConsoleForeLogger({silent: options.silent}),
-  });
 }

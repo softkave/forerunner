@@ -5,12 +5,11 @@
 
 import assert from 'assert';
 import {execSync} from 'child_process';
-import {Command} from 'commander';
 import {ensureDir, exists} from 'fs-extra';
 import path from 'path';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 
 export const kDefaultMongoVersion = '8.0.0';
 export const kDefaultMongodBinName = 'mongod';
@@ -141,24 +140,4 @@ export async function downloadMongo(params: {
   }
 
   return {path: getMongoDownloadDir(mongoRunConfig), url: url};
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-s, --silent', 'silent mode')
-    .parse(process.argv);
-
-  const options = program.opts();
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: false,
-  });
-
-  downloadMongo({
-    mongoRunConfig,
-    logger: new ConsoleForeLogger({silent: options.silent}),
-  });
 }

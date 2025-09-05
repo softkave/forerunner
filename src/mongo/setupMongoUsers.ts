@@ -1,11 +1,10 @@
-import {Command} from 'commander';
 import fs from 'fs';
 import {exists} from 'fs-extra';
 import path from 'path';
 import z from 'zod';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 import {generateMongoPassword, getMongoClientForReplicaSet} from './utils.js';
 
 export const MongoUserSchema = z.object({
@@ -181,7 +180,7 @@ export function getMongoUsersConfigFilePath(mongoRunConfig: MongoRunConfig) {
   return path.join(mongoRunConfig.workingDir, 'mongo-users.json');
 }
 
-async function setupMongoUsersMain(params: {
+export async function setupMongoUsersMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
 }) {
@@ -216,21 +215,4 @@ async function setupMongoUsersMain(params: {
       await setupSingleMongoUser({user, adminUser, mongoRunConfig, logger});
     })
   );
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-s, --silent', 'silent mode')
-    .parse(process.argv);
-  const options = program.opts();
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: false,
-  });
-  await setupMongoUsersMain({
-    mongoRunConfig,
-    logger: new ConsoleForeLogger({silent: options.silent}),
-  });
 }

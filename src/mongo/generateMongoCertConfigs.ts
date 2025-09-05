@@ -1,12 +1,11 @@
 import assert from 'assert';
-import {Command} from 'commander';
 import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
 import {flattenDeep, uniq} from 'lodash-es';
 import path from 'path';
 import {convertToArray} from 'softkave-js-utils';
 import {CAConfig, CertConfig} from '../certs/types.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 import {generateMongoPassword, getFirstNonLocalhostBindIp} from './utils.js';
 
 export function getMongoCertCAConfigFilePath(mongoRunConfig: MongoRunConfig) {
@@ -146,23 +145,4 @@ export async function generateMongoCertConfigsMain(params: {
       overwrite,
     });
   }
-}
-
-// Check if this module is being run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-o, --overwrite', 'Overwrite existing cert configs', false)
-    .parse(process.argv);
-
-  const options = program.opts();
-  const overwrite = !!options.overwrite;
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: false,
-  });
-
-  await generateMongoCertConfigsMain({mongoRunConfig, overwrite});
 }

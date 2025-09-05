@@ -1,4 +1,3 @@
-import {Command} from 'commander';
 import {ensureDir, ensureFile} from 'fs-extra';
 import fs from 'fs/promises';
 import {load} from 'js-yaml';
@@ -11,7 +10,7 @@ import {
   getMongodConfigFilePath,
   MongoConfigSchema,
 } from './generateMongodConfigs.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 
 export async function generateRunShFile(params: {
   instanceNumber: number;
@@ -111,21 +110,4 @@ export async function startMongodInstancesMain(params: {
   for (let i = 1; i <= replicaCount; i++) {
     await startMongodInstance({instanceNumber: i, mongoRunConfig, logger});
   }
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-s, --silent', 'silent mode')
-    .parse(process.argv);
-  const options = program.opts();
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: false,
-  });
-  await startMongodInstancesMain({
-    mongoRunConfig,
-    logger: new ConsoleForeLogger({silent: options.silent}),
-  });
 }

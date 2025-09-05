@@ -1,6 +1,6 @@
 {
   "name": "softkave-forerunner",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "softkave internal application runner & helpers",
   "author": {
     "email": "ywordk@gmail.com",
@@ -27,7 +27,7 @@
     "!build/src/**/testutils/**/*",
     "!build/src/private*"
   ],
-  "bin": "build/cmd/cmd.js",
+  "bin": "build/src/bin.js",
   "scripts": {
     "test": "vitest",
     "lint": "gts lint",
@@ -37,21 +37,7 @@
     "posttest": "npm run lint",
     "publish:npm": "npm run clean && tsc && npm publish",
     "publish:yalc": "npm run clean && tsc && yalc publish",
-    "show:packlist": "npm run clean && tsc && npm pack --dry-run",
-    "certs:ca": "npx --yes -- tsx src/certs/bin.ts ca",
-    "certs:cert": "npx --yes -- tsx src/certs/bin.ts cert",
-    "certs:help": "npx --yes -- tsx src/certs/bin.ts help",
-    "etcHosts": "npx --yes -- tsx src/etcHosts.ts",
-    "mongo:generateCerts": "npx --yes -- tsx src/mongo/generateMongoCerts.ts",
-    "mongo:generateMongodConfigs": "npx --yes -- tsx src/mongo/generateMongodConfigs.ts",
-    "mongo:generateMongoCertConfigs": "npx --yes -- tsx src/mongo/generateMongoCertConfigs.ts",
-    "mongo:downloadMongo": "npx --yes -- tsx src/mongo/downloadMongo.ts",
-    "mongo:startMongodInstances": "npx --yes -- tsx src/mongo/startMongodInstances.ts",
-    "mongo:setupReplicaSet": "npx --yes -- tsx src/mongo/setupReplicaSet.ts",
-    "mongo:runMongo": "npx --yes -- tsx src/mongo/runMongo.ts",
-    "mongo:stopMongodInstances": "npx --yes -- tsx src/mongo/stopMongodInstances.ts",
-    "mongo:writeFimidaraMongoRunConfig": "npx --yes -- tsx src/mongo/writeFimidaraMongoRunConfig.ts",
-    "mongo:setNonLocalhostNamesInEtcHosts": "npx --yes -- tsx src/mongo/etcMongo.ts"
+    "show:packlist": "npm run clean && tsc && npm pack --dry-run"
   },
   "engines": {
     "node": ">=22"

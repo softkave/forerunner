@@ -1,4 +1,3 @@
-import {Command} from 'commander';
 import {compact, uniqBy} from 'lodash-es';
 import {waitTimeout} from 'softkave-js-utils';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
@@ -8,7 +7,7 @@ import {setNonLocalhostNamesInEtcHostsMain} from './etcHostsMongo.js';
 import {generateMongoCertConfigsMain} from './generateMongoCertConfigs.js';
 import {generateMongoCertsMain} from './generateMongoCerts.js';
 import {generateMongodConfigsMain} from './generateMongodConfigs.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 import {
   findAdminMongoUser,
   findClusterAdminMongoUser,
@@ -118,30 +117,4 @@ export async function runMongo(params: {
   logger.log('\n');
   logger.log('Setting up replica set first users');
   await setupReplicaSetFirstUsers({mongoRunConfig, logger});
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-e, --addToEtcHosts', 'Add to etc hosts', false)
-    .option('--overwriteConfig', 'Overwrite existing config', false)
-    .option('--overwriteCerts', 'Overwrite existing certs', false)
-    .option('-s, --silent', 'silent mode')
-    .parse(process.argv);
-  const options = program.opts();
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: true,
-  });
-  const addToEtcHosts = options.addToEtcHosts;
-  const overwriteConfig = options.overwriteConfig;
-  const overwriteCerts = options.overwriteCerts;
-  await runMongo({
-    mongoRunConfig,
-    addToEtcHosts,
-    overwriteConfig,
-    overwriteCerts,
-    logger: new ConsoleForeLogger({silent: options.silent}),
-  });
 }

@@ -1,8 +1,7 @@
-import {Command} from 'commander';
-import {listHosts, setHost} from '../../../forerunner/src/etcHosts/helpers.js';
+import {listHosts, setHost} from '../etcHosts/helpers.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 import {getMongodConfigForInstance, getNonLocalhostBindIps} from './utils.js';
 
 export async function setNonLocalhostNamesInEtcHosts(params: {
@@ -53,21 +52,4 @@ export async function setNonLocalhostNamesInEtcHostsMain(params: {
       logger,
     });
   }
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-s, --silent', 'silent mode')
-    .parse(process.argv);
-  const options = program.opts();
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: false,
-  });
-  await setNonLocalhostNamesInEtcHostsMain({
-    mongoRunConfig,
-    logger: new ConsoleForeLogger({silent: options.silent}),
-  });
 }

@@ -1,5 +1,4 @@
 import assert from 'assert';
-import {Command} from 'commander';
 import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
 import {dump, load} from 'js-yaml';
@@ -11,7 +10,7 @@ import {
   generateCAConfigForMongo,
   generateCertConfigForMongod,
 } from './generateMongoCertConfigs.js';
-import {getMongoRunConfig, MongoRunConfig} from './mongoRunConfig.js';
+import {MongoRunConfig} from './mongoRunConfig.js';
 
 export const MongoConfigSchema = z.object({
   systemLog: z.object({
@@ -183,19 +182,4 @@ export async function generateMongodConfigsMain(params: {
       overwrite,
     });
   }
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const program = new Command();
-  program
-    .requiredOption('-c, --config <path>', 'Path to mongoRunConfig file')
-    .option('-o, --overwrite', 'Overwrite existing config', false)
-    .parse(process.argv);
-  const options = program.opts();
-  const overwrite = options.overwrite;
-  const mongoRunConfig = await getMongoRunConfig({
-    mongoRunConfigFilepath: options.config,
-    checkExisting: false,
-  });
-  await generateMongodConfigsMain({mongoRunConfig, overwrite});
 }
