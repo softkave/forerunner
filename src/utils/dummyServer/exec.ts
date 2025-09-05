@@ -16,4 +16,4 @@ assert(port, '--port or -p not provided');
 
 await newDummyServer({port});
 
-console.log('server started', {port});
+console.log('Dummy server started', {port});

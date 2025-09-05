@@ -1,13 +1,16 @@
 import {execSync} from 'child_process';
 import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
 import {join} from 'path';
+import {ForeLogger, IForeLogger} from '../utils/foreLogger.js';
 import {CAConfig} from './types.js';
 
 export class CAGenerator {
   private config: CAConfig;
+  private logger: IForeLogger;
 
-  constructor(config: CAConfig) {
+  constructor(config: CAConfig, silent?: boolean) {
     this.config = config;
+    this.logger = new ForeLogger({silent});
   }
 
   /**
@@ -23,14 +26,14 @@ export class CAGenerator {
         unlinkSync(keyPath);
         unlinkSync(certPath);
       } else {
-        console.log(
+        this.logger.log(
           `✅ CA already exists at ${caDir}. Use --force to regenerate.`
         );
         return;
       }
     }
 
-    console.log(`🔑 Generating CA: ${this.config.outDir}`);
+    this.logger.log(`🔑 Generating CA: ${this.config.outDir}`);
 
     // Create output directory
     mkdirSync(caDir, {recursive: true});
@@ -42,7 +45,7 @@ export class CAGenerator {
 
     try {
       // Generate private key
-      console.log('  Generating private key...');
+      this.logger.log('  Generating private key...');
       const keyCmd = this.config.passphrase
         ? `openssl genrsa -aes256 -passout pass:'${this.config.passphrase}' -out "${keyPath}" 4096`
         : `openssl genrsa -out "${keyPath}" 4096`;
@@ -53,16 +56,16 @@ export class CAGenerator {
       execSync(`chmod 400 "${keyPath}"`, {stdio: 'inherit'});
 
       // Generate certificate
-      console.log('  Generating certificate...');
+      this.logger.log('  Generating certificate...');
       const certCmd = this.config.passphrase
         ? `openssl req -new -x509 -key "${keyPath}" -passin pass:'${this.config.passphrase}' -out "${certPath}" -days ${this.config.days} -config "${configPath}"`
         : `openssl req -new -x509 -key "${keyPath}" -out "${certPath}" -days ${this.config.days} -config "${configPath}"`;
 
       execSync(certCmd, {stdio: 'inherit'});
 
-      console.log(`✅ CA generated successfully at ${caDir}`);
+      this.logger.log(`✅ CA generated successfully at ${caDir}`);
     } catch (error) {
-      console.error('❌ Error generating CA:', error);
+      this.logger.error('❌ Error generating CA:', error);
       throw error;
     }
   }

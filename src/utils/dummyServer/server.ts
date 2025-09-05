@@ -22,7 +22,7 @@ const handleExitServerRequest: RequestHandler = (req, res) => {
 const handleFailServerRequest: RequestHandler = (req, res) => {
   res.status(200).end();
   setTimeout(() => {
-    throw new Error('fail server!');
+    throw new Error('Fail server!');
   });
 };
 

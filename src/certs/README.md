@@ -202,20 +202,3 @@ certs/
 2. **Permission denied**: Check that you have write permissions to the output directory
 3. **CA not found**: Ensure the CA directory path in certificate config is correct
 4. **Invalid configuration**: Use `npm run certs:help` to see example configurations
-
-### Debug Mode
-
-For detailed OpenSSL output, the commands will show all OpenSSL operations in real-time.
-
-## Integration
-
-This tool integrates with the softkave-infra package and can be used alongside other infrastructure management commands. The generated certificates can be used with:
-
-- Web servers (nginx, Apache)
-- Application servers (Node.js, Python, etc.)
-- Database servers (MongoDB, PostgreSQL)
-- Load balancers and proxies
-
-## License
-
-MIT - Part of the softkave-infra package

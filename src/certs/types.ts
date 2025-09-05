@@ -67,6 +67,7 @@ export const CLIOptionsSchema = z.object({
   force: z.boolean().optional(),
   config: z.string().min(1, 'Config file path is required'),
   cwd: z.string().optional(),
+  silent: z.boolean().optional(),
 });
 
 export type CAConfig = z.infer<typeof CAConfigSchema>;

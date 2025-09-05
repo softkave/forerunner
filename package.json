@@ -38,9 +38,9 @@
     "publish:npm": "npm run clean && tsc && npm publish",
     "publish:yalc": "npm run clean && tsc && yalc publish",
     "show:packlist": "npm run clean && tsc && npm pack --dry-run",
-    "certs:ca": "npx --yes -- tsx src/certs/index.ts ca",
-    "certs:cert": "npx --yes -- tsx src/certs/index.ts cert",
-    "certs:help": "npx --yes -- tsx src/certs/index.ts help"
+    "certs:ca": "npx --yes -- tsx src/certs/bin.ts ca",
+    "certs:cert": "npx --yes -- tsx src/certs/bin.ts cert",
+    "certs:help": "npx --yes -- tsx src/certs/bin.ts help"
   },
   "engines": {
     "node": ">=22"

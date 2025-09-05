@@ -1,13 +1,16 @@
 import {execSync} from 'child_process';
 import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
 import {join} from 'path';
+import {ForeLogger, IForeLogger} from '../utils/foreLogger.js';
 import {CertConfig} from './types.js';
 
 export class CertGenerator {
   private config: CertConfig;
+  private logger: IForeLogger;
 
-  constructor(config: CertConfig) {
+  constructor(config: CertConfig, silent?: boolean) {
     this.config = config;
+    this.logger = new ForeLogger({silent});
   }
 
   /**
@@ -23,14 +26,14 @@ export class CertGenerator {
         unlinkSync(keyPath);
         unlinkSync(certPath);
       } else {
-        console.log(
+        this.logger.log(
           `✅ Certificate already exists at ${certDir}. Use --force to regenerate.`
         );
         return;
       }
     }
 
-    console.log(`🔐 Generating certificate: ${this.config.outDir}`);
+    this.logger.log(`🔐 Generating certificate: ${this.config.outDir}`);
 
     // Create output directory
     mkdirSync(certDir, {recursive: true});
@@ -42,7 +45,7 @@ export class CertGenerator {
 
     try {
       // Generate private key
-      console.log('  Generating private key...');
+      this.logger.log('  Generating private key...');
       const keyCmd = this.config.passphrase
         ? `openssl genrsa -aes256 -passout pass:'${this.config.passphrase}' -out "${keyPath}" 2048`
         : `openssl genrsa -out "${keyPath}" 2048`;
@@ -50,7 +53,7 @@ export class CertGenerator {
       execSync(keyCmd, {stdio: 'inherit'});
 
       // Generate CSR
-      console.log('  Generating CSR...');
+      this.logger.log('  Generating CSR...');
       const csrPath = join(certDir, this.config.files.csr);
       const csrCmd = this.config.passphrase
         ? `openssl req -new -key "${keyPath}" -passin pass:'${this.config.passphrase}' -out "${csrPath}" -config "${configPath}"`
@@ -59,7 +62,7 @@ export class CertGenerator {
       execSync(csrCmd, {stdio: 'inherit'});
 
       // Sign certificate with CA
-      console.log('  Signing certificate with CA...');
+      this.logger.log('  Signing certificate with CA...');
       const caKeyPath = join(this.config.ca.dir, 'ca.key.pem');
       const caCertPath = join(this.config.ca.dir, 'ca.crt.pem');
 
@@ -74,7 +77,7 @@ export class CertGenerator {
       execSync(signCmd, {stdio: 'inherit'});
 
       // Create full chain
-      console.log('  Creating full chain...');
+      this.logger.log('  Creating full chain...');
       const fullchainPath = join(certDir, this.config.files.fullchain);
       const caChainPath = join(this.config.ca.dir, 'ca-chain.pem');
 
@@ -91,16 +94,16 @@ export class CertGenerator {
       }
 
       if (this.config.files.crtAndKey) {
-        console.log('  Creating CRT and key...');
+        this.logger.log('  Creating CRT and key...');
         const crtAndKeyPath = join(certDir, this.config.files.crtAndKey);
         execSync(`cat "${certPath}" "${keyPath}" > "${crtAndKeyPath}"`, {
           stdio: 'inherit',
         });
       }
 
-      console.log(`✅ Certificate generated successfully at ${certDir}`);
+      this.logger.log(`✅ Certificate generated successfully at ${certDir}`);
     } catch (error) {
-      console.error('❌ Error generating certificate:', error);
+      this.logger.error('❌ Error generating certificate:', error);
       throw error;
     }
   }
