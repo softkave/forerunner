@@ -49,6 +49,7 @@ program
       logger.log('✅ CA generation completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
       process.exit(1);
     }
   });
@@ -93,6 +94,7 @@ program
       logger.log('✅ Certificate generation completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
       process.exit(1);
     }
   });
