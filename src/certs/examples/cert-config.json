@@ -1,0 +1,23 @@
+{
+  "certName": "fimidara.com",
+  "outDir": "./certs",
+  "days": 825,
+  "subject": {
+    "C": "US",
+    "ST": "Delaware",
+    "L": "Dover",
+    "O": "fimidara",
+    "CN": "fimidara.com"
+  },
+  "san": ["fimidara.com", "www.fimidara.com", "127.0.0.1"],
+  "files": {
+    "key": "fimidara.com.key.pem",
+    "cert": "fimidara.com.crt.pem",
+    "csr": "fimidara.com.csr.pem",
+    "fullchain": "fimidara.com.fullchain.pem"
+  },
+  "ca": {
+    "dir": "./certs/fimidara-root-ca",
+    "passphrase": ""
+  }
+}

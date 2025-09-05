@@ -129,9 +129,6 @@ runtime-logs/
 local.json
 local-*.json
 
-# certificates
-certs/
-
 # local shananigans
 testdir/
 

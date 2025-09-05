@@ -1,0 +1,18 @@
+{
+  "caName": "fimidara-root-ca",
+  "outDir": "./certs",
+  "days": 3650,
+  "subject": {
+    "C": "US",
+    "ST": "Delaware",
+    "L": "Dover",
+    "O": "fimidara",
+    "CN": "fimidara Root CA"
+  },
+  "files": {
+    "key": "ca.key.pem",
+    "cert": "ca.crt.pem",
+    "csr": "ca.csr.pem",
+    "chain": "ca-chain.pem"
+  }
+}
