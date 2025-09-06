@@ -153,6 +153,10 @@ softkave-forerunner mongo run -c <config-path> [options]
 
 **Note:** This command is currently designed to run on a single computer. It sets up a complete MongoDB replica set locally.
 
+**Automatic User Creation:** Admin and cluster admin users will be automatically created if they don't exist in your configuration. This ensures the replica set has the necessary administrative users for proper operation.
+
+**Configuration Management:** An updated configuration file will be created in the working directory with the name `mongo-run-config.json`. This file contains the merged configuration used during the MongoDB setup process.
+
 **Options:**
 
 - `-e, --addToEtcHosts` - Add non-localhost hostnames to `/etc/hosts` file. This is useful when using non-localhost hostnames in your MongoDB configuration, as it ensures the replica set members can discover each other by resolving the hostnames back to the host machine (127.0.0.1)

@@ -111,11 +111,11 @@ export async function generateCertConfigForMongod(params: {
     },
     san,
     files: {
-      key: 'mongod.key.pem',
-      cert: 'mongod.crt.pem',
-      csr: 'mongod.csr.pem',
-      fullchain: 'mongod-chain.pem',
-      crtAndKey: 'mongod.crt.key.pem',
+      key: `mongod-${params.instanceNumber}.key.pem`,
+      cert: `mongod-${params.instanceNumber}.crt.pem`,
+      csr: `mongod-${params.instanceNumber}.csr.pem`,
+      fullchain: `mongod-${params.instanceNumber}-chain.pem`,
+      crtAndKey: `mongod-${params.instanceNumber}.crt.key.pem`,
     },
     ca: {
       dir: params.caConfig.outDir,
