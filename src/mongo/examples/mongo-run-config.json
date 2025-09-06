@@ -1,0 +1,58 @@
+{
+  "workingDir": "./mongo-data",
+  "mongoVersion": "7.0.0",
+  "systemLinux": "ubuntu2004",
+  "os": "linux",
+  "caConfig": {
+    "days": 365,
+    "subject": {
+      "C": "US",
+      "ST": "Delaware",
+      "L": "Dover",
+      "O": "fimidara",
+      "CN": "fimidara-mongo-ca"
+    },
+    "passphrase": "mongo-ca-passphrase"
+  },
+  "instancesHostnames": [
+    "mongo-1.fimidara.local",
+    "mongo-2.fimidara.local",
+    "mongo-3.fimidara.local"
+  ],
+  "bindLocalhost": true,
+  "instancePorts": [27017, 27018, 27019],
+  "replicaCount": 3,
+  "replicaSetName": "fimidara-rs",
+  "users": [
+    {
+      "username": "admin",
+      "password": "admin-password",
+      "roles": [
+        {
+          "role": "root",
+          "db": "admin"
+        }
+      ]
+    },
+    {
+      "username": "app-user",
+      "password": "app-password",
+      "roles": [
+        {
+          "role": "readWrite",
+          "db": "fimidara"
+        }
+      ]
+    },
+    {
+      "username": "readonly-user",
+      "password": "readonly-password",
+      "roles": [
+        {
+          "role": "read",
+          "db": "fimidara"
+        }
+      ]
+    }
+  ]
+}

@@ -32,7 +32,7 @@ export const mongoRunConfigSchema = z.object({
   instancesHostnames: z.array(z.string().or(z.array(z.string()))),
   bindLocalhost: z.boolean().optional(),
   instancePorts: z.array(z.number()),
-  replicaCount: z.number(),
+  replicaCount: z.number().min(3, 'Replica count must be at least 3'),
   replicaSetName: z.string(),
 
   // mongo users

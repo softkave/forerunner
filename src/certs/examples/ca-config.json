@@ -1,5 +1,4 @@
 {
-  "caName": "fimidara-root-ca",
   "outDir": "./certs",
   "days": 3650,
   "subject": {
@@ -14,5 +13,6 @@
     "cert": "ca.crt.pem",
     "csr": "ca.csr.pem",
     "chain": "ca-chain.pem"
-  }
+  },
+  "passphrase": "ca-passphrase"
 }

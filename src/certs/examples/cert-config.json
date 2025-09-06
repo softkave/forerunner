@@ -1,5 +1,4 @@
 {
-  "certName": "fimidara.com",
   "outDir": "./certs",
   "days": 825,
   "subject": {
@@ -18,6 +17,7 @@
   },
   "ca": {
     "dir": "./certs/fimidara-root-ca",
-    "passphrase": ""
-  }
+    "passphrase": "ca-passphrase"
+  },
+  "passphrase": "cert-passphrase"
 }
