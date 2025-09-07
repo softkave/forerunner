@@ -42,7 +42,7 @@ export class CAGenerator {
 
     // Generate OpenSSL configuration
     const opensslConfig = this.generateOpenSSLConfig();
-    const configPath = join(caDir, 'openssl.cnf');
+    const configPath = join(caDir, `openssl-${this.config.files.key}.cnf`);
     writeFileSync(configPath, opensslConfig);
 
     try {

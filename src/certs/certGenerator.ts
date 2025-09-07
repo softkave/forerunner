@@ -45,7 +45,7 @@ export class CertGenerator {
 
     // Generate OpenSSL configuration with SAN
     const opensslConfig = this.generateOpenSSLConfig();
-    const configPath = join(certDir, 'openssl.cnf');
+    const configPath = join(certDir, `openssl-${this.config.files.key}.cnf`);
     writeFileSync(configPath, opensslConfig);
 
     try {

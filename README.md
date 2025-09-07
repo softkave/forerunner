@@ -159,7 +159,7 @@ softkave-forerunner mongo run -c <config-path> [options]
 
 **Options:**
 
-- `-e, --addToEtcHosts` - Add non-localhost hostnames to `/etc/hosts` file. This is useful when using non-localhost hostnames in your MongoDB configuration, as it ensures the replica set members can discover each other by resolving the hostnames back to the host machine (127.0.0.1)
+- `-e, --addToEtcHosts` - Add non-localhost hostnames to `/etc/hosts` file. This is useful when using non-localhost hostnames in your MongoDB configuration, as it ensures the replica set members can discover each other by resolving the hostnames back to the host machine (127.0.0.1). **Note:** This will require sudo password unless you have configured passwordless sudo access for `/etc/hosts` in your sudoers file.
 - `--overwriteConfig` - Overwrite existing config
 - `--overwriteCerts` - Overwrite existing certs
 
@@ -172,6 +172,8 @@ softkave-forerunner mongo etc-hosts -c <config-path> [options]
 ### Hosts File Management (`etc-hosts`)
 
 Manage `/etc/hosts` file entries for local development.
+
+**Note:** Commands that write to the `/etc/hosts` file (set, backup, restore) will require sudo password unless you have configured passwordless sudo access for `/etc/hosts` in your sudoers file.
 
 #### Set Host Entry
 
