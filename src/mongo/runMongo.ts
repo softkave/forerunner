@@ -1,7 +1,10 @@
 import {compact, uniqBy} from 'lodash-es';
-import {waitTimeout} from 'softkave-js-utils';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {
+  checkMongoInstancesListening,
+  checkMongoReplicaSetReady,
+} from './checkMongoReadyState.js';
 import {downloadMongo} from './downloadMongo.js';
 import {setNonLocalhostNamesInEtcHostsMain} from './etcHostsMongo.js';
 import {generateMongoCertConfigsMain} from './generateMongoCertConfigs.js';
@@ -75,8 +78,10 @@ export async function runMongo(params: {
   // instances and checking if they are ready, instead of just waiting for a
   // fixed amount of time, because different systems have different startup
   // times.
-  logger.log('Waiting for 10 seconds for mongo instances to start');
-  await waitTimeout(10_000);
+  // logger.log('Waiting for 10 seconds for mongo instances to start');
+  // await waitTimeout(10_000);
+  logger.log('Waiting for mongo instances to start');
+  await checkMongoInstancesListening({mongoRunConfig});
 
   logger.log('Setting up replica set');
   await setupReplicaSetMain({mongoRunConfig, logger});
@@ -116,8 +121,10 @@ export async function runMongo(params: {
   // looking into the system logs of the mongo instances and checking if the
   // replica set is ready, instead of just waiting for a fixed amount of time,
   // because different systems have different speeds.
-  logger.log('Waiting for 5 seconds for replica set to be ready');
-  await waitTimeout(5000);
+  // logger.log('Waiting for 5 seconds for replica set to be ready');
+  // await waitTimeout(5000);
+  logger.log('Waiting for replica set to be ready');
+  await checkMongoReplicaSetReady({mongoRunConfig});
 
   logger.log('Setting up replica set first users');
   await setupReplicaSetFirstUsers({mongoRunConfig, logger});
