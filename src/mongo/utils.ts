@@ -2,7 +2,6 @@ import assert from 'assert';
 import fs from 'fs';
 import {generate} from 'generate-password';
 import {load} from 'js-yaml';
-import {first} from 'lodash-es';
 import {MongoClient} from 'mongodb';
 import {convertToArray} from 'softkave-js-utils';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
@@ -125,6 +124,18 @@ export async function getMongoUriForInstance(params: {
   return uri;
 }
 
+export function compileHostnames(params: {
+  initialHostnames: string[] | string;
+  bindLocalhost: boolean;
+}) {
+  const {initialHostnames, bindLocalhost} = params;
+  let hostnames = convertToArray(initialHostnames);
+  if (bindLocalhost) {
+    hostnames = [...hostnames, 'localhost', '127.0.0.1'];
+  }
+  return hostnames;
+}
+
 export async function getMongoUriForReplicaSet(params: {
   username?: string;
   password?: string;
@@ -135,12 +146,19 @@ export async function getMongoUriForReplicaSet(params: {
 }) {
   const {mongoRunConfig, serverSelectionTimeoutMS = 5000, logger} = params;
   const hostnamesPerInstance = mongoRunConfig.instancesHostnames.map(
-    hostnames => {
+    initialHostnames => {
+      const hostnames = compileHostnames({
+        initialHostnames,
+        bindLocalhost: mongoRunConfig.bindLocalhost || false,
+      });
+      let hostname: string | undefined;
       if (params.preferLocalhost) {
-        return getFirstLocalhostBindIp({hostnames}) || first(hostnames);
+        hostname = getFirstLocalhostBindIp({hostnames});
+      } else {
+        hostname = getFirstNonLocalhostBindIp({hostnames});
       }
 
-      return getFirstNonLocalhostBindIp({hostnames}) || first(hostnames);
+      return hostname || hostnames[0];
     }
   );
   const portsPerInstance = mongoRunConfig.instancePorts;

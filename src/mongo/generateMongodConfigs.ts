@@ -3,9 +3,9 @@ import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
 import {dump, load} from 'js-yaml';
 import path from 'path';
-import {convertToArray} from 'softkave-js-utils';
 import {z} from 'zod';
 import {CAConfig, CertConfig} from '../certs/types.js';
+import {compileHostnames} from '../index.js';
 import {
   generateCAConfigForMongo,
   generateCertConfigForMongod,
@@ -110,13 +110,11 @@ export async function generateMongoConfigForMongod(params: {
   const port = params.mongoRunConfig.instancePorts[params.instanceNumber - 1];
   assert.ok(port, 'port must be set');
 
-  let hostnames = convertToArray(
-    params.mongoRunConfig.instancesHostnames[params.instanceNumber - 1]
-  );
-  if (params.mongoRunConfig.bindLocalhost) {
-    hostnames = [...hostnames, 'localhost', '127.0.0.1'];
-  }
-  const bindIp = hostnames;
+  const bindIp = compileHostnames({
+    initialHostnames:
+      params.mongoRunConfig.instancesHostnames[params.instanceNumber - 1],
+    bindLocalhost: params.mongoRunConfig.bindLocalhost || false,
+  });
   const config: MongoConfig = {
     systemLog: {
       destination: 'file',
