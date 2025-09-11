@@ -1,4 +1,5 @@
 import {compact, uniqBy} from 'lodash-es';
+import {writeMongoUser} from '../index.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {
@@ -23,7 +24,6 @@ import {
 } from './setupReplicaSet.js';
 import {startMongodInstancesMain} from './startMongodInstances.js';
 import {stopMongodInstancesMain} from './stopMongodInstances.js';
-import {writeMongoUser} from './writeMongoUsers.js';
 
 export async function runMongo(params: {
   mongoRunConfig: MongoRunConfig;
@@ -72,21 +72,9 @@ export async function runMongo(params: {
   logger.log('Starting mongo instances');
   await startMongodInstancesMain({mongoRunConfig, logger});
 
-  // Wait a bit for mongo instances to start. In my tests, it was up after 10
-  // seconds, but not before 5 seconds, so I settled for 10 seconds. TODO: We
-  // need to improve this, by looking into the system logs of the mongo
-  // instances and checking if they are ready, instead of just waiting for a
-  // fixed amount of time, because different systems have different startup
-  // times.
-  // logger.log('Waiting for 10 seconds for mongo instances to start');
-  // await waitTimeout(10_000);
   logger.log('Waiting for mongo instances to start');
   await checkMongoInstancesListening({mongoRunConfig});
 
-  logger.log('Setting up replica set');
-  await setupReplicaSetMain({mongoRunConfig, logger});
-
-  logger.log('Setting up replica set first users');
   logger.log('Reading mongo users');
   const mongoUsers = await readMongoUsers({
     configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
@@ -116,16 +104,12 @@ export async function runMongo(params: {
   logger.log('Writing mongo users');
   await writeMongoUser({mongoRunConfig, users, logger});
 
-  // Wait a bit for replica set to be ready. In my tests, it was ready after 5
-  // seconds, so I settled for 5 seconds. TODO: We need to improve this, by
-  // looking into the system logs of the mongo instances and checking if the
-  // replica set is ready, instead of just waiting for a fixed amount of time,
-  // because different systems have different speeds.
-  // logger.log('Waiting for 5 seconds for replica set to be ready');
-  // await waitTimeout(5000);
+  logger.log('Setting up replica set');
+  await setupReplicaSetMain({mongoRunConfig, logger});
+
   logger.log('Waiting for replica set to be ready');
   await checkMongoReplicaSetReady({mongoRunConfig});
 
-  logger.log('Setting up replica set first users');
+  logger.log('Setting up replica set first users if not setup');
   await setupReplicaSetFirstUsers({mongoRunConfig, logger});
 }

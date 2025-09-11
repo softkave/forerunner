@@ -37,18 +37,21 @@ export async function setupSingleMongoUser(params: {
   adminUser?: MongoUser;
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  preferLocalhost?: boolean;
 }) {
   const {
     user,
     adminUser,
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
+    preferLocalhost,
   } = params;
   const client = await getMongoClientForReplicaSet({
     username: adminUser?.username,
     password: adminUser?.password,
     mongoRunConfig,
     logger,
+    preferLocalhost,
   });
 
   try {
@@ -145,18 +148,21 @@ async function checkUserExists(params: {
   adminUser?: MongoUser;
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  preferLocalhost?: boolean;
 }) {
   const {
     user,
     adminUser,
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
+    preferLocalhost,
   } = params;
   const client = await getMongoClientForReplicaSet({
     username: adminUser?.username,
     password: adminUser?.password,
     mongoRunConfig,
     logger,
+    preferLocalhost,
   });
 
   try {

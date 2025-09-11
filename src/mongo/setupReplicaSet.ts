@@ -34,7 +34,12 @@ export async function setupReplicaSetFirstUsers(params: {
     return;
   }
 
-  await setupSingleMongoUser({user: adminUser, mongoRunConfig, logger});
+  await setupSingleMongoUser({
+    user: adminUser,
+    mongoRunConfig,
+    logger,
+    preferLocalhost: true,
+  });
 
   const clusterAdminUser = await findClusterAdminMongoUser({
     mongoUsers,
@@ -50,12 +55,19 @@ export async function setupReplicaSetFirstUsers(params: {
     adminUser,
     mongoRunConfig,
     logger,
+    preferLocalhost: true,
   });
 
   const regularUsers = await filterRegularMongoUsers({mongoUsers});
   await Promise.all(
     regularUsers.map(user =>
-      setupSingleMongoUser({user, adminUser, mongoRunConfig, logger})
+      setupSingleMongoUser({
+        user,
+        adminUser,
+        mongoRunConfig,
+        logger,
+        preferLocalhost: true,
+      })
     )
   );
 }
@@ -73,7 +85,11 @@ export async function setupReplicaSetMain(params: {
   let client: MongoClient | null = null;
 
   try {
-    client = await getMongoClientForInstance({mongoRunConfig, logger});
+    client = await getMongoClientForInstance({
+      mongoRunConfig,
+      logger,
+      preferLocalhost: true,
+    });
     const adminDb = client.db('admin');
 
     // Check if replica set is already initialized
