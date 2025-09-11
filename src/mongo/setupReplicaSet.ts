@@ -1,3 +1,4 @@
+import assert from 'assert';
 import {MongoClient} from 'mongodb';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
@@ -14,6 +15,7 @@ import {
   getFirstNonLocalhostBindIp,
   getMongoClientForInstance,
   getMongodConfigs,
+  separateBindIps,
 } from './utils.js';
 
 export async function setupReplicaSetFirstUsers(params: {
@@ -107,9 +109,10 @@ export async function setupReplicaSetMain(params: {
           replSetInitiate: {
             _id: mongoConfig0.replication.replSetName,
             members: mongodConfigs.map((config, index) => {
-              const bindIp0 = getFirstNonLocalhostBindIp({
-                bindIp: config.net.bindIp,
-              });
+              const hostnames = separateBindIps(config.net.bindIp);
+              const bindIp0 =
+                getFirstNonLocalhostBindIp({hostnames}) || hostnames[0];
+              assert.ok(bindIp0, 'bindIp0 must be set');
               let host = `${bindIp0}:${config.net.port}`;
               logger.log('host:', host);
               return {

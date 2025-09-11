@@ -64,6 +64,17 @@ export function getNonLocalhostBindIps(params: {
   return hostnames.filter(hostname => !isLocalhostname(hostname));
 }
 
+export function getLocalhostBindIps(params: {
+  bindIp?: string;
+  hostnames?: string[] | string;
+}) {
+  const hostnames = [
+    ...(params.bindIp ? separateBindIps(params.bindIp) : []),
+    ...(params.hostnames || []),
+  ];
+  return hostnames.filter(hostname => isLocalhostname(hostname));
+}
+
 export function getFirstNonLocalhostBindIp(params: {
   bindIp?: string;
   hostnames?: string[] | string;
@@ -79,7 +90,7 @@ export function getFirstLocalhostBindIp(params: {
   bindIp?: string;
   hostnames?: string[] | string;
 }) {
-  const bindIps = getNonLocalhostBindIps({
+  const bindIps = getLocalhostBindIps({
     bindIp: params.bindIp,
     hostnames: params.hostnames ? convertToArray(params.hostnames) : undefined,
   });
