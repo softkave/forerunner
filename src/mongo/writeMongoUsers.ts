@@ -74,7 +74,7 @@ export async function writeMongoUsersFromConfig(params: {
   } = params;
 
   // Read existing users from the config file
-  const mongoUsers = await readMongoUsers({
+  const existingMongoUsers = await readMongoUsers({
     configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
   });
 
@@ -83,6 +83,12 @@ export async function writeMongoUsersFromConfig(params: {
   if (usersFilePath) {
     fileUsers = await readMongoUsers({configFilePath: usersFilePath});
   }
+
+  const mongoUsers = [
+    ...mongoRunConfig.users,
+    ...existingMongoUsers,
+    ...fileUsers,
+  ];
 
   // Find or create admin user if requested
   let adminUser: MongoUser | undefined;
@@ -100,13 +106,7 @@ export async function writeMongoUsersFromConfig(params: {
 
   // Combine all users, removing duplicates by username
   const users = uniqBy(
-    compact([
-      adminUser,
-      clusterAdminUser,
-      ...mongoUsers,
-      ...fileUsers,
-      ...mongoRunConfig.users,
-    ]),
+    compact([adminUser, clusterAdminUser, ...mongoUsers]),
     user => user.username
   );
 
