@@ -262,5 +262,6 @@ export function generateMongoPassword() {
     symbols: true,
     uppercase: true,
     strict: true,
+    exclude: '"\'\\',
   });
 }
