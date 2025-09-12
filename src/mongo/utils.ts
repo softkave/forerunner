@@ -259,8 +259,7 @@ export function generateMongoPassword() {
   return generate({
     length: 32,
     numbers: true,
-    // MongoDB when testing was having issues with some symbols in passwords
-    symbols: false,
+    symbols: true,
     uppercase: true,
     strict: true,
   });

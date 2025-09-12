@@ -105,10 +105,10 @@ export async function setupReplicaSetMain(params: {
     logger = new ConsoleForeLogger({silent: true}),
     retainClient,
   } = params;
+
   const replicaCount = mongoRunConfig.replicaCount;
   const mongodConfigs = await getMongodConfigs({replicaCount, mongoRunConfig});
   const mongoConfig0 = mongodConfigs[0];
-
   let client: MongoClient | null = null;
 
   try {
@@ -147,7 +147,10 @@ export async function setupReplicaSetMain(params: {
             }),
           },
         });
-        logger.log('Replica set initialization result:', result);
+        logger.log(
+          'Replica set initialization result:',
+          result.ok ? 'success' : 'failed'
+        );
       }
     }
 

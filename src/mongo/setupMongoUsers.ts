@@ -120,7 +120,7 @@ export async function findAdminMongoUser(params: {
     user.roles.some(role => role.role === 'userAdminAnyDatabase')
   );
 
-  if (createIfNotFound) {
+  if (createIfNotFound && !adminUser) {
     adminUser = {
       username: 'admin',
       password: generateMongoPassword(),
@@ -145,7 +145,7 @@ export async function findClusterAdminMongoUser(params: {
     user.roles.some(role => role.role === 'clusterAdmin')
   );
 
-  if (createIfNotFound) {
+  if (createIfNotFound && !clusterAdminUser) {
     clusterAdminUser = {
       username: 'clusterAdmin',
       password: generateMongoPassword(),
