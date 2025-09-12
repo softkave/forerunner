@@ -1,6 +1,6 @@
 {
   "workingDir": "./mongo-data",
-  "mongoVersion": "7.0.0",
+  "mongoVersion": "8.0.0",
   "systemLinux": "ubuntu2004",
   "os": "linux",
   "caConfig": {
@@ -27,9 +27,21 @@
     {
       "username": "admin",
       "password": "admin-password",
+      "authDb": "admin",
       "roles": [
         {
-          "role": "root",
+          "role": "userAdminAnyDatabase",
+          "db": "admin"
+        }
+      ]
+    },
+    {
+      "username": "cluster-admin",
+      "password": "cluster-admin-password",
+      "authDb": "admin",
+      "roles": [
+        {
+          "role": "clusterAdmin",
           "db": "admin"
         }
       ]
@@ -37,6 +49,7 @@
     {
       "username": "app-user",
       "password": "app-password",
+      "authDb": "fimidara",
       "roles": [
         {
           "role": "readWrite",
@@ -47,6 +60,7 @@
     {
       "username": "readonly-user",
       "password": "readonly-password",
+      "authDb": "fimidara",
       "roles": [
         {
           "role": "read",

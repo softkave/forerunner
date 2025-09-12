@@ -37,7 +37,8 @@ export const MongoConfigSchema = z.object({
     }),
   }),
   security: z.object({
-    authorization: z.literal('enabled'),
+    authorization: z.enum(['enabled', 'disabled']),
+    transitionToAuth: z.boolean().optional(),
     keyFile: z.string().optional(),
     clusterAuthMode: z.literal('x509'),
   }),
@@ -97,6 +98,7 @@ export async function generateMongoConfigForMongod(params: {
   caConfig: CAConfig;
   overwrite?: boolean;
   mongoRunConfig: MongoRunConfig;
+  modifyConfig?: (config: MongoConfig) => MongoConfig;
 }) {
   const configFilePath = getMongodConfigFilePath(
     params.mongoRunConfig,
@@ -115,7 +117,7 @@ export async function generateMongoConfigForMongod(params: {
       params.mongoRunConfig.instancesHostnames[params.instanceNumber - 1],
     bindLocalhost: params.mongoRunConfig.bindLocalhost || false,
   });
-  const config: MongoConfig = {
+  let config: MongoConfig = {
     systemLog: {
       destination: 'file',
       logAppend: true,
@@ -146,6 +148,7 @@ export async function generateMongoConfigForMongod(params: {
       // keyFile: `${params.mongoCertConfig.outDir}/${params.mongoCertConfig.files.key}`,
       clusterAuthMode: 'x509',
       authorization: 'enabled',
+      transitionToAuth: false,
     },
     processManagement: {
       // we handle starting a background process for each mongod instance
@@ -158,6 +161,9 @@ export async function generateMongoConfigForMongod(params: {
   };
 
   await ensureFile(configFilePath);
+  if (params.modifyConfig) {
+    config = params.modifyConfig(config);
+  }
   await fs.promises.writeFile(configFilePath, dump(config, {lineWidth: 120}));
   return config;
 }
@@ -165,8 +171,9 @@ export async function generateMongoConfigForMongod(params: {
 export async function generateMongodConfigsMain(params: {
   mongoRunConfig: MongoRunConfig;
   overwrite?: boolean;
+  modifyConfig?: (config: MongoConfig) => MongoConfig;
 }) {
-  const {mongoRunConfig, overwrite} = params;
+  const {mongoRunConfig, overwrite, modifyConfig} = params;
   const caConfig = await generateCAConfigForMongo({overwrite, mongoRunConfig});
   for (let i = 1; i <= mongoRunConfig.replicaCount; i++) {
     const mongoCertConfig = await generateCertConfigForMongod({
@@ -180,6 +187,7 @@ export async function generateMongodConfigsMain(params: {
       mongoCertConfig,
       caConfig,
       overwrite,
+      modifyConfig,
     });
   }
 }

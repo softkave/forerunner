@@ -2,7 +2,6 @@
 /* eslint-disable n/no-process-exit */
 
 import {Command} from 'commander';
-import {readFileSync} from 'fs';
 import {ConsoleForeLogger} from './utils/foreLogger/ConsoleForeLogger.js';
 
 // Import certs functionality
@@ -17,11 +16,11 @@ import {
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
   generateMongodConfigsMain,
-  runMongo,
+  initMongo,
   setupReplicaSetMain,
   startMongodInstancesMain,
   stopMongodInstancesMain,
-  writeMongoUser,
+  writeMongoUsersFromConfig,
 } from './mongo/index.js';
 import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
 import {setupMongoUsersMain} from './mongo/setupMongoUsers.js';
@@ -318,7 +317,13 @@ mongoProgram
   .command('write-users')
   .description('Write MongoDB users configuration')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .requiredOption('-u, --users <path>', 'Path to users JSON file')
+  .option('-u, --users <path>', 'Path to users JSON file (optional)')
+  .option('--create-admin', 'Create admin user if not found', false)
+  .option(
+    '--create-cluster-admin',
+    'Create cluster admin user if not found',
+    false
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -327,9 +332,14 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: false,
       });
-      const usersContent = readFileSync(options.users, 'utf-8');
-      const users = JSON.parse(usersContent);
-      await writeMongoUser({mongoRunConfig, users, logger});
+
+      await writeMongoUsersFromConfig({
+        mongoRunConfig,
+        usersFilePath: options.users,
+        createAdmin: options.createAdmin,
+        createClusterAdmin: options.createClusterAdmin,
+        logger,
+      });
       logger.log('✅ MongoDB users configuration written successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -338,12 +348,11 @@ mongoProgram
     }
   });
 
-// Run MongoDB
+// Initialize MongoDB
 mongoProgram
-  .command('run')
-  .description('Run MongoDB with configuration')
+  .command('init')
+  .description('Initialize MongoDB with configuration')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-e, --addToEtcHosts', 'Add to etc hosts', false)
   .option('--overwriteConfig', 'Overwrite existing config', false)
   .option('--overwriteCerts', 'Overwrite existing certs', false)
   .option('-s, --silent', 'Silent mode')
@@ -354,14 +363,13 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: true,
       });
-      await runMongo({
+      await initMongo({
         mongoRunConfig,
         logger,
-        addToEtcHosts: options.addToEtcHosts,
         overwriteConfig: options.overwriteConfig,
         overwriteCerts: options.overwriteCerts,
       });
-      logger.log('✅ MongoDB run completed successfully');
+      logger.log('✅ MongoDB initialization completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -552,8 +560,8 @@ COMMANDS:
     stop                   Stop MongoDB instances
     setup-replica-set      Setup MongoDB replica set
     setup-users            Setup MongoDB users
-    write-users            Write MongoDB users configuration
-    run                    Run MongoDB with configuration
+    write-users            Write MongoDB users configuration (users file optional)
+    init                   Initialize MongoDB with configuration
     etc-hosts              Setup non-localhost hostnames in /etc/hosts for MongoDB instances
 
   etc-hosts                Manage /etc/hosts file entries
@@ -575,8 +583,8 @@ EXAMPLES:
   # Download MongoDB (requires config file)
   forerunner mongo download -c mongo-config.json
 
-  # Start MongoDB instances (requires config file)
-  forerunner mongo start -c mongo-config.json
+  # Initialize MongoDB (requires config file)
+  forerunner mongo init -c mongo-config.json
 
   # Set a host entry
   forerunner etc-hosts set example.com 127.0.0.1

@@ -1,11 +1,16 @@
 import fs from 'fs';
 import {exists} from 'fs-extra';
+import {MongoClient} from 'mongodb';
 import path from 'path';
 import z from 'zod';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {generateMongoPassword, getMongoClientForReplicaSet} from './utils.js';
+import {
+  generateMongoPassword,
+  getMongoClientForInstance,
+  getMongoClientForReplicaSet,
+} from './utils.js';
 
 export const MongoUserSchema = z.object({
   username: z.string(),
@@ -38,6 +43,11 @@ export async function setupSingleMongoUser(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   preferLocalhost?: boolean;
+  client?: MongoClient;
+  /** Do not close the client after setup */
+  retainClient?: boolean;
+  /** Only used if a client is provided */
+  connectionType?: 'replicaSet' | 'instance';
 }) {
   const {
     user,
@@ -45,14 +55,27 @@ export async function setupSingleMongoUser(params: {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
     preferLocalhost,
+    client: incomingClient,
+    retainClient,
+    connectionType = 'replicaSet',
   } = params;
-  const client = await getMongoClientForReplicaSet({
-    username: adminUser?.username,
-    password: adminUser?.password,
-    mongoRunConfig,
-    logger,
-    preferLocalhost,
-  });
+  const client =
+    incomingClient ||
+    (connectionType === 'replicaSet'
+      ? await getMongoClientForReplicaSet({
+          username: adminUser?.username,
+          password: adminUser?.password,
+          mongoRunConfig,
+          logger,
+          preferLocalhost,
+        })
+      : await getMongoClientForInstance({
+          username: adminUser?.username,
+          password: adminUser?.password,
+          mongoRunConfig,
+          logger,
+          preferLocalhost,
+        }));
 
   try {
     // Use the authDb specified in the user config
@@ -64,15 +87,17 @@ export async function setupSingleMongoUser(params: {
     });
 
     logger.log('username', user.username, result.ok ? 'success' : 'failed');
+    return retainClient ? client : undefined;
   } finally {
     // Close the database connection on completion or error
-    await client.close();
+    if (!retainClient) {
+      await client.close();
+    }
   }
 }
 
 export async function readMongoUsers(params: {configFilePath: string}) {
   const {configFilePath} = params;
-
   if (!(await exists(configFilePath))) {
     return [];
   }

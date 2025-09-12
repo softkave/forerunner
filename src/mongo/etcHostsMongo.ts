@@ -1,6 +1,7 @@
 import {listHosts, setHost} from '../etcHosts/helpers.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {getLocalIP} from '../utils/getLocalIP.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {getMongodConfigForInstance, getNonLocalhostBindIps} from './utils.js';
 
@@ -30,11 +31,13 @@ export async function setNonLocalhostNamesInEtcHosts(params: {
   );
 
   const localIp = '127.0.0.1';
+  const {ipv4} = getLocalIP();
+  const ip = ipv4[0] ?? localIp;
   for (const hostname of nonLocalhostBindIp) {
     if (currentEtcHostsMap.has(hostname)) {
       continue;
     }
-    setHost({hostname, ip: localIp, logger});
+    setHost({hostname, ip, logger});
   }
 }
 

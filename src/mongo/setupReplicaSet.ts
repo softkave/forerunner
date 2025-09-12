@@ -18,12 +18,20 @@ import {
   separateBindIps,
 } from './utils.js';
 
-export async function setupReplicaSetFirstUsers(params: {
+export async function setupFirstUsers(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  client?: MongoClient;
+  /** Only used if a client is provided */
+  connectionType?: 'replicaSet' | 'instance';
 }) {
-  const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
-    params;
+  const {
+    mongoRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+    client,
+    connectionType = 'replicaSet',
+  } = params;
+
   const mongoUsers = await readMongoUsers({
     configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
   });
@@ -31,55 +39,72 @@ export async function setupReplicaSetFirstUsers(params: {
     mongoUsers,
     createIfNotFound: true,
   });
-  if (!adminUser) {
-    logger.log('Admin user not found, skipping');
-    return;
-  }
 
-  await setupSingleMongoUser({
-    user: adminUser,
-    mongoRunConfig,
-    logger,
-    preferLocalhost: true,
-  });
+  // If a client is provided, we don't want to close it after setting up a user
+  // because it's externally managed.
+  const retainClient = !!client;
+
+  if (adminUser) {
+    logger.log('Admin user found, setting up');
+    await setupSingleMongoUser({
+      user: adminUser,
+      mongoRunConfig,
+      logger,
+      preferLocalhost: true,
+      client,
+      retainClient,
+      connectionType,
+    });
+  }
 
   const clusterAdminUser = await findClusterAdminMongoUser({
     mongoUsers,
     createIfNotFound: true,
   });
-  if (!clusterAdminUser) {
-    logger.log('Cluster admin user not found, skipping');
-    return;
+  if (clusterAdminUser) {
+    logger.log('Cluster admin user found, setting up');
+    await setupSingleMongoUser({
+      user: clusterAdminUser,
+      adminUser,
+      mongoRunConfig,
+      logger,
+      preferLocalhost: true,
+      client,
+      retainClient,
+      connectionType,
+    });
   }
 
-  await setupSingleMongoUser({
-    user: clusterAdminUser,
-    adminUser,
-    mongoRunConfig,
-    logger,
-    preferLocalhost: true,
-  });
-
   const regularUsers = await filterRegularMongoUsers({mongoUsers});
-  await Promise.all(
-    regularUsers.map(user =>
-      setupSingleMongoUser({
-        user,
-        adminUser,
-        mongoRunConfig,
-        logger,
-        preferLocalhost: true,
-      })
-    )
-  );
+  if (regularUsers.length > 0) {
+    logger.log('Setting up regular users', regularUsers.length);
+    await Promise.all(
+      regularUsers.map(user =>
+        setupSingleMongoUser({
+          user,
+          adminUser,
+          mongoRunConfig,
+          logger,
+          preferLocalhost: true,
+          client,
+          retainClient,
+          connectionType,
+        })
+      )
+    );
+  }
 }
 
 export async function setupReplicaSetMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  retainClient?: boolean;
 }) {
-  const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
-    params;
+  const {
+    mongoRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+    retainClient,
+  } = params;
   const replicaCount = mongoRunConfig.replicaCount;
   const mongodConfigs = await getMongodConfigs({replicaCount, mongoRunConfig});
   const mongoConfig0 = mongodConfigs[0];
@@ -125,8 +150,12 @@ export async function setupReplicaSetMain(params: {
         logger.log('Replica set initialization result:', result);
       }
     }
+
+    return retainClient ? client : undefined;
   } finally {
     // Close the database connection on completion or error
-    await client?.close();
+    if (!retainClient) {
+      await client?.close();
+    }
   }
 }

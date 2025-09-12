@@ -1,6 +1,6 @@
-# forerunner
+# softkave-forerunner
 
-Softkave internal application runner & helpers - A CLI tool and SDK for managing certificates, MongoDB instances, and system hosts file.
+Softkave's internal application runner & helpers - A CLI tool and SDK for managing certificates, MongoDB instances, and system hosts file.
 
 ## Overview
 
@@ -41,11 +41,40 @@ softkave-forerunner <command> [subcommand] [options]
 ### SDK Usage
 
 ```typescript
-import {generateCA, runMongo} from 'softkave-forerunner';
+import {generateCA, initMongo} from 'softkave-forerunner';
 // Use programmatically in your Node.js applications
 ```
 
 ## Commands
+
+### Command Overview
+
+#### Certificate Management
+
+- [`certs ca`](#generate-certificate-authority) - Generate Certificate Authority
+- [`certs cert`](#generate-certificate) - Generate signed certificate
+
+#### MongoDB Management
+
+- [`mongo download`](#download-mongodb) - Download MongoDB binary
+- [`mongo generate-certs`](#generate-certificates) - Generate MongoDB certificates
+- [`mongo generate-cert-configs`](#generate-certificate-configurations) - Generate certificate configs
+- [`mongo generate-configs`](#generate-mongodb-configurations) - Generate MongoDB configs
+- [`mongo start`](#start-mongodb-instances) - Start MongoDB instances
+- [`mongo stop`](#stop-mongodb-instances) - Stop MongoDB instances
+- [`mongo setup-replica-set`](#setup-replica-set) - Setup replica set
+- [`mongo setup-users`](#setup-mongodb-users) - Setup MongoDB users
+- [`mongo write-users`](#write-mongodb-users) - Write users to file
+- [`mongo init`](#initialize-mongodb-complete-setup) - Complete MongoDB setup
+- [`mongo etc-hosts`](#setup-etchosts-for-mongodb) - Setup etc/hosts for MongoDB
+
+#### Hosts File Management
+
+- [`etc-hosts set`](#set-host-entry) - Set host entry
+- [`etc-hosts remove`](#remove-host-entry) - Remove host entry
+- [`etc-hosts list`](#list-host-entries) - List host entries
+- [`etc-hosts backup`](#backup-hosts-file) - Backup hosts file
+- [`etc-hosts restore`](#restore-hosts-file) - Restore hosts file
 
 ### Certificate Management (`certs`)
 
@@ -129,37 +158,65 @@ softkave-forerunner mongo stop -c <config-path> [options]
 softkave-forerunner mongo setup-replica-set -c <config-path> [options]
 ```
 
+**Description**: Configures a MongoDB replica set by connecting directly to the first instance in the configuration. This command initializes the replica set and adds all configured instances as members.
+
+**Connection Method**: Uses a direct connection to the first instance (typically the primary) to configure the replica set.
+
+**Important:** If you are using non-IP hostnames (e.g., `mongo-1.fimidara.local`) in your MongoDB configuration, you must add these hostnames to your `/etc/hosts` file (on Mac/Linux or equivalent on other Operating Systems) before running this command, if they are not discoverable through DNS. Use the `etc-hosts` command to manage host entries.
+
 #### Setup MongoDB Users
 
 ```bash
 softkave-forerunner mongo setup-users -c <config-path> [options]
 ```
 
+**Description**: Creates and adds users directly to the MongoDB database. This command connects to MongoDB and creates user accounts with the specified roles and permissions.
+
+**Prerequisites**: Expects a replica set to be running and connects to the replica set using the configuration provided.
+
+**What it does**:
+
+- Connects to the MongoDB replica set
+- Creates user accounts in the database
+- Assigns roles and permissions to users
+- Users are immediately available for authentication
+
 #### Write MongoDB Users
 
 ```bash
-softkave-forerunner mongo write-users -c <config-path> -u <users-path> [options]
+softkave-forerunner mongo write-users -c <config-path> [options]
 ```
+
+**Description**: Writes user configuration from the MongoDB config (and/or `--users` path provided) to a `mongo-users.json` file in the working directory. This command extracts user information from the configuration and saves it to a separate file for reference or backup purposes.
+
+**What it does**:
+
+- Reads user configuration from the MongoDB config file (and/or `--users` path provided)
+- Writes user data to `mongo-users.json` in the working directory
+- Does not connect to or modify the MongoDB database
 
 **Options:**
 
-- `-u, --users <path>` - Path to users JSON file (required)
+- `-u, --users <path>` - Path to users JSON file (optional - if not provided, users are read from mongo config)
+- `--create-admin` - Create admin user if not found (default: false)
+- `--create-cluster-admin` - Create cluster admin user if not found (default: false)
 
-#### Run MongoDB (Complete Setup)
+#### Initialize MongoDB (Complete Setup)
 
 ```bash
-softkave-forerunner mongo run -c <config-path> [options]
+softkave-forerunner mongo init -c <config-path> [options]
 ```
 
-**Note:** This command is currently designed to run on a single computer. It sets up a complete MongoDB replica set locally.
+**Note:** This command is currently designed to run on a single computer. It sets up a complete MongoDB replica set locally. **This command should be run once** to set up the initial MongoDB infrastructure. After the initial setup, use other commands like `start` and `stop`, for ongoing operations.
 
-**Automatic User Creation:** Admin and cluster admin users will be automatically created if they don't exist in your configuration. This ensures the replica set has the necessary administrative users for proper operation.
+**Important:** If you are using non-IP hostnames (e.g., `mongo-1.fimidara.local`) in your MongoDB configuration, you must add these hostnames to your `/etc/hosts` file before running this command. Use the `etc-hosts` command to manage host entries.
+
+**Automatic User Creation:** Admin and cluster admin users will be automatically created if they don't exist in your configuration. This ensures the replica set has the necessary administrative users for proper operation. Users are written to `mongo-users.json` in the working directory from the configuration.
 
 **Configuration Management:** An updated configuration file will be created in the working directory with the name `mongo-run-config.json`. This file contains the merged configuration used during the MongoDB setup process.
 
 **Options:**
 
-- `-e, --addToEtcHosts` - Add non-localhost hostnames to `/etc/hosts` file. This is useful when using non-localhost hostnames in your MongoDB configuration, as it ensures the replica set members can discover each other by resolving the hostnames back to the host machine (127.0.0.1). **Note:** This will require sudo password unless you have configured passwordless sudo access for `/etc/hosts` in your sudoers file.
 - `--overwriteConfig` - Overwrite existing config
 - `--overwriteCerts` - Overwrite existing certs
 
@@ -169,9 +226,24 @@ softkave-forerunner mongo run -c <config-path> [options]
 softkave-forerunner mongo etc-hosts -c <config-path> [options]
 ```
 
+**Description**: Adds non-IP hostnames from the MongoDB configuration to the `/etc/hosts` file. This command extracts hostnames from the `instancesHostnames` configuration and maps them to the local IPv4 address or 127.0.0.1 in the system hosts file.
+
+**What it does**:
+
+- Reads `instancesHostnames` from the MongoDB configuration
+- Identifies non-IP hostnames (e.g., `mongo-1.fimidara.local`)
+- Adds hostname-to-IP mappings to `/etc/hosts` file
+- Maps hostnames to the local IPv4 address or 127.0.0.1 for local development
+
+**Important**: This is a convenience command that should only be run if the hostnames are not discoverable through DNS. The command maps all hostnames in the configuration without checking whether they are already discoverable through DNS or not.
+
+**Platform Support**: This command only works on Mac/Linux systems. On other operating systems, you'll need to manually manage host entries using the system's equivalent functionality.
+
 ### Hosts File Management (`etc-hosts`)
 
 Manage `/etc/hosts` file entries for local development.
+
+**Platform Support:** These commands only work on Mac/Linux systems. On other operating systems, you'll need to manually manage host entries using the system's equivalent functionality.
 
 **Note:** Commands that write to the `/etc/hosts` file (set, backup, restore) will require sudo password unless you have configured passwordless sudo access for `/etc/hosts` in your sudoers file.
 
@@ -241,13 +313,22 @@ softkave-forerunner certs cert -c cert-config.json
 
 ```bash
 # Complete MongoDB setup
-softkave-forerunner mongo run -c mongo-config.json
+softkave-forerunner mongo init -c mongo-config.json
 
 # Download MongoDB only
 softkave-forerunner mongo download -c mongo-config.json
 
 # Start existing MongoDB instances
 softkave-forerunner mongo start -c mongo-config.json
+
+# Write users from config only
+softkave-forerunner mongo write-users -c mongo-config.json
+
+# Write users from config with admin users
+softkave-forerunner mongo write-users -c mongo-config.json --create-admin --create-cluster-admin
+
+# Write users from file and config
+softkave-forerunner mongo write-users -c mongo-config.json -u users.json
 ```
 
 ### Hosts File Management
@@ -267,19 +348,101 @@ softkave-forerunner etc-hosts backup
 
 ### MongoDB Configuration
 
-The MongoDB commands require a configuration file that specifies:
+The MongoDB commands require a configuration file that specifies MongoDB version, instance settings, replica set configuration, and user management. Below is a detailed breakdown of each configuration option:
 
-- MongoDB version and download settings
-- Instance configurations
-- Replica set settings
-- User management settings
+#### Configuration Options
+
+**`workingDir`** (string, required)
+
+- **Description**: The directory where MongoDB data, logs, and configuration files will be stored
+- **Example**: `"./fimidara-mongo"`
+- **Note**: This directory will be created if it doesn't exist
+
+**`mongoVersion`** (string, optional)
+
+- **Description**: The MongoDB version to download and use
+- **Example**: `"8.0.0"`
+- **Default**: Uses the latest stable version if not specified
+
+**`systemLinux`** (string, optional if `os` is not `linux`)
+
+- **Description**: The Linux distribution identifier for MongoDB download
+- **Example**: `"ubuntu2004"`
+- **Options**: `"ubuntu2004"`, `"ubuntu2204"`, `"rhel8"`, `"rhel9"`, etc.
+
+**`os`** (string, optional)
+
+- **Description**: The operating system platform
+- **Example**: `"linux"`
+- **Options**: `"linux"`, `"macos"`, `"windows"`
+
+**`caConfig`** (object, required)
+
+- **Description**: Certificate Authority configuration for MongoDB SSL/TLS certificates
+- **Properties**:
+  - `days` (number): Certificate validity period in days
+  - `subject` (object): X.509 certificate subject information
+    - `C` (string): Country code (2 characters)
+    - `ST` (string): State or province
+    - `L` (string): Locality or city
+    - `O` (string): Organization name
+    - `CN` (string): Common name for the CA
+  - `passphrase` (string, optional): Passphrase for the CA private key
+
+**`instancesHostnames`** (array, required)
+
+- **Description**: Hostnames for each MongoDB instance in the replica set
+- **Example**: `["mongo-1.fimidara.local", "mongo-2.fimidara.local", "mongo-3.fimidara.local", "0.0.0.0", "localhost", "127.0.0.1"]`
+- **Note**: Must match the number of instances specified in `replicaCount`
+
+**`bindLocalhost`** (boolean, optional)
+
+- **Description**: Whether to bind MongoDB instances to localhost (`127.0.0.1`)
+- **Example**: `true`
+- **Default**: `false`
+
+**`instancePorts`** (array, required)
+
+- **Description**: Port numbers for each MongoDB instance
+- **Example**: `[27017, 27018, 27019]`
+- **Note**: Must match the number of instances and be unique ports
+
+**`replicaCount`** (number, required)
+
+- **Description**: Number of MongoDB instances in the replica set
+- **Example**: `3`
+- **Minimum**: 3 (required for replica set functionality)
+
+**`replicaSetName`** (string, required)
+
+- **Description**: Name of the MongoDB replica set
+- **Example**: `"fimidara-rs"`
+- **Note**: All instances in the replica set must use the same name
+
+**`users`** (array, required)
+
+- **Description**: MongoDB users to create with their roles and permissions
+- **Properties**:
+  - `username` (string): User login name
+  - `password` (string): User password
+  - `authDb` (string, optional): Authentication database for the user (default: "`admin`")
+  - `roles` (array): Array of role objects
+    - `role` (string): MongoDB role name (see supported roles below)
+    - `db` (string): Database name the role applies to
+
+**Supported Roles:**
+
+- `userAdminAnyDatabase`: User administration privileges for all databases (use with "admin" db)
+- `clusterAdmin`: Cluster administration privileges (use with "admin" db)
+- `readWrite`: Read and write privileges for a specific database
+- `read`: Read-only privileges for a specific database
 
 **Example MongoDB Configuration** (`src/mongo/examples/mongo-run-config.json`):
 
 ```json
 {
   "workingDir": "./mongo-data",
-  "mongoVersion": "7.0.0",
+  "mongoVersion": "8.0.0",
   "systemLinux": "ubuntu2004",
   "os": "linux",
   "caConfig": {
@@ -306,9 +469,21 @@ The MongoDB commands require a configuration file that specifies:
     {
       "username": "admin",
       "password": "admin-password",
+      "authDb": "admin",
       "roles": [
         {
-          "role": "root",
+          "role": "userAdminAnyDatabase",
+          "db": "admin"
+        }
+      ]
+    },
+    {
+      "username": "cluster-admin",
+      "password": "cluster-admin-password",
+      "authDb": "admin",
+      "roles": [
+        {
+          "role": "clusterAdmin",
           "db": "admin"
         }
       ]
@@ -316,6 +491,7 @@ The MongoDB commands require a configuration file that specifies:
     {
       "username": "app-user",
       "password": "app-password",
+      "authDb": "fimidara",
       "roles": [
         {
           "role": "readWrite",
@@ -326,6 +502,7 @@ The MongoDB commands require a configuration file that specifies:
     {
       "username": "readonly-user",
       "password": "readonly-password",
+      "authDb": "fimidara",
       "roles": [
         {
           "role": "read",
@@ -339,11 +516,100 @@ The MongoDB commands require a configuration file that specifies:
 
 ### Certificate Configuration
 
-Certificate generation requires JSON configuration files specifying:
+Certificate generation requires JSON configuration files for both Certificate Authority (CA) and end-entity certificates. Below are detailed explanations for each configuration option:
 
-- CA settings (for CA generation)
-- Certificate details (for certificate generation)
-- File paths and naming conventions
+#### CA Configuration Options
+
+**`outDir`** (string, required)
+
+- **Description**: Output directory where CA files will be generated
+- **Example**: `"./certs"`
+- **Note**: Directory will be created if it doesn't exist
+
+**`days`** (number, required)
+
+- **Description**: Certificate validity period in days
+- **Example**: `3650` (10 years)
+- **Note**: Must be a positive integer
+
+**`subject`** (object, required)
+
+- **Description**: X.509 certificate subject information for the CA
+- **Properties**:
+  - `C` (string): Country code (2 characters, e.g., "US")
+  - `ST` (string): State or province name
+  - `L` (string): Locality or city name
+  - `O` (string): Organization name
+  - `CN` (string): Common name for the CA
+
+**`files`** (object, optional)
+
+- **Description**: Custom filenames for generated CA files
+- **Properties**:
+  - `key` (string): Private key filename (default: "ca.key.pem")
+  - `cert` (string): Certificate filename (default: "ca.crt.pem")
+  - `csr` (string): Certificate Signing Request filename (default: "ca.csr.pem")
+  - `chain` (string): Certificate chain filename (default: "ca-chain.pem")
+- **Default**: Uses standard filenames if not specified
+
+**`passphrase`** (string, optional)
+
+- **Description**: Passphrase to protect the CA private key
+- **Example**: `"ca-passphrase"`
+- **Note**: If provided, the private key will be encrypted
+
+#### Certificate Configuration Options
+
+**`outDir`** (string, required)
+
+- **Description**: Output directory where certificate files will be generated
+- **Example**: `"./certs"`
+- **Note**: Directory will be created if it doesn't exist
+
+**`days`** (number, required)
+
+- **Description**: Certificate validity period in days
+- **Example**: `825` (approximately 2.25 years)
+- **Note**: Must be a positive integer
+
+**`subject`** (object, required)
+
+- **Description**: X.509 certificate subject information for the end-entity certificate
+- **Properties**:
+  - `C` (string): Country code (2 characters, e.g., "US")
+  - `ST` (string): State or province name
+  - `L` (string): Locality or city name
+  - `O` (string): Organization name
+  - `CN` (string): Common name (typically the primary domain name)
+
+**`san`** (array, required)
+
+- **Description**: Subject Alternative Names (SAN) for the certificate
+- **Example**: `["fimidara.com", "www.fimidara.com", "127.0.0.1"]`
+- **Note**: Must include at least one SAN entry
+
+**`files`** (object, required)
+
+- **Description**: Filenames for generated certificate files
+- **Properties**:
+  - `key` (string): Private key filename
+  - `cert` (string): Certificate filename
+  - `csr` (string): Certificate Signing Request filename
+  - `fullchain` (string): Full certificate chain filename (cert + CA chain)
+  - `crtAndKey` (string, optional): Combined certificate and key filename
+
+**`ca`** (object, required)
+
+- **Description**: Certificate Authority configuration for signing
+- **Properties**:
+  - `dir` (string): Directory containing the CA files
+  - `passphrase` (string, optional): CA private key passphrase
+
+**`passphrase`** (string, optional)
+
+- **Description**: Passphrase to protect the certificate private key
+- **Example**: `"cert-passphrase"`
+- **Note**: If provided, the private key will be encrypted
 
 **Example CA Configuration** (`src/certs/examples/ca-config.json`):
 
@@ -403,15 +669,6 @@ Complete example configuration files are available in the repository:
 - **MongoDB**: [`src/mongo/examples/mongo-run-config.json`](src/mongo/examples/mongo-run-config.json)
 - **CA**: [`src/certs/examples/ca-config.json`](src/certs/examples/ca-config.json)
 - **Certificate**: [`src/certs/examples/cert-config.json`](src/certs/examples/cert-config.json)
-
-## Error Handling
-
-All commands include comprehensive error handling with:
-
-- Detailed error messages
-- Silent mode support for scripting
-- Proper exit codes for automation
-- Graceful failure handling
 
 ## SDK Usage
 
@@ -521,11 +778,11 @@ await generateCert({
 #### Complete MongoDB Setup
 
 ```typescript
-import {runMongo, MongoRunConfig} from 'softkave-forerunner';
+import {initMongo, MongoRunConfig} from 'softkave-forerunner';
 
 const mongoConfig: MongoRunConfig = {
   workingDir: './mongo-setup',
-  mongoVersion: '7.0.0',
+  mongoVersion: '8.0.0',
   systemLinux: 'ubuntu2004',
   os: 'linux',
   caConfig: {
@@ -548,20 +805,32 @@ const mongoConfig: MongoRunConfig = {
     {
       username: 'admin',
       password: 'admin123',
+      authDb: 'admin',
       roles: [
-        'userAdminAnyDatabase',
-        'dbAdminAnyDatabase',
-        'readWriteAnyDatabase',
+        {
+          role: 'userAdminAnyDatabase',
+          db: 'admin',
+        },
+      ],
+    },
+    {
+      username: 'app-user',
+      password: 'app123',
+      authDb: 'myapp',
+      roles: [
+        {
+          role: 'readWrite',
+          db: 'myapp',
+        },
       ],
     },
   ],
 };
 
-await runMongo({
+await initMongo({
   mongoRunConfig: mongoConfig,
   overwriteConfig: false,
   overwriteCerts: false,
-  addToEtcHosts: true,
   logger,
 });
 ```
@@ -648,6 +917,12 @@ restoreHostsFile({
 ```
 
 ### Process Management
+
+**Important Notes:**
+
+- `startProcess` starts a background process that continues running even after the terminal or the initial program that started it stops
+- Background processes can be stopped by sending a kill signal to the process ID from the PID filepath provided or using `stopProcess`
+- Process management functions have only been tested on Mac and Linux systems
 
 ```typescript
 import {startProcess, IInstanceOpts} from 'softkave-forerunner';
@@ -737,12 +1012,18 @@ All SDK functions include proper error handling and can be used with try-catch b
 
 ```typescript
 try {
-  await runMongo({mongoRunConfig, logger});
+  await initMongo({mongoRunConfig, logger});
 } catch (error) {
   console.error('MongoDB setup failed:', error);
   process.exit(1);
 }
 ```
+
+## Release Notes
+
+For detailed information about changes, new features, and bug fixes in each version:
+
+- **[v0 Series Release Notes](notes/releases/v0.md)** - Complete changelog for v0.x.x versions
 
 ## Help
 
