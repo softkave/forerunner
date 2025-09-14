@@ -5,6 +5,10 @@ import path from 'path';
 import {startProcess} from '../process/startProcess.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {
+  checkMongoInstancesListening,
+  checkMongoReplicaSetReady,
+} from './checkMongoReadyState.js';
 import {getMongodBinFilePath} from './downloadMongo.js';
 import {
   getMongodConfigFilePath,
@@ -100,11 +104,28 @@ export async function startMongodInstance(params: {
 export async function startMongodInstancesMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  waitUntilListening?: boolean;
+  waitUntilReplicaSetReady?: boolean;
 }) {
-  const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
-    params;
+  const {
+    mongoRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+    waitUntilListening,
+    waitUntilReplicaSetReady,
+  } = params;
+
   const replicaCount = mongoRunConfig.replicaCount;
   for (let i = 1; i <= replicaCount; i++) {
     await startMongodInstance({instanceNumber: i, mongoRunConfig, logger});
+  }
+
+  if (waitUntilListening) {
+    logger.log('Waiting for mongo instances to start');
+    await checkMongoInstancesListening({mongoRunConfig});
+  }
+
+  if (waitUntilReplicaSetReady) {
+    logger.log('Waiting for replica set to be ready');
+    await checkMongoReplicaSetReady({mongoRunConfig});
   }
 }

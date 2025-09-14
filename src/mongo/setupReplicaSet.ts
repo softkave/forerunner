@@ -4,7 +4,6 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {
-  filterRegularMongoUsers,
   findAdminMongoUser,
   findClusterAdminMongoUser,
   getMongoUsersConfigFilePath,
@@ -75,7 +74,11 @@ export async function setupFirstUsers(params: {
     });
   }
 
-  const regularUsers = await filterRegularMongoUsers({mongoUsers});
+  const regularUsers = mongoUsers.filter(
+    user =>
+      user.username !== adminUser.username &&
+      user.username !== clusterAdminUser?.username
+  );
   if (regularUsers.length > 0) {
     logger.log('Setting up regular users', regularUsers.length);
     await Promise.all(
