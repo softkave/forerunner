@@ -1,11 +1,11 @@
-import * as fsExtra from 'fs-extra';
+import fs from 'fs-extra';
 import {readFile, writeFile} from 'fs/promises';
 
 async function getVersionFromPackageJson(
   defaultVersion: string
 ): Promise<string> {
   try {
-    const packageJson = await fsExtra.readJson('package.json');
+    const packageJson = await fs.readJson('package.json');
     return packageJson.version;
   } catch (error) {
     return defaultVersion;
