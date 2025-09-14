@@ -11,7 +11,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
-export const kDefaultMongoVersion = '8.0.0';
+export const kDefaultMongoVersion = '8.0.13';
 export const kDefaultMongodBinName = 'mongod';
 const kMongoBinDir = 'mongodb-bin';
 
@@ -50,7 +50,7 @@ export async function downloadMongo(params: {
   }
 
   /** NOTE: it downloads both mongod and mongos */
-  const version = mongoRunConfig.mongoVersion || '8.0.0';
+  const version = mongoRunConfig.mongoVersion || '8.0.13';
   const {systemLinux} = mongoRunConfig;
 
   const versionMatch = version.match(/^(\d)\.(\d)\.(\d+)$/);
@@ -119,21 +119,44 @@ export async function downloadMongo(params: {
   const url = `${base}/${os}/${filename}`;
 
   if (os.startsWith('win')) {
+    // Create a temporary extraction directory
+    const tempExtractDir = `temp-mongo-extract-${Date.now()}`;
+
     execSync(
       'powershell.exe -nologo -noprofile -command "&{' +
         'Add-Type -AssemblyName System.IO.Compression.FileSystem;' +
         `(New-Object Net.WebClient).DownloadFile('${url}', '${filename}');` +
-        `[System.IO.Compression.ZipFile]::ExtractToDirectory('${filename}','.');` +
-        `mv './${dirname}/bin' '${getMongoDownloadDir(mongoRunConfig)}';` +
-        `rd -r './${dirname}';` +
-        `rm './${filename}';` +
+        `New-Item -ItemType Directory -Path '${tempExtractDir}' -Force;` +
+        `[System.IO.Compression.ZipFile]::ExtractToDirectory('${filename}','${tempExtractDir}');` +
+        `$extractedDir = Get-ChildItem '${tempExtractDir}' | Select-Object -First 1 | Select-Object -ExpandProperty Name;` +
+        `Move-Item '${tempExtractDir}/$extractedDir/bin' '${getMongoDownloadDir(mongoRunConfig)}';` +
+        `Remove-Item -Recurse -Force '${tempExtractDir}';` +
+        `Remove-Item '${filename}';` +
         '}"'
     );
   } else {
     execSync(`curl -OL ${url}`);
-    execSync(`tar -zxvf ${filename}`);
-    execSync(`mv ./${dirname}/bin ${getMongoDownloadDir(mongoRunConfig)}`);
-    execSync(`rm -rf ./${dirname}`);
+
+    // Create a temporary extraction directory
+    const tempExtractDir = `temp-mongo-extract-${Date.now()}`;
+    execSync(`mkdir -p ${tempExtractDir}`);
+
+    // Extract to the temporary directory
+    execSync(`tar -zxf ${filename} -C ${tempExtractDir}`);
+
+    // Find the extracted directory (should be the only subdirectory)
+    const extractedDir = execSync(`ls ${tempExtractDir}`, {
+      encoding: 'utf8',
+    }).trim();
+    const extractedDirPath = `${tempExtractDir}/${extractedDir}`;
+
+    // Move the bin directory to the final location
+    execSync(
+      `mv ${extractedDirPath}/bin ${getMongoDownloadDir(mongoRunConfig)}`
+    );
+
+    // Clean up
+    execSync(`rm -rf ${tempExtractDir}`);
     execSync(`rm ./${filename}`);
   }
 

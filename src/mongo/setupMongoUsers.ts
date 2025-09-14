@@ -1,6 +1,6 @@
 import fs from 'fs';
 import {exists} from 'fs-extra';
-import {MongoClient} from 'mongodb';
+import {Db, MongoClient} from 'mongodb';
 import path from 'path';
 import z from 'zod';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
@@ -15,18 +15,18 @@ import {
 export const MongoUserSchema = z.object({
   username: z.string(),
   password: z.string(),
-  authDb: z.string().default('admin').optional(),
+  authDb: z.string().optional(),
   roles: z.array(
     z.object({
-      /**
-       * `userAdminAnyDatabase` and `clusterAdmin` should use the `admin` db
-       */
-      role: z.enum([
-        'userAdminAnyDatabase',
-        'clusterAdmin',
-        'readWrite',
-        'read',
-      ]),
+      role: z
+        .enum([
+          'userAdminAnyDatabase',
+          'readAnyDatabase',
+          'clusterAdmin',
+          'readWrite',
+          'read',
+        ])
+        .or(z.string()),
       db: z.string(),
     })
   ),
@@ -59,6 +59,7 @@ export async function setupSingleMongoUser(params: {
     retainClient,
     connectionType = 'replicaSet',
   } = params;
+
   const client =
     incomingClient ||
     (connectionType === 'replicaSet'
@@ -78,8 +79,19 @@ export async function setupSingleMongoUser(params: {
         }));
 
   try {
-    // Use the authDb specified in the user config
-    const db = client.db(user.authDb);
+    // Use the authDb specified in the user config or default to 'admin'
+    const db = client.db(user.authDb || 'admin');
+    const {userExists} = await checkUserExists({
+      user,
+      db,
+      logger,
+    });
+
+    if (userExists) {
+      logger.log(`User ${user.username} already exists`);
+      return;
+    }
+
     const result = await db.command({
       createUser: user.username,
       pwd: user.password,
@@ -125,7 +137,10 @@ export async function findAdminMongoUser(params: {
       username: 'admin',
       password: generateMongoPassword(),
       authDb: 'admin',
-      roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
+      roles: [
+        {role: 'userAdminAnyDatabase', db: 'admin'},
+        {role: 'readAnyDatabase', db: 'admin'},
+      ],
     };
   }
 
@@ -157,54 +172,21 @@ export async function findClusterAdminMongoUser(params: {
   return clusterAdminUser;
 }
 
-export async function filterRegularMongoUsers(params: {
-  mongoUsers: MongoUserList;
-}) {
-  const {mongoUsers} = params;
-  return mongoUsers.filter(
-    user =>
-      user.roles.some(role => role.role !== 'userAdminAnyDatabase') &&
-      user.roles.some(role => role.role !== 'clusterAdmin')
-  );
-}
-
 async function checkUserExists(params: {
   user: MongoUser;
-  adminUser?: MongoUser;
-  mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
-  preferLocalhost?: boolean;
+  db: Db;
 }) {
-  const {
-    user,
-    adminUser,
-    mongoRunConfig,
-    logger = new ConsoleForeLogger({silent: true}),
-    preferLocalhost,
-  } = params;
-  const client = await getMongoClientForReplicaSet({
-    username: adminUser?.username,
-    password: adminUser?.password,
-    mongoRunConfig,
-    logger,
-    preferLocalhost,
+  const {user, logger = new ConsoleForeLogger({silent: true}), db} = params;
+  const result = await db.command({
+    usersInfo: user.username,
   });
 
-  try {
-    const db = client.db();
-    const result = await db.command({
-      usersInfo: user.username,
-    });
-
-    logger.log(`${user.username} exists: ${result.users.length > 0}`);
-    const userExists = result.users.length > 0;
-    return {
-      userExists,
-    };
-  } finally {
-    // Close the database connection on completion or error
-    await client.close();
-  }
+  logger.log(`${user.username} exists: ${result.users.length > 0}`);
+  const userExists = result.users.length > 0;
+  return {
+    userExists,
+  };
 }
 
 export function getMongoUsersConfigFilePath(mongoRunConfig: MongoRunConfig) {
@@ -228,20 +210,11 @@ export async function setupMongoUsersMain(params: {
     throw new Error('Admin user not found');
   }
 
-  const regularUsers = await filterRegularMongoUsers({mongoUsers});
+  const otherUsers = mongoUsers.filter(
+    user => user.username !== adminUser.username
+  );
   await Promise.all(
-    regularUsers.map(async user => {
-      const {userExists} = await checkUserExists({
-        user,
-        adminUser,
-        mongoRunConfig,
-        logger,
-      });
-      if (userExists) {
-        logger.log(`User ${user.username} already exists`);
-        return;
-      }
-
+    otherUsers.map(async user => {
       logger.log(`Setting up user ${user.username}`);
       await setupSingleMongoUser({user, adminUser, mongoRunConfig, logger});
     })

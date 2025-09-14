@@ -259,9 +259,8 @@ export function generateMongoPassword() {
   return generate({
     length: 32,
     numbers: true,
-    symbols: true,
+    symbols: false,
     uppercase: true,
     strict: true,
-    exclude: '"\'\\',
   });
 }

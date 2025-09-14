@@ -1,0 +1,7 @@
+# Lint staged files
+prettier $(git diff --cached --name-only --diff-filter=ACMR | sed 's| |\\ |g') --write --ignore-unknown
+
+# Write version file
+npx -y -- tsx src/version.ts
+
+git update-index --again

@@ -361,14 +361,14 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 **`mongoVersion`** (string, optional)
 
 - **Description**: The MongoDB version to download and use
-- **Example**: `"8.0.0"`
+- **Example**: `"8.0.13"`
 - **Default**: Uses the latest stable version if not specified
 
 **`systemLinux`** (string, optional if `os` is not `linux`)
 
 - **Description**: The Linux distribution identifier for MongoDB download
-- **Example**: `"ubuntu2004"`
-- **Options**: `"ubuntu2004"`, `"ubuntu2204"`, `"rhel8"`, `"rhel9"`, etc.
+- **Example**: `"ubuntu2404"`
+- **Options**: `"ubuntu2404"`, `"ubuntu2204"`, `"rhel8"`, `"rhel9"`, etc.
 
 **`os`** (string, optional)
 
@@ -442,8 +442,8 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 ```json
 {
   "workingDir": "./mongo-data",
-  "mongoVersion": "8.0.0",
-  "systemLinux": "ubuntu2004",
+  "mongoVersion": "8.0.13",
+  "systemLinux": "ubuntu2404",
   "os": "linux",
   "caConfig": {
     "days": 365,
@@ -782,8 +782,8 @@ import {initMongo, MongoRunConfig} from 'softkave-forerunner';
 
 const mongoConfig: MongoRunConfig = {
   workingDir: './mongo-setup',
-  mongoVersion: '8.0.0',
-  systemLinux: 'ubuntu2004',
+  mongoVersion: '8.0.13',
+  systemLinux: 'ubuntu2404',
   os: 'linux',
   caConfig: {
     days: 365,

@@ -3,6 +3,7 @@
 
 import {Command} from 'commander';
 import {ConsoleForeLogger} from './utils/foreLogger/ConsoleForeLogger.js';
+import {getVersion} from './version.js';
 
 // Import certs functionality
 import {generateCA} from './certs/caGenerator.js';
@@ -39,7 +40,7 @@ const program = new Command();
 program
   .name('forerunner')
   .description('Softkave internal application runner & helpers')
-  .version('0.3.0');
+  .version(await getVersion('unknown'));
 
 // ============================================================================
 // CERTS SUB-PROGRAM
@@ -237,7 +238,14 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
         checkExisting: false,
       });
-      await startMongodInstancesMain({mongoRunConfig, logger});
+      await startMongodInstancesMain({
+        mongoRunConfig,
+        logger,
+        waitUntilListening: true,
+        // Because we currently only support replica sets (and not standalone
+        // instances), we wait for the replica set to be ready.
+        waitUntilReplicaSetReady: true,
+      });
       logger.log('✅ MongoDB instances started successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);

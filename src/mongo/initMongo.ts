@@ -1,10 +1,7 @@
 import {writeMongoUsersFromConfig} from '../index.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {
-  checkMongoInstancesListening,
-  checkMongoReplicaSetReady,
-} from './checkMongoReadyState.js';
+import {checkMongoReplicaSetReady} from './checkMongoReadyState.js';
 import {downloadMongo} from './downloadMongo.js';
 import {generateMongoCertConfigsMain} from './generateMongoCertConfigs.js';
 import {generateMongoCertsMain} from './generateMongoCerts.js';
@@ -64,10 +61,11 @@ export async function initMongo(params: {
   await stopMongodInstancesMain({mongoRunConfig, logger});
 
   logger.log('Starting mongo instances');
-  await startMongodInstancesMain({mongoRunConfig, logger});
-
-  logger.log('Waiting for mongo instances to start');
-  await checkMongoInstancesListening({mongoRunConfig});
+  await startMongodInstancesMain({
+    mongoRunConfig,
+    logger,
+    waitUntilListening: true,
+  });
 
   logger.log('Writing mongo users');
   await writeMongoUsersFromConfig({
@@ -101,11 +99,10 @@ export async function initMongo(params: {
   });
 
   logger.log('Starting mongo instances');
-  await startMongodInstancesMain({mongoRunConfig, logger});
-
-  logger.log('Waiting for mongo instances to start');
-  await checkMongoInstancesListening({mongoRunConfig});
-
-  logger.log('Waiting for replica set to be ready');
-  await checkMongoReplicaSetReady({mongoRunConfig});
+  await startMongodInstancesMain({
+    mongoRunConfig,
+    logger,
+    waitUntilReplicaSetReady: true,
+    waitUntilListening: true,
+  });
 }

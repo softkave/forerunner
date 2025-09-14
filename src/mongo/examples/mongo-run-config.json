@@ -1,7 +1,7 @@
 {
   "workingDir": "./mongo-data",
-  "mongoVersion": "8.0.0",
-  "systemLinux": "ubuntu2004",
+  "mongoVersion": "8.0.13",
+  "systemLinux": "ubuntu2404",
   "os": "linux",
   "caConfig": {
     "days": 365,
