@@ -23,6 +23,7 @@
     "build/src/{*.js,**/*.js}",
     "build/src/{*.js.map,**/*.js.map}",
     "build/src/{*.d.ts,**/*.d.ts}",
+    "build/version.txt",
     "!build/src/**/__tests__/**/*",
     "!build/src/**/testutils/**/*",
     "!build/src/private*"
@@ -32,12 +33,14 @@
     "test": "vitest",
     "lint": "gts lint",
     "clean": "gts clean && rm -f tsconfig.tsbuildinfo",
-    "compile": "npm run clean && tsc",
+    "compile": "npm run clean && tsc && npm run write-version-file && npm run copy-version-file",
+    "write-version-file": "npx -y -- tsx src/version.ts",
+    "copy-version-file": "cp version.txt build/version.txt",
     "fix": "gts fix",
     "posttest": "npm run lint",
-    "publish:npm": "npm run clean && tsc && npm publish",
-    "publish:yalc": "npm run clean && tsc && yalc publish",
-    "show:packlist": "npm run clean && tsc && npm pack --dry-run",
+    "publish:npm": "npm run compile && npm publish",
+    "publish:yalc": "npm run compile && yalc publish",
+    "show:packlist": "npm run compile && npm pack --dry-run",
     "prepare": "husky"
   },
   "engines": {
