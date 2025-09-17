@@ -4,6 +4,7 @@ export * from './generateMongoCerts.js';
 export * from './generateMongodConfigs.js';
 export * from './initMongo.js';
 export * from './mongoRunConfig.js';
+export * from './printMongoUri.js';
 export * from './setupMongoUsers.js';
 export * from './setupReplicaSet.js';
 export * from './startMongodInstances.js';

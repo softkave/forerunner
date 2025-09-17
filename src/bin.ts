@@ -18,6 +18,7 @@ import {
   generateMongoCertsMain,
   generateMongodConfigsMain,
   initMongo,
+  printMongoUriMain,
   setupReplicaSetMain,
   startMongodInstancesMain,
   stopMongodInstancesMain,
@@ -409,6 +410,64 @@ mongoProgram
     }
   });
 
+// Print MongoDB URI
+mongoProgram
+  .command('print-uri')
+  .description('Print MongoDB connection URI using configuration')
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option(
+    '--connection-type <type>',
+    'Connection type: instance or replicaSet',
+    'replicaSet'
+  )
+  .option(
+    '--instance-number <number>',
+    'Instance number (for instance connection type)',
+    '1'
+  )
+  .option('-u, --username <username>', 'Username for authentication')
+  .option('-p, --password <password>', 'Password for authentication')
+  .option('--prefer-localhost', 'Prefer localhost over other hostnames', false)
+  .option(
+    '--server-selection-timeout <ms>',
+    'Server selection timeout in milliseconds',
+    '5000'
+  )
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const mongoRunConfig = await getMongoRunConfig({
+        mongoRunConfigFilepath: options.config,
+        checkExisting: false,
+      });
+
+      const connectionType = options.connectionType as
+        | 'instance'
+        | 'replicaSet';
+      const instanceNumber = parseInt(options.instanceNumber, 10);
+      const serverSelectionTimeoutMS = parseInt(
+        options.serverSelectionTimeout,
+        10_000 // 10 seconds
+      );
+
+      await printMongoUriMain({
+        mongoRunConfig,
+        logger,
+        connectionType,
+        instanceNumber,
+        username: options.username,
+        password: options.password,
+        preferLocalhost: options.preferLocalhost,
+        serverSelectionTimeoutMS,
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
 // ============================================================================
 // ETC HOSTS SUB-PROGRAM
 // ============================================================================
@@ -571,6 +630,7 @@ COMMANDS:
     write-users            Write MongoDB users configuration (users file optional)
     init                   Initialize MongoDB with configuration
     etc-hosts              Setup non-localhost hostnames in /etc/hosts for MongoDB instances
+    print-uri              Print MongoDB connection URI using configuration
 
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP
