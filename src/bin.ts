@@ -19,6 +19,7 @@ import {
   generateMongodConfigsMain,
   initMongo,
   printMongoUriMain,
+  replicaSetStatus,
   setupReplicaSetMain,
   startMongodInstancesMain,
   stopMongodInstancesMain,
@@ -468,6 +469,34 @@ mongoProgram
     }
   });
 
+// Print MongoDB replica set status
+mongoProgram
+  .command('replica-set-status')
+  .description('Print MongoDB replica set status')
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('--prefer-localhost', 'Prefer localhost over other hostnames', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const mongoRunConfig = await getMongoRunConfig({
+        mongoRunConfigFilepath: options.config,
+        checkExisting: false,
+      });
+
+      await replicaSetStatus({
+        mongoRunConfig,
+        logger,
+        preferLocalhost: options.preferLocalhost,
+        printStatus: true,
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
 // ============================================================================
 // ETC HOSTS SUB-PROGRAM
 // ============================================================================
@@ -631,6 +660,7 @@ COMMANDS:
     init                   Initialize MongoDB with configuration
     etc-hosts              Setup non-localhost hostnames in /etc/hosts for MongoDB instances
     print-uri              Print MongoDB connection URI using configuration
+    replica-set-status     Print MongoDB replica set status
 
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP

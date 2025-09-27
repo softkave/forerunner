@@ -67,6 +67,7 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 - [`mongo write-users`](#write-mongodb-users) - Write users to file
 - [`mongo init`](#initialize-mongodb-complete-setup) - Complete MongoDB setup
 - [`mongo etc-hosts`](#setup-etchosts-for-mongodb) - Setup etc/hosts for MongoDB
+- [`mongo replica-set-status`](#print-replica-set-status) - Print replica set status
 
 #### Hosts File Management
 
@@ -239,6 +240,50 @@ softkave-forerunner mongo etc-hosts -c <config-path> [options]
 
 **Platform Support**: This command only works on Mac/Linux systems. On other operating systems, you'll need to manually manage host entries using the system's equivalent functionality.
 
+#### Print Replica Set Status
+
+```bash
+softkave-forerunner mongo replica-set-status -c <config-path> [options]
+```
+
+**Description**: Displays the current status of the MongoDB replica set, including member information, health status, and connection details. This command connects to the replica set and retrieves real-time status information using MongoDB's `replSetGetStatus` command.
+
+**What it does**:
+
+- Connects to the MongoDB replica set using admin credentials
+- Retrieves replica set status information
+- Displays replica set name, date, and current state
+- Shows detailed member information including hostnames, status, health, and heartbeat data
+- Provides real-time visibility into replica set operations
+
+**Options**:
+
+- `--prefer-localhost` - Prefer localhost over other hostnames when connecting
+
+**Example Output**:
+
+```
+Replica Set Status:
+Set: fimidara-rs
+Date: 2024-01-15T10:30:00.000Z
+My State: 1
+Members:
+  - Hostname: mongo-1.fimidara.local:27017
+    Status: PRIMARY
+    Health: 1
+    Last Heartbeat: 2024-01-15T10:29:58.000Z
+  - Hostname: mongo-2.fimidara.local:27018
+    Status: SECONDARY
+    Health: 1
+    Last Heartbeat: 2024-01-15T10:29:58.000Z
+  - Hostname: mongo-3.fimidara.local:27019
+    Status: SECONDARY
+    Health: 1
+    Last Heartbeat: 2024-01-15T10:29:58.000Z
+```
+
+**Prerequisites**: Expects a replica set to be running and accessible with admin credentials from the configuration.
+
 ### Hosts File Management (`etc-hosts`)
 
 Manage `/etc/hosts` file entries for local development.
@@ -329,6 +374,9 @@ softkave-forerunner mongo write-users -c mongo-config.json --create-admin --crea
 
 # Write users from file and config
 softkave-forerunner mongo write-users -c mongo-config.json -u users.json
+
+# Check replica set status
+softkave-forerunner mongo replica-set-status -c mongo-config.json
 ```
 
 ### Hosts File Management
@@ -841,6 +889,7 @@ await initMongo({
 import {
   downloadMongo,
   generateMongoCertsMain,
+  replicaSetStatus,
   startMongodInstancesMain,
   stopMongodInstancesMain,
   setupReplicaSetMain,
@@ -863,6 +912,14 @@ await startMongodInstancesMain({mongoRunConfig, logger});
 
 // Setup replica set
 await setupReplicaSetMain({mongoRunConfig, logger});
+
+// Check replica set status
+const status = await replicaSetStatus({
+  mongoRunConfig,
+  logger,
+  preferLocalhost: false,
+  printStatus: true,
+});
 
 // Stop instances
 await stopMongodInstancesMain({mongoRunConfig, logger});
