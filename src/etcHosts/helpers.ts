@@ -307,13 +307,11 @@ export function listHostsAndPrint(params: {
   }
 
   logger.log('Current host entries:');
-
-  // Use console.table for better formatting
-  const tableData = entries.map(entry => ({
-    IP: entry.ip,
-    Hostname: entry.hostname,
-    Comment: entry.comment || '',
-  }));
-
-  logger.table(tableData);
+  entries.forEach(entry => {
+    logger.log(`  - IP: ${entry.ip}`);
+    logger.log(`    Hostname: ${entry.hostname}`);
+    if (entry.comment) {
+      logger.log(`    Comment: ${entry.comment}`);
+    }
+  });
 }
