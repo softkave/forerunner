@@ -475,6 +475,11 @@ mongoProgram
   .description('Print MongoDB replica set status')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option('--prefer-localhost', 'Prefer localhost over other hostnames', false)
+  .option(
+    '--ping <ping>',
+    'Ping option: all, repl, or instance number (for instance connection type)',
+    'all'
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -489,6 +494,7 @@ mongoProgram
         logger,
         preferLocalhost: options.preferLocalhost,
         printStatus: true,
+        ping: options.ping,
       });
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);

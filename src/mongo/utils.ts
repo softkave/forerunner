@@ -13,6 +13,7 @@ import {
 import {MongoRunConfig} from './mongoRunConfig.js';
 
 export async function getMongodConfigForInstance(params: {
+  /** Instance number (1-based) */
   instanceNumber: number;
   mongoRunConfig: MongoRunConfig;
 }) {
@@ -97,6 +98,7 @@ export function getFirstLocalhostBindIp(params: {
 }
 
 export async function getMongoUriForInstance(params: {
+  /** Instance number (1-based) */
   instanceNumber: number;
   username?: string;
   password?: string;
@@ -189,11 +191,16 @@ export async function getMongoClientForInstance(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   preferLocalhost?: boolean;
+  /** Instance number (1-based) */
+  instanceNumber?: number;
 }) {
-  const {logger = new ConsoleForeLogger({silent: true}), mongoRunConfig} =
-    params;
+  const {
+    logger = new ConsoleForeLogger({silent: true}),
+    mongoRunConfig,
+    instanceNumber = 1,
+  } = params;
   const uri = await getMongoUriForInstance({
-    instanceNumber: 1,
+    instanceNumber,
     username: params.username,
     password: params.password,
     mongoRunConfig: mongoRunConfig,

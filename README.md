@@ -259,6 +259,7 @@ softkave-forerunner mongo replica-set-status -c <config-path> [options]
 **Options**:
 
 - `--prefer-localhost` - Prefer localhost over other hostnames when connecting
+- `--ping <ping>` - Ping option: `all` (to ping all members individually and combine the results), `repl` (to ping the replica set for status), or instance number (to ping a specific instance, it is `1`-based not `0`-based.) (default: "`all`")
 
 **Example Output**:
 
@@ -377,6 +378,9 @@ softkave-forerunner mongo write-users -c mongo-config.json -u users.json
 
 # Check replica set status
 softkave-forerunner mongo replica-set-status -c mongo-config.json
+
+# Check replica set status with specific ping option
+softkave-forerunner mongo replica-set-status -c mongo-config.json --ping repl
 ```
 
 ### Hosts File Management
@@ -919,6 +923,7 @@ const status = await replicaSetStatus({
   logger,
   preferLocalhost: false,
   printStatus: true,
+  ping: 'all',
 });
 
 // Stop instances

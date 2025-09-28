@@ -54,6 +54,7 @@ export type MongoConfig = z.infer<typeof MongoConfigSchema>;
 
 export function getMongodConfigFilePath(
   mongoRunConfig: MongoRunConfig,
+  /** Instance number (1-based) */
   instanceNumber: number
 ) {
   const dir = path.resolve(
@@ -69,6 +70,7 @@ export function getMongodConfigFilePath(
 
 export function getMongodSystemLogFilePath(
   mongoRunConfig: MongoRunConfig,
+  /** Instance number (1-based) */
   instanceNumber: number
 ) {
   const dir = path.join(
@@ -82,6 +84,7 @@ export function getMongodSystemLogFilePath(
 
 export function getMongodDataDir(
   mongoRunConfig: MongoRunConfig,
+  /** Instance number (1-based) */
   instanceNumber: number
 ) {
   const dir = path.join(
@@ -93,6 +96,7 @@ export function getMongodDataDir(
 }
 
 export async function generateMongoConfigForMongod(params: {
+  /** Instance number (1-based) */
   instanceNumber: number;
   mongoCertConfig: CertConfig;
   caConfig: CAConfig;
