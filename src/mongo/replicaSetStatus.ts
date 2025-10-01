@@ -4,7 +4,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {
-  findAdminMongoUser,
+  findClusterAdminMongoUser,
   getMongoUsersConfigFilePath,
   MongoUser,
   readMongoUsers,
@@ -265,34 +265,34 @@ export async function replicaSetStatus(params: ReplicaSetStatusParams) {
     configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
   });
 
-  // Find the admin user
-  const adminUser = await findAdminMongoUser({
+  // Find the cluster admin user
+  const clusterAdminUser = await findClusterAdminMongoUser({
     mongoUsers,
     createIfNotFound: false,
   });
 
-  assert.ok(adminUser, 'Admin user not found');
+  assert.ok(clusterAdminUser, 'Cluster admin user not found');
   let status: ReplicaSetStatusResponse | undefined;
   if (ping === 'all') {
     status = await getStatusFromAllMembers({
       mongoRunConfig,
       logger,
       preferLocalhost,
-      adminUser,
+      adminUser: clusterAdminUser,
     });
   } else if (ping === 'repl') {
     status = await getStatusFromReplicaSet({
       mongoRunConfig,
       logger,
       preferLocalhost,
-      adminUser,
+      adminUser: clusterAdminUser,
     });
   } else if (!isNaN(Number(ping))) {
     status = await getStatusFromInstanceNumber({
       mongoRunConfig,
       logger,
       preferLocalhost,
-      adminUser,
+      adminUser: clusterAdminUser,
       instanceNumber: Number(ping),
     });
   }
