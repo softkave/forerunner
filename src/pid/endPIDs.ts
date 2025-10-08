@@ -1,6 +1,6 @@
 import find from 'find-process';
+import {kill} from 'process';
 import {waitTimeout} from 'softkave-js-utils';
-import {kill} from 'zx';
 import {IRunnerOpts} from '../process/types.js';
 import {getPIDsFromFile} from './getPIDs.js';
 
@@ -34,10 +34,22 @@ export async function endPIDs(
   }
 
   const pids = [...pidsFromFile, ...(opts.otherPids || []), ...pidsFromPorts];
-  await Promise.all(pids.map(pid => kill(Number(pid), signal)));
+  pids.forEach(pid => {
+    try {
+      kill(Number(pid), signal);
+    } catch (error) {
+      // do nothing
+    }
+  });
 
   if (killAfterMs) {
     await waitTimeout(killAfterMs);
-    await Promise.all(pids.map(pid => kill(Number(pid), 'SIGKILL')));
+    pids.forEach(pid => {
+      try {
+        kill(Number(pid), 'SIGKILL');
+      } catch (error) {
+        // do nothing
+      }
+    });
   }
 }
