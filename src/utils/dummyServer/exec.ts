@@ -12,7 +12,7 @@ const args = parseArgs({
 });
 
 const port = Number(args.values.port);
-assert(port, '--port or -p not provided');
+assert.ok(port, '--port or -p not provided');
 
 await newDummyServer({port});
 
