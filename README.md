@@ -77,6 +77,10 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 - [`etc-hosts backup`](#backup-hosts-file) - Backup hosts file
 - [`etc-hosts restore`](#restore-hosts-file) - Restore hosts file
 
+#### Process Management
+
+- [`pm children-pids`](#find-children-pids) - Find all child PIDs of a parent PID
+
 ### Certificate Management (`certs`)
 
 Generate and manage SSL/TLS certificates for development and infrastructure.
@@ -336,6 +340,70 @@ softkave-forerunner etc-hosts backup [options]
 softkave-forerunner etc-hosts restore [options]
 ```
 
+### Process Management (`pm`)
+
+Process management utilities for finding and managing child processes.
+
+**Platform Support:** These commands only work on Linux and macOS systems. On other operating systems, the functionality may not be available.
+
+#### Find Children PIDs
+
+```bash
+softkave-forerunner pm children-pids <pid> [options]
+```
+
+**Description**: Recursively finds all child process IDs (PIDs) of a given parent process ID. This command uses `pgrep -P` to traverse the process tree and identify all descendant processes.
+
+**Arguments:**
+
+- `pid` - Parent process ID to find children for (required)
+
+**Options:**
+
+- `-s, --silent` - Silent mode (suppress output)
+
+**What it does:**
+
+- Takes a parent PID as input
+- Uses `pgrep -P` to find direct children of the parent process
+- Recursively traverses the process tree to find all descendant processes
+- Returns a list of all child PIDs found
+- Displays the total count of child processes
+
+**Example Output:**
+
+```
+Child PIDs of 1234:
+  5678
+  5679
+  5680
+  5681
+Total: 4 child process(es)
+```
+
+**Error Handling:**
+
+- Validates that the provided PID is a valid number
+- Handles cases where no child processes exist (displays appropriate message)
+- Provides clear error messages for invalid inputs or system errors
+
+**Use Cases:**
+
+- Debugging process hierarchies
+- Monitoring spawned child processes
+- Process cleanup and management
+- Understanding application process structure
+
+**Example:**
+
+```bash
+# Find all child processes of PID 1234
+softkave-forerunner pm children-pids 1234
+
+# Find child processes in silent mode
+softkave-forerunner pm children-pids 1234 --silent
+```
+
 ## Common Options
 
 Most commands support:
@@ -394,6 +462,16 @@ softkave-forerunner etc-hosts list
 
 # Backup hosts file
 softkave-forerunner etc-hosts backup
+```
+
+### Process Management
+
+```bash
+# Find all child processes of PID 1234
+softkave-forerunner pm children-pids 1234
+
+# Find child processes in silent mode
+softkave-forerunner pm children-pids 1234 --silent
 ```
 
 ## Configuration Files
@@ -741,6 +819,7 @@ import {
   runMongo,
   setHost,
   removeHost,
+  findChildrenPIDs,
   ConsoleForeLogger,
 } from 'softkave-forerunner';
 
@@ -980,6 +1059,26 @@ restoreHostsFile({
 
 ### Process Management
 
+#### Find Children PIDs
+
+```typescript
+import {findChildrenPIDs} from 'softkave-forerunner';
+
+// Find all child processes of a parent PID
+const parentPid = 1234;
+const childrenPids = await findChildrenPIDs(parentPid);
+
+console.log(`Found ${childrenPids.length} child processes:`, childrenPids);
+```
+
+**Important Notes:**
+
+- `findChildrenPIDs` only works on Linux and macOS systems
+- Returns an array of all descendant PIDs (children, grandchildren, etc.)
+- Throws an error if the parent process doesn't exist or if running on unsupported platforms
+
+#### Process Instance Management
+
 **Important Notes:**
 
 - `startProcess` starts a background process that continues running even after the terminal or the initial program that started it stops
@@ -1067,6 +1166,7 @@ The SDK exports comprehensive TypeScript types:
 - `IProcessIdItem` - Process ID item structure
 - `IForeLogger` - Logger interface
 - `IInstanceOpts` - Process instance options
+- `findChildrenPIDs` - Function to find child process IDs
 
 ### Error Handling
 

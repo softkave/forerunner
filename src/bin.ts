@@ -37,6 +37,9 @@ import {
   setHost,
 } from './etcHosts/helpers.js';
 
+// Import process management functionality
+import {findChildrenPIDs} from './pid/findChildrenPIDs.js';
+
 const program = new Command();
 
 program
@@ -634,6 +637,45 @@ etcHostsProgram
   });
 
 // ============================================================================
+// PROCESS MANAGEMENT SUB-PROGRAM
+// ============================================================================
+const pmProgram = program
+  .command('pm')
+  .description('Process management utilities');
+
+// Find children PIDs command
+pmProgram
+  .command('children-pids')
+  .description('Find all child PIDs of a given parent PID')
+  .argument('<pid>', 'Parent process ID to find children for')
+  .option('-s, --silent', 'Silent mode')
+  .action(async (pid: string, options) => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const parentPid = parseInt(pid, 10);
+      if (isNaN(parentPid)) {
+        throw new Error(`Invalid PID: ${pid}. Must be a number.`);
+      }
+
+      const childrenPids = await findChildrenPIDs(parentPid);
+
+      if (childrenPids.length === 0) {
+        logger.log(`No child processes found for PID ${parentPid}`);
+      } else {
+        logger.log(`Child PIDs of ${parentPid}:`);
+        childrenPids.forEach(childPid => {
+          logger.log(`  ${childPid}`);
+        });
+        logger.log(`Total: ${childrenPids.length} child process(es)`);
+      }
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
 // HELP AND DEFAULT ACTIONS
 // ============================================================================
 
@@ -675,6 +717,9 @@ COMMANDS:
     backup                 Create a backup of the current hosts file
     restore                Restore hosts file from backup
 
+  pm                       Process management utilities
+    children-pids          Find all child PIDs of a given parent PID
+
   help                     Show this help message
 
 EXAMPLES:
@@ -698,6 +743,9 @@ EXAMPLES:
 
   # Backup hosts file
   forerunner etc-hosts backup
+
+  # Find child processes of a PID
+  forerunner pm children-pids 1234
 
 For more information about a specific command, use:
   forerunner <command> --help
