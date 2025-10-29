@@ -5,16 +5,17 @@ import {glob} from 'fs/promises';
 import getPort from 'get-port';
 import http from 'http';
 import path from 'path';
-import {newDummyServer} from '../../utils/dummyServer/server.js';
-import {getPIDsFromFile} from '../getPIDs.js';
-import {IProcessIdItem} from '../types.js';
-import {writePIDs} from '../writePIDs.js';
+import {getPIDsFromFile} from '../pid/getPIDs.js';
+import {IProcessIdItem} from '../pid/types.js';
+import {writePIDs} from '../pid/writePIDs.js';
+import {newDummyServer} from '../utils/dummyServer/server.js';
 
 // Message types for IPC communication
 interface ReadyMessage {
   type: 'ready';
   processName: string;
   pid: number;
+  pgid: number | undefined;
   childrenCount: number;
 }
 
@@ -39,8 +40,20 @@ interface ProcessArgs {
 }
 
 /**
- * Generates a unique process name based on base name, depth, and position
+ * Gets the process group ID for the current process
  */
+function getCurrentProcessGroupId(): number | undefined {
+  try {
+    // Use process.getgid() if available, otherwise fallback to process.pid
+    if (typeof process.getgid === 'function') {
+      return process.getgid();
+    }
+    return undefined;
+  } catch (error) {
+    console.error('Failed to get process group ID:', error);
+    return undefined;
+  }
+}
 function generateProcessName(
   baseName: string,
   depth: number,
@@ -184,7 +197,7 @@ function parseProcessArgs(): ProcessArgs {
 }
 
 /**
- * Writes the current process PID to a file for testing purposes
+ * Writes the current process PID and PGID to a file for testing purposes
  */
 async function writeCurrentProcessPid(config: SpawnerConfig): Promise<void> {
   const processName = generateProcessName(
@@ -192,9 +205,11 @@ async function writeCurrentProcessPid(config: SpawnerConfig): Promise<void> {
     config.depth,
     config.position
   );
+  const pgid = getCurrentProcessGroupId();
   const pidItem: IProcessIdItem = {
     name: processName,
     pid: process.pid.toString(),
+    pgid: pgid?.toString(),
   };
 
   const pidsFilepath = path.join(config.outputDir, processName, 'pids.json');
@@ -206,15 +221,17 @@ async function writeCurrentProcessPid(config: SpawnerConfig): Promise<void> {
       existingPids = await fse.readJson(pidsFilepath);
     }
 
-    // Add current PID
+    // Add current PID and PGID
     existingPids.push(pidItem);
 
     // Write back to file
     await writePIDs(existingPids, {pidsFilepath});
 
-    console.log(`[${processName}] Wrote PID ${process.pid} to ${pidsFilepath}`);
+    console.log(
+      `[${processName}] Wrote PID ${process.pid} and PGID ${pgid} to ${pidsFilepath}`
+    );
   } catch (error) {
-    console.error(`[${processName}] Failed to write PID:`, error);
+    console.error(`[${processName}] Failed to write PID and PGID:`, error);
   }
 }
 
@@ -344,7 +361,7 @@ async function waitForChildrenReady(
           if (message.type === 'ready') {
             if (processName) {
               console.log(
-                `[${processName}] Received ready message from ${message.processName} (PID: ${message.pid}, children: ${message.childrenCount})`
+                `[${processName}] Received ready message from ${message.processName} (PID: ${message.pid}, PGID: ${message.pgid}, children: ${message.childrenCount})`
               );
             }
             handleReady();
@@ -503,10 +520,12 @@ async function main(): Promise<{
 
   // Send ready message to parent (including root process for test usage)
   console.log(`[${processName}] Sending ready message to parent`);
+  const pgid = getCurrentProcessGroupId();
   sendMessageToParent({
     type: 'ready',
     processName,
     pid: process.pid,
+    pgid,
     childrenCount: children.length,
   });
 
@@ -533,6 +552,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 export {
   generateProcessName,
+  getCurrentProcessGroupId,
   main,
   parseProcessArgs,
   spawnChildren,

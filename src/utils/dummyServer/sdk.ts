@@ -83,4 +83,18 @@ export class DummyServerSdk {
 
     handleFailedResponse(result, 'postLog error');
   }
+
+  async postLogError(props: {message: string}) {
+    const {message} = props;
+    const result = await fetch(
+      `http://localhost:${this.port}${kDummyServerConstants.paths.logError}`,
+      {
+        method: 'post',
+        body: JSON.stringify({message}),
+        headers: {'Content-Type': 'application/json'},
+      }
+    );
+
+    handleFailedResponse(result, 'postLogError error');
+  }
 }

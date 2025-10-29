@@ -5,6 +5,7 @@ export const kDummyServerConstants = {
     exit: '/exit',
     fail: '/fail',
     log: '/log',
+    logError: '/log-error',
   },
   port: {
     min: 1,

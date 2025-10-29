@@ -2,11 +2,11 @@ import {ChildProcess, spawn} from 'child_process';
 import {ensureDir, remove} from 'fs-extra';
 import path from 'path';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
-import {findChildrenPIDs} from '../findChildrenPIDs.js';
 import {
   readAllPIDsFromDirectory,
   waitForChildrenReady,
-} from '../testHelpers/childSpawner.js';
+} from '../../testHelpers/childSpawner.js';
+import {findChildrenPIDs} from '../findChildrenPIDs.js';
 
 const testDir = '.' + path.sep + 'testdir/findChildrenPIDs';
 const childSpawnerPath = path.join(__dirname, '../testHelpers/childSpawner.ts');

@@ -32,6 +32,12 @@ const handleLogServerRequest: RequestHandler = (req, res) => {
   res.status(200).end();
 };
 
+const handleLogErrorServerRequest: RequestHandler = (req, res) => {
+  const strBody = isObject(req.body) ? JSON.stringify(req.body) : req.body;
+  console.error(strBody);
+  res.status(200).end();
+};
+
 export async function newDummyServer(props: {port: number}) {
   const {port} = props;
   const {app: expressApp, server} = await new Promise<{
@@ -47,6 +53,7 @@ export async function newDummyServer(props: {port: number}) {
     app.post(kDummyServerConstants.paths.exit, handleExitServerRequest);
     app.post(kDummyServerConstants.paths.fail, handleFailServerRequest);
     app.post(kDummyServerConstants.paths.log, handleLogServerRequest);
+    app.post(kDummyServerConstants.paths.logError, handleLogErrorServerRequest);
 
     const server = http.createServer(app).listen(port, () => {
       resolve({app, server});
