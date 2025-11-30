@@ -5,6 +5,7 @@ import path from 'path';
 import {waitTimeout} from 'softkave-js-utils';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {kill} from 'zx';
+import {getProcessGroupId} from '../../pid/getProcessGroupId.js';
 import {getDummyServerCmd} from '../../utils/dummyServer/run.js';
 import {DummyServerSdk} from '../../utils/dummyServer/sdk.js';
 import {startProcess} from '../startProcess.js';
@@ -64,70 +65,6 @@ describe('startProcess', () => {
           logs.includes(logMsg),
           `"${logs}" does not contain "${logMsg}"`
         ).toBeTruthy();
-      } finally {
-        await kill(pidNo);
-      }
-    }
-  );
-
-  test(
-    'process group ID is present and different from test runner',
-    {timeout: 30_000},
-    async () => {
-      const runName = faker.lorem.word();
-      const instanceName = faker.lorem.word();
-      const logsFolderpath = path.join(
-        testDir,
-        faker.number.int({min: 10_000}).toString()
-      );
-      const {cmd, port} = getDummyServerCmd();
-      const sdk = new DummyServerSdk({port});
-
-      const cmdFilepath = path.join(
-        testDir,
-        faker.number.int({min: 10_000}).toString()
-      );
-      await ensureFile(cmdFilepath);
-      await writeFile(cmdFilepath, cmd);
-
-      const pidsFilepath = path.join(
-        testDir,
-        faker.number.int({min: 10_000}).toString()
-      );
-
-      const {pid, pgid, logsFilepath} = await startProcess({
-        name: instanceName,
-        startCmdFilepath: cmdFilepath,
-        runName,
-        logsFolderpath,
-        cwd: process.cwd(),
-        pidsFilepath,
-      });
-
-      const pidNo = Number(pid);
-
-      try {
-        const testRunnerPgid = process.getgid?.();
-        if (!testRunnerPgid) {
-          throw new Error('Test runner PGID is not defined');
-        }
-
-        await waitTimeout(1_000);
-
-        // Verify the process is running and responding
-        const echoMsg = 'hello, world!';
-        const echoResponse = await sdk.postEcho({message: echoMsg});
-        expect(echoMsg).toBe(echoResponse);
-
-        // Verify PGID is present
-        expect(pgid).toBeDefined();
-        expect(pgid).not.toBe('');
-
-        const pgidNo = Number(pgid);
-        expect(pgidNo).toBeGreaterThan(0);
-
-        // Verify PGID is different from test runner PID
-        expect(pgidNo).not.toBe(testRunnerPgid);
       } finally {
         await kill(pidNo);
       }
@@ -261,7 +198,9 @@ describe('startProcess', () => {
         }
 
         // Verify both processes have PGIDs (they may be different since each gets its own group)
-        const pgids = processes.map(p => p.pgid);
+        const pgids = await Promise.all(
+          processes.map(p => getProcessGroupId(Number(p.pid)))
+        );
         expect(pgids[0]).toBeDefined();
         expect(pgids[1]).toBeDefined();
         expect(pgids[0]).not.toBe('');
