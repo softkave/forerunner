@@ -9,15 +9,17 @@ export async function getPIDsFromFile(
 ) {
   const {cwd} = opts;
   try {
-    const pidsFilepath = cwd
-      ? path.join(cwd, opts.pidsFilepath)
-      : opts.pidsFilepath;
+    const pidsFilepath =
+      cwd && !path.isAbsolute(opts.pidsFilepath)
+        ? path.join(cwd, opts.pidsFilepath)
+        : opts.pidsFilepath;
     const untypedJson = await fse.readJson(pidsFilepath, 'utf-8');
     const pids = untypedJson as ProcessIdFileParsed;
     const pidsByName = keyBy(pids, pid => pid.name);
     return {pids, pidsByName};
   } catch (error: unknown) {
     // TODO: log error
+    console.error('getPIDsFromFile error', error);
     return {pids: [], pidsByName: {}};
   }
 }
