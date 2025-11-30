@@ -1,7 +1,7 @@
 import find from 'find-process';
 import {defaultTo, uniq} from 'lodash-es';
 import {kill} from 'process';
-import {waitTimeout} from 'softkave-js-utils';
+import {AnyObject, waitTimeout} from 'softkave-js-utils';
 import {IRunnerOpts} from '../process/types.js';
 import {findChildrenPIDs} from './findChildrenPIDs.js';
 import {getPIDsFromFile} from './getPIDs.js';
@@ -16,23 +16,6 @@ async function getPIDsFromFilePath(
       cwd,
     });
     return pids.map(pid => Number(pid.pid));
-  }
-
-  return [];
-}
-
-async function getPGIDsFromFilePath(
-  opts: Partial<Pick<IRunnerOpts, 'pidsFilepath' | 'cwd'>>
-) {
-  const {pidsFilepath, cwd} = opts;
-  if (pidsFilepath) {
-    const {pids} = await getPIDsFromFile({
-      pidsFilepath,
-      cwd,
-    });
-    return pids
-      .filter(pid => pid.pgid) // Only include items that have a pgid
-      .map(pid => Number(pid.pgid));
   }
 
   return [];
@@ -59,20 +42,18 @@ function killPIDs(
     try {
       // Use negative PID to kill process group if stopProcessGroup is true
       const targetPid = stopProcessGroup ? -Number(pid) : Number(pid);
-      kill(targetPid, signal);
-    } catch (error) {
-      // do nothing
-    }
-  });
-}
-
-function killPGIDs(pgids: number[], signal: string) {
-  pgids.forEach(pgid => {
-    try {
-      // Use negative PGID to kill process group
-      kill(-Number(pgid), signal);
-    } catch (error) {
-      // do nothing
+      const result = kill(targetPid, signal);
+    } catch (error: unknown) {
+      if (error) {
+        const errorObject = error as AnyObject;
+        if (errorObject.code === 'ESRCH') {
+          console.log(`Process ${pid} not found`);
+        } else if (errorObject.code === 'EPERM') {
+          console.log(`Process ${pid} is not owned by the current user`);
+        }
+      } else {
+        console.error('endPIDs', pid, signal, error);
+      }
     }
   });
 }
@@ -80,7 +61,6 @@ function killPGIDs(pgids: number[], signal: string) {
 export async function endPIDs(
   opts: Partial<Pick<IRunnerOpts, 'pidsFilepath' | 'cwd'>> & {
     pids?: number[];
-    pgids?: number[];
     ports?: number[];
     signal?: string;
     timeoutMs?: number;
@@ -98,13 +78,6 @@ export async function endPIDs(
   const pidsFromFile = await getPIDsFromFilePath(opts);
   const pidsFromPorts = await getPIDsFromPorts(opts);
   let pids = [...pidsFromFile, ...defaultTo(opts.pids, []), ...pidsFromPorts];
-  let pgids = defaultTo(opts.pgids, []);
-
-  // Include PGIDs from file when stopProcessGroup is true
-  if (stopProcessGroup) {
-    const pgidsFromFile = await getPGIDsFromFilePath(opts);
-    pgids = [...pgids, ...pgidsFromFile];
-  }
 
   if (stopChildren) {
     const childrenPids = await Promise.all(
@@ -114,15 +87,12 @@ export async function endPIDs(
   }
 
   pids = uniq(pids);
-  pgids = uniq(pgids);
 
   // Kill individual processes and process groups
   killPIDs(pids, signal, stopProcessGroup);
-  killPGIDs(pgids, signal);
 
   if (timeoutMs) {
     await waitTimeout(timeoutMs);
     killPIDs(pids, 'SIGKILL', stopProcessGroup);
-    killPGIDs(pgids, 'SIGKILL');
   }
 }
