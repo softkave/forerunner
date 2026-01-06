@@ -17,6 +17,7 @@ export const MongoConfigSchema = z.object({
     destination: z.literal('file'),
     path: z.string(),
     logAppend: z.boolean(),
+    logRotate: z.enum(['rename', 'reopen']),
   }),
   processManagement: z.object({
     fork: z.boolean(),
@@ -125,6 +126,7 @@ export async function generateMongoConfigForMongod(params: {
     systemLog: {
       destination: 'file',
       logAppend: true,
+      logRotate: 'rename',
       path: getMongodSystemLogFilePath(
         params.mongoRunConfig,
         params.instanceNumber
