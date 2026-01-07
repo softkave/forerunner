@@ -24,16 +24,16 @@ export async function initMongo(params: {
     logger = new ConsoleForeLogger({silent: true}),
   } = params;
 
-  logger.log('Downloading mongo');
+  logger.log('Downloading Mongo');
   await downloadMongo({mongoRunConfig, logger});
 
-  logger.log('Generating mongo cert configs');
+  logger.log('Generating Mongo cert configs');
   await generateMongoCertConfigsMain({
     mongoRunConfig,
     overwrite: overwriteCerts,
   });
 
-  logger.log('Generating mongo certs');
+  logger.log('Generating Mongo certs');
   await generateMongoCertsMain({
     logger,
     overwriteConfig: overwriteConfig,
@@ -42,32 +42,32 @@ export async function initMongo(params: {
     mongoRunConfig,
   });
 
-  logger.log('Generating mongo configs without authorization');
+  logger.log('Generating Mongo configs without authorization');
   await generateMongodConfigsMain({
     mongoRunConfig,
     overwrite: overwriteConfig,
     modifyConfig: config => {
-      // Disable authorization before setting up first users. We'll enable it
-      // again later after setting up first users. The reason we do this is is
-      // because replica set members with non-local hostnames disables local
-      // authentication bypass causing authentication errors.
+      // Disable authorization before setting up first users. It'll be
+      // re-enabled after setting up first users. The reason is to avoid
+      // authentication errors when replica set members have non-local hostnames
+      // and local authentication bypass is disabled.
       config.security.authorization = 'disabled';
       config.security.transitionToAuth = true;
       return config;
     },
   });
 
-  logger.log('Stopping existing mongo instances');
+  logger.log('Stopping existing Mongo instances');
   await stopMongodInstancesMain({mongoRunConfig, logger});
 
-  logger.log('Starting mongo instances');
+  logger.log('Starting Mongo instances');
   await startMongodInstancesMain({
     mongoRunConfig,
     logger,
     waitUntilListening: true,
   });
 
-  logger.log('Writing mongo users');
+  logger.log('Writing Mongo users');
   await writeMongoUsersFromConfig({
     mongoRunConfig,
     createAdmin: true,
@@ -75,19 +75,19 @@ export async function initMongo(params: {
     logger,
   });
 
-  logger.log('Setting up replica set');
+  logger.log('Setting up Replica Set');
   await setupReplicaSetMain({mongoRunConfig, logger});
 
-  logger.log('Waiting for replica set to be ready');
+  logger.log('Waiting for Replica Set to be ready');
   await checkMongoReplicaSetReady({mongoRunConfig});
 
-  logger.log('Setting up replica set first users');
+  logger.log('Setting up Replica Set first users');
   await setupFirstUsers({mongoRunConfig, logger});
 
-  logger.log('Stopping existing mongo instances');
+  logger.log('Stopping existing Mongo instances');
   await stopMongodInstancesMain({mongoRunConfig, logger});
 
-  logger.log('Generating mongo configs with authorization enabled');
+  logger.log('Generating Mongo configs with authorization enabled');
   await generateMongodConfigsMain({
     mongoRunConfig,
     overwrite: true,
@@ -98,7 +98,7 @@ export async function initMongo(params: {
     },
   });
 
-  logger.log('Starting mongo instances');
+  logger.log('Starting Mongo instances');
   await startMongodInstancesMain({
     mongoRunConfig,
     logger,

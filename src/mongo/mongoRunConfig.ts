@@ -7,15 +7,15 @@ import z from 'zod';
 import {MongoUserListSchema} from './setupMongoUsers.js';
 
 export const mongoRunConfigSchema = z.object({
-  // working dir
+  // Working dir
   workingDir: z.string(),
 
-  // download mongo
+  // Download Mongo
   mongoVersion: z.string().optional(),
   systemLinux: z.string().optional(),
   os: z.string().optional(),
 
-  // mongo certs
+  // Mongo certs
   caConfig: z.object({
     days: z.number().int().positive('Days must be a positive integer'),
     subject: z.object({
@@ -28,14 +28,14 @@ export const mongoRunConfigSchema = z.object({
     passphrase: z.string().optional(),
   }),
 
-  // mongo configs
+  // Mongo configs
   instancesHostnames: z.array(z.string().or(z.array(z.string()))),
   bindLocalhost: z.boolean().optional(),
   instancePorts: z.array(z.number()),
   replicaCount: z.number().min(3, 'Replica count must be at least 3'),
   replicaSetName: z.string(),
 
-  // mongo users
+  // Mongo users
   users: MongoUserListSchema,
 });
 

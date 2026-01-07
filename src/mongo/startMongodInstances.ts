@@ -49,9 +49,12 @@ export async function ensureMongodInstanceFiles(params: {
   const mongodConfig = MongoConfigSchema.parse(
     load(await fs.readFile(mongodConfigFilePath, 'utf8'))
   );
+  const systemLogDir = path.dirname(mongodConfig.systemLog.path);
   await Promise.all([
     ensureDir(mongodConfig.storage.dbPath),
-    ensureFile(mongodConfig.systemLog.path),
+    // Mongo config is set to daily rotate log files, so we need to ensure only
+    // the log directory exists, not the log files themselves.
+    ensureDir(systemLogDir),
   ]);
 }
 
