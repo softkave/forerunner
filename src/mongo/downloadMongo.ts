@@ -11,7 +11,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
-export const kDefaultMongoVersion = '8.0.13';
+export const kDefaultMongoVersion = '8.2.3';
 export const kDefaultMongodBinName = 'mongod';
 const kMongoBinDir = 'mongodb-bin';
 
@@ -50,7 +50,7 @@ export async function downloadMongo(params: {
   }
 
   /** NOTE: it downloads both mongod and mongos */
-  const version = mongoRunConfig.mongoVersion || '8.0.13';
+  const version = mongoRunConfig.mongoVersion || kDefaultMongoVersion;
   const {systemLinux} = mongoRunConfig;
 
   const versionMatch = version.match(/^(\d)\.(\d)\.(\d+)$/);
