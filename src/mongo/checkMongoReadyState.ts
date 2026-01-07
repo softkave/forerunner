@@ -29,7 +29,12 @@ async function findLastRestartPosition(filePath: string): Promise<number> {
 
     while (position >= 0) {
       const buffer = Buffer.alloc(CHUNK_SIZE);
-      const {bytesRead} = await fd.read(buffer, 0, CHUNK_SIZE, position);
+      const {bytesRead} = await fd.read(
+        buffer as Uint8Array,
+        0,
+        CHUNK_SIZE,
+        position
+      );
 
       if (bytesRead === 0) {
         break; // Should not happen, but safety check
@@ -93,7 +98,12 @@ async function searchInFileChunks(
 
     while (true) {
       const buffer = Buffer.alloc(CHUNK_SIZE);
-      const {bytesRead} = await fd.read(buffer, 0, CHUNK_SIZE, position);
+      const {bytesRead} = await fd.read(
+        buffer as Uint8Array,
+        0,
+        CHUNK_SIZE,
+        position
+      );
 
       if (bytesRead === 0) {
         break; // End of file
