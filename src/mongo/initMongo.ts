@@ -79,7 +79,7 @@ export async function initMongo(params: {
   await setupReplicaSetMain({mongoRunConfig, logger});
 
   logger.log('Waiting for Replica Set to be ready');
-  await checkMongoReplicaSetReady({mongoRunConfig});
+  await checkMongoReplicaSetReady({mongoRunConfig, logger});
 
   logger.log('Setting up Replica Set first users');
   await setupFirstUsers({mongoRunConfig, logger});

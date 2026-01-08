@@ -124,11 +124,11 @@ export async function startMongodInstancesMain(params: {
 
   if (waitUntilListening) {
     logger.log('Waiting for mongo instances to start');
-    await checkMongoInstancesListening({mongoRunConfig});
+    await checkMongoInstancesListening({mongoRunConfig, logger});
   }
 
   if (waitUntilReplicaSetReady) {
     logger.log('Waiting for replica set to be ready');
-    await checkMongoReplicaSetReady({mongoRunConfig});
+    await checkMongoReplicaSetReady({mongoRunConfig, logger});
   }
 }
