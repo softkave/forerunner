@@ -61,7 +61,6 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "fimidara": "^1.25.0",
     "find-process": "^2.0.0",
     "fs-extra": "^11.2.0",
     "generate-password": "^1.7.1",

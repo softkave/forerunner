@@ -75,8 +75,11 @@ export interface ReplicaSetStatusParams {
 }
 
 export interface ReplicaSetStatusMember {
+  /** The host (hostname:port) of the member */
   name: string;
+  /** The state (code) of the member */
   state: number;
+  /** The state string of the member */
   stateStr: string;
   health: string;
   lastHeartbeat?: string;
