@@ -134,7 +134,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await downloadMongo({mongoRunConfig, logger});
       logger.log('✅ MongoDB download completed successfully');
@@ -159,7 +158,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await generateMongoCertsMain({
         mongoRunConfig,
@@ -188,7 +186,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await generateMongoCertConfigsMain({
         mongoRunConfig,
@@ -216,7 +213,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await generateMongodConfigsMain({
         mongoRunConfig,
@@ -241,7 +237,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await startMongodInstancesMain({
         mongoRunConfig,
@@ -270,7 +265,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await stopMongodInstancesMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB instances stopped successfully');
@@ -292,7 +286,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await setupReplicaSetMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB replica set setup completed successfully');
@@ -314,7 +307,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await setupMongoUsersMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB users setup completed successfully');
@@ -343,7 +335,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
 
       await writeMongoUsersFromConfig({
@@ -374,7 +365,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: true,
       });
       await initMongo({
         mongoRunConfig,
@@ -403,7 +393,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
       await setNonLocalhostNamesInEtcHostsMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB etc hosts setup completed successfully');
@@ -443,7 +432,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
 
       const connectionType = options.connectionType as
@@ -489,7 +477,6 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
-        checkExisting: false,
       });
 
       await replicaSetStatus({

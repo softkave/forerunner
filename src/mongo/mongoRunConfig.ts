@@ -1,8 +1,6 @@
 import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
-import {isEqual} from 'lodash-es';
 import path from 'path';
-import {mergeObjects} from 'softkave-js-utils';
 import z from 'zod';
 import {MongoUserListSchema} from './setupMongoUsers.js';
 
@@ -41,7 +39,7 @@ export const mongoRunConfigSchema = z.object({
 
 export type MongoRunConfig = z.infer<typeof mongoRunConfigSchema>;
 
-export function getWorkingMongoRunConfigFilepath(params: {
+export function getCachedMongoRunConfigFilepath(params: {
   mongoRunConfig: MongoRunConfig;
 }) {
   const {mongoRunConfig} = params;
@@ -50,46 +48,25 @@ export function getWorkingMongoRunConfigFilepath(params: {
 
 export async function getMongoRunConfig(params: {
   mongoRunConfigFilepath: string;
-  checkExisting: boolean;
+  cacheConfig?: boolean;
 }) {
-  const {mongoRunConfigFilepath, checkExisting = true} = params;
+  const {mongoRunConfigFilepath, cacheConfig = true} = params;
   const mongoRunConfig = mongoRunConfigSchema.parse(
     JSON.parse(await fs.promises.readFile(mongoRunConfigFilepath, 'utf8'))
   );
 
-  if (checkExisting) {
-    const workingMongoRunConfigFilepath = getWorkingMongoRunConfigFilepath({
+  if (cacheConfig) {
+    const cachedMongoRunConfigFilepath = getCachedMongoRunConfigFilepath({
       mongoRunConfig,
     });
-    if (!(await exists(workingMongoRunConfigFilepath))) {
-      await ensureFile(workingMongoRunConfigFilepath);
+
+    if (!(await exists(cachedMongoRunConfigFilepath))) {
+      await ensureFile(cachedMongoRunConfigFilepath);
       await fs.promises.writeFile(
-        workingMongoRunConfigFilepath,
+        cachedMongoRunConfigFilepath,
         JSON.stringify(mongoRunConfig, null, 2)
       );
-      return mongoRunConfig;
     }
-
-    const existingMongoRunConfig = mongoRunConfigSchema.parse(
-      JSON.parse(
-        await fs.promises.readFile(workingMongoRunConfigFilepath, 'utf8')
-      )
-    );
-    const hasDiff = !isEqual(existingMongoRunConfig, mongoRunConfig);
-    if (hasDiff) {
-      const mergedMongoRunConfig = mergeObjects(
-        existingMongoRunConfig,
-        mongoRunConfig,
-        {arrayUpdateStrategy: 'replace'}
-      );
-      await fs.promises.writeFile(
-        workingMongoRunConfigFilepath,
-        JSON.stringify(mergedMongoRunConfig, null, 2)
-      );
-      return mergedMongoRunConfig;
-    }
-
-    return existingMongoRunConfig;
   }
 
   return mongoRunConfig;
