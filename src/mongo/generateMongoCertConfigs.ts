@@ -94,11 +94,15 @@ export async function generateCertConfigForMongod(params: {
     hostnames = [...hostnames, 'localhost', '127.0.0.1'];
   }
 
+  assert.ok(
+    hostnames.length > 0,
+    `instanceHostnames or bindLocalhost must be set for instance ${params.instanceNumber}`
+  );
+
   const hostname0 = hostnames[0] as string | undefined;
-  assert.ok(hostname0, 'hostname0 must be set');
+  assert.ok(hostname0, 'hostname or bindLocalhost must be set');
   const firstNonLocalHostname = getFirstNonLocalhostBindIp({bindIp: hostname0});
   const cn = firstNonLocalHostname || hostname0;
-  assert.ok(cn, 'cn must be set');
   const san = uniq(
     flattenDeep(params.mongoRunConfig.instancesHostnames).concat(hostnames)
   );
@@ -137,7 +141,7 @@ export async function generateMongoCertConfigsMain(params: {
 }) {
   const {mongoRunConfig, overwrite} = params;
   const caConfig = await generateCAConfigForMongo({overwrite, mongoRunConfig});
-  for (let i = 1; i <= mongoRunConfig.replicaCount; i++) {
+  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
     await generateCertConfigForMongod({
       instanceNumber: i,
       caConfig,

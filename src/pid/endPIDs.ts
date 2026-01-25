@@ -1,10 +1,12 @@
-import find from 'find-process';
 import {defaultTo, uniq} from 'lodash-es';
 import {kill} from 'process';
 import {AnyObject, waitTimeout} from 'softkave-js-utils';
+import find, {FindFunction} from '../findProcess/index.js';
 import {IRunnerOpts} from '../process/types.js';
 import {findChildrenPIDs} from './findChildrenPIDs.js';
 import {getPIDsFromFile} from './getPIDs.js';
+import {getPIDsByPortLsof} from './getPIDsByPortLsof.js';
+import {processExists} from './processExists.js';
 
 async function getPIDsFromFilePath(
   opts: Partial<Pick<IRunnerOpts, 'pidsFilepath' | 'cwd'>>
@@ -23,14 +25,21 @@ async function getPIDsFromFilePath(
 
 async function getPIDsFromPorts(opts: {ports?: number[]}) {
   const {ports} = opts;
-  if (ports) {
-    const processes = await Promise.all(
-      ports.map(port => find.default('port', port))
-    );
-    return processes.map(process => process.map(process => process.pid)).flat();
+
+  let pids: number[] = [];
+  if (ports && ports.length > 0) {
+    const [fromFind, fromLsof] = await Promise.all([
+      Promise.all(
+        ports.map(port => (find as unknown as FindFunction)('port', port))
+      ).then(processes =>
+        processes.map(p => p.map(proc => Number(proc.pid))).flat()
+      ),
+      getPIDsByPortLsof(ports),
+    ]);
+    pids = uniq([...fromFind, ...fromLsof]);
   }
 
-  return [];
+  return pids;
 }
 
 function killPIDs(
@@ -39,21 +48,36 @@ function killPIDs(
   stopProcessGroup: boolean = false
 ) {
   pids.forEach(pid => {
+    const n = Number(pid);
+    // When stopProcessGroup: try process-group kill first (kill(-pid)).
+    // Process-group ID equals PID only when that process is the group leader.
+    // If the process was started as a child of a shell (e.g. bash start.sh;
+    // mongod), the shell is the leader, so process group `pid` does not exist
+    // and kill(-pid) returns ESRCH. Fall back to killing the process itself.
+    const tryPid = stopProcessGroup ? -n : n;
     try {
-      // Use negative PID to kill process group if stopProcessGroup is true
-      const targetPid = stopProcessGroup ? -Number(pid) : Number(pid);
-      const result = kill(targetPid, signal);
+      kill(tryPid, signal);
     } catch (error: unknown) {
       if (error) {
-        const errorObject = error as AnyObject;
-        if (errorObject.code === 'ESRCH') {
-          console.log(`Process ${pid} not found`);
-        } else if (errorObject.code === 'EPERM') {
-          console.log(`Process ${pid} is not owned by the current user`);
+        const err = error as AnyObject;
+        if (err.code === 'ESRCH' && stopProcessGroup && tryPid < 0) {
+          try {
+            kill(n, signal);
+            return; // fallback succeeded; avoid logging the original kill(-n) ESRCH
+          } catch (fallbackErr) {
+            const fe = fallbackErr as AnyObject;
+            if (fe.code === 'ESRCH') {
+              return;
+            }
+            console.error('endPIDs', pid, signal, fallbackErr);
+            return;
+          }
+        } else if (err.code === 'ESRCH') {
+          return;
         }
-      } else {
-        console.error('endPIDs', pid, signal, error);
       }
+
+      console.error('endPIDs', pid, signal, error);
     }
   });
 }
@@ -75,9 +99,13 @@ export async function endPIDs(
     stopProcessGroup = false,
   } = opts;
 
-  const pidsFromFile = await getPIDsFromFilePath(opts);
+  const pidsFromFile = (await getPIDsFromFilePath(opts)).filter(processExists);
   const pidsFromPorts = await getPIDsFromPorts(opts);
-  let pids = [...pidsFromFile, ...defaultTo(opts.pids, []), ...pidsFromPorts];
+  let pids = [
+    ...pidsFromFile,
+    ...defaultTo(opts.pids, []).filter(processExists),
+    ...pidsFromPorts,
+  ];
 
   if (stopChildren) {
     const childrenPids = await Promise.all(
@@ -87,6 +115,10 @@ export async function endPIDs(
   }
 
   pids = uniq(pids);
+
+  if (pids.length === 0) {
+    return;
+  }
 
   // Kill individual processes and process groups
   killPIDs(pids, signal, stopProcessGroup);

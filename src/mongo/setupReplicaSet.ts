@@ -4,99 +4,11 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {
-  findAdminMongoUser,
-  findClusterAdminMongoUser,
-  getMongoUsersConfigFilePath,
-  readMongoUsers,
-  setupSingleMongoUser,
-} from './setupMongoUsers.js';
-import {
   getFirstNonLocalhostBindIp,
   getMongoClientForInstance,
   getMongodConfigs,
   separateBindIps,
 } from './utils.js';
-
-export async function setupFirstUsers(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  client?: MongoClient;
-  /** Only used if a client is provided */
-  connectionType?: 'replicaSet' | 'instance';
-}) {
-  const {
-    mongoRunConfig,
-    logger = new ConsoleForeLogger({silent: true}),
-    client,
-    connectionType = 'replicaSet',
-  } = params;
-
-  const mongoUsers = await readMongoUsers({
-    configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
-  });
-  const adminUser = await findAdminMongoUser({
-    mongoUsers,
-    createIfNotFound: true,
-  });
-
-  // If a client is provided, we don't want to close it after setting up a user
-  // because it's externally managed.
-  const retainClient = !!client;
-
-  if (adminUser) {
-    logger.log('Admin user found, setting up');
-    await setupSingleMongoUser({
-      user: adminUser,
-      mongoRunConfig,
-      logger,
-      preferLocalhost: true,
-      client,
-      retainClient,
-      connectionType,
-    });
-  }
-
-  const clusterAdminUser = await findClusterAdminMongoUser({
-    mongoUsers,
-    createIfNotFound: true,
-  });
-  if (clusterAdminUser) {
-    logger.log('Cluster admin user found, setting up');
-    await setupSingleMongoUser({
-      user: clusterAdminUser,
-      adminUser,
-      mongoRunConfig,
-      logger,
-      preferLocalhost: true,
-      client,
-      retainClient,
-      connectionType,
-    });
-  }
-
-  const regularUsers = mongoUsers.filter(
-    user =>
-      user.username !== adminUser.username &&
-      user.username !== clusterAdminUser?.username
-  );
-  if (regularUsers.length > 0) {
-    logger.log('Setting up regular users', regularUsers.length);
-    await Promise.all(
-      regularUsers.map(user =>
-        setupSingleMongoUser({
-          user,
-          adminUser,
-          mongoRunConfig,
-          logger,
-          preferLocalhost: true,
-          client,
-          retainClient,
-          connectionType,
-        })
-      )
-    );
-  }
-}
 
 export async function setupReplicaSetMain(params: {
   mongoRunConfig: MongoRunConfig;
@@ -110,9 +22,17 @@ export async function setupReplicaSetMain(params: {
   } = params;
 
   const replicaCount = mongoRunConfig.replicaCount;
+  if (!replicaCount) {
+    throw new Error('Replica count is not set');
+  }
+
   const mongodConfigs = await getMongodConfigs({replicaCount, mongoRunConfig});
   const mongoConfig0 = mongodConfigs[0];
   let client: MongoClient | null = null;
+
+  if (!mongoConfig0.replication) {
+    throw new Error('Replication is not set');
+  }
 
   try {
     client = await getMongoClientForInstance({

@@ -1,19 +1,15 @@
 import assert from 'assert';
-import {MongoClient} from 'mongodb';
+import {ValueOf} from 'type-fest';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {closeMongoClient} from './connection.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {
-  findClusterAdminMongoUser,
-  getMongoUsersConfigFilePath,
-  MongoUser,
-  readMongoUsers,
-} from './setupMongoUsers.js';
+import {findReplMemberByInstanceNumber} from './replSetUtils.js';
+import {findClusterAdminUser} from './user/findUtils.js';
+import {MongoUser} from './user/types.js';
 import {
   getMongoClientForInstance,
   getMongoClientForReplicaSet,
-  getMongodConfigForInstance,
-  separateBindIps,
 } from './utils.js';
 
 /**
@@ -40,7 +36,7 @@ import {
  * | 10   | REMOVED    | Node was removed from the replica set config.                             |
  */
 
-const kMemberReplicaSetStates: Record<number, string> = {
+export const kMemberReplicaSetStatesMap = {
   0: 'STARTUP',
   1: 'PRIMARY',
   2: 'SECONDARY',
@@ -51,12 +47,34 @@ const kMemberReplicaSetStates: Record<number, string> = {
   8: 'DOWN',
   9: 'ROLLBACK',
   10: 'REMOVED',
-};
+} as const;
 
-const kMemberHealth: Record<number, string> = {
+export const kMemberReplicaSetStatesStr = {
+  STARTUP: 'STARTUP',
+  PRIMARY: 'PRIMARY',
+  SECONDARY: 'SECONDARY',
+  RECOVERING: 'RECOVERING',
+  STARTUP2: 'STARTUP2',
+  UNKNOWN: 'UNKNOWN',
+  ARBITER: 'ARBITER',
+  DOWN: 'DOWN',
+  ROLLBACK: 'ROLLBACK',
+  REMOVED: 'REMOVED',
+} as const;
+
+export type MemberReplicaSetState = ValueOf<typeof kMemberReplicaSetStatesStr>;
+
+export const kMemberHealthMap = {
   0: 'UNHEALTHY',
   1: 'HEALTHY',
-};
+} as const;
+
+export const kMemberHealthStr = {
+  UNHEALTHY: 'UNHEALTHY',
+  HEALTHY: 'HEALTHY',
+} as const;
+
+export type MemberHealth = ValueOf<typeof kMemberHealthStr>;
 
 /**
  * Ping option can be:
@@ -80,8 +98,8 @@ export interface ReplicaSetStatusMember {
   /** The state (code) of the member */
   state: number;
   /** The state string of the member */
-  stateStr: string;
-  health: string;
+  stateStr: MemberReplicaSetState;
+  health: MemberHealth;
   lastHeartbeat?: string;
 }
 
@@ -106,73 +124,81 @@ function rawStatusToReplicaSetStatusResponse(
       state: member.state,
       stateStr:
         member.stateStr ||
-        kMemberReplicaSetStates[member.state as number] ||
+        kMemberReplicaSetStatesMap[
+          member.state as keyof typeof kMemberReplicaSetStatesMap
+        ] ||
         'UNKNOWN',
-      health: kMemberHealth[member.health as number] || 'UNKNOWN',
+      health:
+        kMemberHealthMap[member.health as keyof typeof kMemberHealthMap] ||
+        'UNKNOWN',
       lastHeartbeat: member.lastHeartbeat,
     })),
   };
 }
 
-async function getStatusFromReplicaSet(params: {
+async function getReplStatusFromReplicaSet(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   preferLocalhost?: boolean;
-  adminUser: MongoUser;
+  adminUser?: MongoUser;
 }): Promise<ReplicaSetStatusResponse> {
-  let client: MongoClient | null = null;
+  const {
+    mongoRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+    preferLocalhost,
+    adminUser,
+  } = params;
+
+  const client = await getMongoClientForReplicaSet({
+    mongoRunConfig,
+    logger,
+    preferLocalhost,
+    username: adminUser?.username,
+    password: adminUser?.password,
+  });
+
   try {
-    const {
-      mongoRunConfig,
-      logger = new ConsoleForeLogger({silent: true}),
-      preferLocalhost,
-      adminUser,
-    } = params;
-    client = await getMongoClientForReplicaSet({
-      mongoRunConfig,
-      logger,
-      preferLocalhost,
-      username: adminUser.username,
-      password: adminUser.password,
-    });
     const adminDb = client.db('admin');
     const status = await adminDb.command({replSetGetStatus: 1});
+
     return rawStatusToReplicaSetStatusResponse(status);
   } finally {
-    await client?.close();
+    await closeMongoClient(client);
   }
 }
 
-async function getStatusFromInstanceNumber(params: {
+async function getReplStatusFromInstance(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   preferLocalhost?: boolean;
-  adminUser: MongoUser;
+  adminUser?: MongoUser;
   /** Instance number (1-based) */
   instanceNumber: number;
 }): Promise<ReplicaSetStatusResponse> {
-  let client: MongoClient | null = null;
+  const {
+    mongoRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+    preferLocalhost,
+    adminUser,
+    instanceNumber,
+  } = params;
+
+  const client = await getMongoClientForInstance({
+    mongoRunConfig,
+    logger,
+    preferLocalhost,
+    username: adminUser?.username,
+    password: adminUser?.password,
+    instanceNumber,
+  });
+
   try {
-    const {
-      mongoRunConfig,
-      logger = new ConsoleForeLogger({silent: true}),
-      preferLocalhost,
-      adminUser,
-      instanceNumber,
-    } = params;
-    client = await getMongoClientForInstance({
-      mongoRunConfig,
-      logger,
-      preferLocalhost,
-      username: adminUser.username,
-      password: adminUser.password,
-      instanceNumber,
-    });
     const adminDb = client.db('admin');
     const status = await adminDb.command({replSetGetStatus: 1});
+
     return rawStatusToReplicaSetStatusResponse(status);
   } finally {
-    await client?.close();
+    await closeMongoClient(client);
   }
 }
 
@@ -180,7 +206,7 @@ async function getStatusFromAllMembers(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   preferLocalhost?: boolean;
-  adminUser: MongoUser;
+  adminUser?: MongoUser;
 }): Promise<ReplicaSetStatusResponse> {
   const {
     mongoRunConfig,
@@ -191,9 +217,9 @@ async function getStatusFromAllMembers(params: {
 
   // Get status from all members
   const statuses = await Promise.all(
-    mongoRunConfig.instancesHostnames.map(async (hostnames, i) => {
+    mongoRunConfig.instancePorts.map(async (_port, i) => {
       const instanceNumber = i + 1;
-      const status = await getStatusFromInstanceNumber({
+      const status = await getReplStatusFromInstance({
         mongoRunConfig,
         logger,
         preferLocalhost,
@@ -201,22 +227,16 @@ async function getStatusFromAllMembers(params: {
         instanceNumber,
       });
 
-      // Get mongod config for the instance
-      const mongodConfig = await getMongodConfigForInstance({
+      const member = await findReplMemberByInstanceNumber({
         instanceNumber,
         mongoRunConfig,
+        status,
       });
-
-      // Find the member with the same bind IP
-      const bindIps = separateBindIps(mongodConfig.net.bindIp);
-      const myMember = status.members.find(member =>
-        bindIps.some(bindIp => member.name.includes(bindIp))
-      );
 
       // Return the status and the member
       return {
         status,
-        myMember,
+        member,
       };
     })
   );
@@ -228,7 +248,7 @@ async function getStatusFromAllMembers(params: {
     set: statuses[0].status.set,
     date: statuses[0].status.date,
     members: statuses
-      .map(status => status.myMember)
+      .map(status => status.member)
       .filter(
         (member): member is ReplicaSetStatusMember => member !== undefined
       ),
@@ -244,17 +264,19 @@ function printStatusToLogger(
   logger.log(`Set: ${status.set}`);
   logger.log(`Date: ${status.date}`);
   logger.log('Members:');
+
   status.members.forEach(member => {
     logger.log(`  - Hostname: ${member.name}`);
     logger.log(`    Status: ${member.stateStr}`);
     logger.log(`    Health: ${member.health}`);
+
     if (member.lastHeartbeat) {
       logger.log(`    Last Heartbeat: ${member.lastHeartbeat}`);
     }
   });
 }
 
-export async function replicaSetStatus(params: ReplicaSetStatusParams) {
+export async function getReplicaSetStatus(params: ReplicaSetStatusParams) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
@@ -263,18 +285,11 @@ export async function replicaSetStatus(params: ReplicaSetStatusParams) {
     ping,
   } = params;
 
-  // Read Mongo users from the config file
-  const mongoUsers = await readMongoUsers({
-    configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
+  const clusterAdminUser = await findClusterAdminUser({
+    users: mongoRunConfig.users,
+    isRequired: mongoRunConfig.authorization !== 'disabled',
   });
 
-  // Find the cluster admin user
-  const clusterAdminUser = await findClusterAdminMongoUser({
-    mongoUsers,
-    createIfNotFound: false,
-  });
-
-  assert.ok(clusterAdminUser, 'Cluster admin user not found');
   let status: ReplicaSetStatusResponse | undefined;
   if (ping === 'all') {
     status = await getStatusFromAllMembers({
@@ -284,14 +299,14 @@ export async function replicaSetStatus(params: ReplicaSetStatusParams) {
       adminUser: clusterAdminUser,
     });
   } else if (ping === 'repl') {
-    status = await getStatusFromReplicaSet({
+    status = await getReplStatusFromReplicaSet({
       mongoRunConfig,
       logger,
       preferLocalhost,
       adminUser: clusterAdminUser,
     });
   } else if (!isNaN(Number(ping))) {
-    status = await getStatusFromInstanceNumber({
+    status = await getReplStatusFromInstance({
       mongoRunConfig,
       logger,
       preferLocalhost,
@@ -301,6 +316,7 @@ export async function replicaSetStatus(params: ReplicaSetStatusParams) {
   }
 
   assert.ok(status, 'Status not found');
+
   if (printStatus) {
     printStatusToLogger(status, logger);
   }

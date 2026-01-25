@@ -1,8 +1,8 @@
 import fs from 'fs';
-import {ensureFile, exists} from 'fs-extra';
+import {ensureFile} from 'fs-extra';
 import path from 'path';
 import z from 'zod';
-import {MongoUserListSchema} from './setupMongoUsers.js';
+import {MongoUserListSchema} from './user/types.js';
 
 export const mongoRunConfigSchema = z.object({
   // Working dir
@@ -28,13 +28,17 @@ export const mongoRunConfigSchema = z.object({
 
   // Mongo configs
   instancesHostnames: z.array(z.string().or(z.array(z.string()))),
-  bindLocalhost: z.boolean().optional(),
+  bindLocalhost: z.boolean().default(true).optional(),
   instancePorts: z.array(z.number()),
-  replicaCount: z.number().min(3, 'Replica count must be at least 3'),
-  replicaSetName: z.string(),
+  replicaCount: z
+    .number()
+    .min(3, 'Replica count must be at least 3')
+    .optional(),
+  replicaSetName: z.string().optional(),
 
-  // Mongo users
+  // Authentication and authorization
   users: MongoUserListSchema,
+  authorization: z.enum(['enabled', 'disabled']).default('enabled').optional(),
 });
 
 export type MongoRunConfig = z.infer<typeof mongoRunConfigSchema>;
@@ -44,6 +48,32 @@ export function getCachedMongoRunConfigFilepath(params: {
 }) {
   const {mongoRunConfig} = params;
   return path.join(mongoRunConfig.workingDir, 'mongo-run-config.json');
+}
+
+export async function getCachedMongoRunConfig(params: {
+  mongoRunConfig: MongoRunConfig;
+}) {
+  const {mongoRunConfig} = params;
+  const cachedMongoRunConfigFilepath = getCachedMongoRunConfigFilepath({
+    mongoRunConfig,
+  });
+  return mongoRunConfigSchema.parse(
+    JSON.parse(await fs.promises.readFile(cachedMongoRunConfigFilepath, 'utf8'))
+  );
+}
+
+export async function cacheMongoRunConfig(params: {
+  mongoRunConfig: MongoRunConfig;
+}) {
+  const {mongoRunConfig} = params;
+  const cachedMongoRunConfigFilepath = getCachedMongoRunConfigFilepath({
+    mongoRunConfig,
+  });
+  await ensureFile(cachedMongoRunConfigFilepath);
+  await fs.promises.writeFile(
+    cachedMongoRunConfigFilepath,
+    JSON.stringify(mongoRunConfig, null, 2)
+  );
 }
 
 export async function getMongoRunConfig(params: {
@@ -56,17 +86,7 @@ export async function getMongoRunConfig(params: {
   );
 
   if (cacheConfig) {
-    const cachedMongoRunConfigFilepath = getCachedMongoRunConfigFilepath({
-      mongoRunConfig,
-    });
-
-    if (!(await exists(cachedMongoRunConfigFilepath))) {
-      await ensureFile(cachedMongoRunConfigFilepath);
-      await fs.promises.writeFile(
-        cachedMongoRunConfigFilepath,
-        JSON.stringify(mongoRunConfig, null, 2)
-      );
-    }
+    await cacheMongoRunConfig({mongoRunConfig});
   }
 
   return mongoRunConfig;

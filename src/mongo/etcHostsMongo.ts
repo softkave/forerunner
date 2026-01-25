@@ -47,8 +47,8 @@ export async function setNonLocalhostNamesInEtcHostsMain(params: {
 }) {
   const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
     params;
-  const replicaCount = mongoRunConfig.replicaCount;
-  for (let i = 1; i <= replicaCount; i++) {
+
+  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
     await setNonLocalhostNamesInEtcHosts({
       instanceNumber: i,
       mongoRunConfig,

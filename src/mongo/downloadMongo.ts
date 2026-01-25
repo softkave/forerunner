@@ -44,6 +44,7 @@ export async function downloadMongo(params: {
 }) {
   const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
     params;
+
   if (await isMongoDownloaded(mongoRunConfig)) {
     logger.log('Mongo already downloaded');
     return;

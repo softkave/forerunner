@@ -6,9 +6,12 @@ import {startProcess} from '../process/startProcess.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {
-  checkMongoInstancesListening,
-  checkMongoReplicaSetReady,
+  assertMongoInstanceListening,
+  assertMongoInstancesListening,
+  assertMongoReplicaSetReady,
+  waitForMemberState,
 } from './checkMongoReadyState.js';
+import {getInstancePaths} from './constants.js';
 import {getMongodBinFilePath} from './downloadMongo.js';
 import {
   getMongodConfigFilePath,
@@ -19,21 +22,20 @@ import {MongoRunConfig} from './mongoRunConfig.js';
 export async function generateRunShFile(params: {
   instanceNumber: number;
   mongoRunConfig: MongoRunConfig;
+  startShFilepath: string;
 }) {
-  const {instanceNumber, mongoRunConfig} = params;
-  const startShFilepath = path.join(
-    mongoRunConfig.workingDir,
-    'start-mongod-scripts',
-    `start-mongod-${instanceNumber}.sh`
-  );
+  const {instanceNumber, mongoRunConfig, startShFilepath} = params;
+
   const mongodBinFilePath = getMongodBinFilePath(mongoRunConfig);
   const mongodConfigFilePath = getMongodConfigFilePath(
     mongoRunConfig,
     instanceNumber
   );
+
   const cmd = `${mongodBinFilePath} --config ${mongodConfigFilePath}`;
   await ensureFile(startShFilepath);
   await fs.writeFile(startShFilepath, cmd, 'utf8');
+
   return startShFilepath;
 }
 
@@ -42,6 +44,7 @@ export async function ensureMongodInstanceFiles(params: {
   mongoRunConfig: MongoRunConfig;
 }) {
   const {instanceNumber, mongoRunConfig} = params;
+
   const mongodConfigFilePath = getMongodConfigFilePath(
     mongoRunConfig,
     instanceNumber
@@ -49,6 +52,7 @@ export async function ensureMongodInstanceFiles(params: {
   const mongodConfig = MongoConfigSchema.parse(
     load(await fs.readFile(mongodConfigFilePath, 'utf8'))
   );
+
   const systemLogDir = path.dirname(mongodConfig.systemLog.path);
   await Promise.all([
     ensureDir(mongodConfig.storage.dbPath),
@@ -62,27 +66,30 @@ export async function startMongodInstance(params: {
   instanceNumber: number;
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  waitUntilListening?: boolean;
+  waitUntilReplicaSetReady?: boolean;
 }) {
   const {
     instanceNumber,
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
+    waitUntilListening = false,
+    waitUntilReplicaSetReady = false,
   } = params;
-  const instanceRunName = `mongod-${instanceNumber}`;
-  const instanceRunDir = path.join(
-    mongoRunConfig.workingDir,
-    'mongo-run',
-    instanceRunName
-  );
-  await ensureDir(instanceRunDir);
-  const instancePidFilepath = path.join(
+
+  const {
     instanceRunDir,
-    `${instanceRunName}.pid`
-  );
-  const instanceLogsDir = path.join(instanceRunDir, `${instanceRunName}-logs`);
-  const startShFilepath = await generateRunShFile({
+    instancePidFilepath,
+    instanceLogsDir,
+    instanceRunName,
+    startShFilepath,
+  } = getInstancePaths({instanceNumber, mongoRunConfig});
+  await ensureDir(instanceRunDir);
+
+  await generateRunShFile({
     instanceNumber,
     mongoRunConfig,
+    startShFilepath,
   });
 
   logger.log('Instance run name:', instanceRunName);
@@ -93,6 +100,7 @@ export async function startMongodInstance(params: {
 
   logger.log('Ensuring mongod instance files...');
   await ensureMongodInstanceFiles({instanceNumber, mongoRunConfig});
+
   logger.log('Starting mongod instance...\n');
   await startProcess({
     name: instanceRunName,
@@ -102,6 +110,26 @@ export async function startMongodInstance(params: {
     logsFolderpath: instanceLogsDir,
     runName: instanceRunName,
   });
+
+  if (waitUntilListening) {
+    logger.log(`Waiting for ${instanceRunName} to begin listening...`);
+    await assertMongoInstanceListening({
+      mongoRunConfig,
+      instanceNumber,
+      logger,
+    });
+  }
+
+  if (waitUntilReplicaSetReady) {
+    logger.log(
+      `Waiting for ${instanceRunName} to reach PRIMARY or SECONDARY state...`
+    );
+    await waitForMemberState({
+      instanceNumber,
+      mongoRunConfig,
+      logger,
+    });
+  }
 }
 
 export async function startMongodInstancesMain(params: {
@@ -117,18 +145,17 @@ export async function startMongodInstancesMain(params: {
     waitUntilReplicaSetReady,
   } = params;
 
-  const replicaCount = mongoRunConfig.replicaCount;
-  for (let i = 1; i <= replicaCount; i++) {
+  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
     await startMongodInstance({instanceNumber: i, mongoRunConfig, logger});
   }
 
   if (waitUntilListening) {
-    logger.log('Waiting for mongo instances to start');
-    await checkMongoInstancesListening({mongoRunConfig, logger});
+    logger.log('Waiting for Mongo instances to begin listening...');
+    await assertMongoInstancesListening({mongoRunConfig, logger});
   }
 
   if (waitUntilReplicaSetReady) {
-    logger.log('Waiting for replica set to be ready');
-    await checkMongoReplicaSetReady({mongoRunConfig, logger});
+    logger.log('Waiting for replica set to be ready...');
+    await assertMongoReplicaSetReady({mongoRunConfig, logger});
   }
 }

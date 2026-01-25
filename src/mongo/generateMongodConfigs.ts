@@ -5,12 +5,12 @@ import {dump, load} from 'js-yaml';
 import path from 'path';
 import {z} from 'zod';
 import {CAConfig, CertConfig} from '../certs/types.js';
-import {compileHostnames} from '../index.js';
 import {
   generateCAConfigForMongo,
   generateCertConfigForMongod,
 } from './generateMongoCertConfigs.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
+import {compileHostnames} from './utils.js';
 
 export const MongoConfigSchema = z.object({
   systemLog: z.object({
@@ -43,9 +43,11 @@ export const MongoConfigSchema = z.object({
     keyFile: z.string().optional(),
     clusterAuthMode: z.literal('x509'),
   }),
-  replication: z.object({
-    replSetName: z.string(),
-  }),
+  replication: z
+    .object({
+      replSetName: z.string(),
+    })
+    .optional(),
   storage: z.object({
     dbPath: z.string(),
   }),
@@ -122,6 +124,12 @@ export async function generateMongoConfigForMongod(params: {
       params.mongoRunConfig.instancesHostnames[params.instanceNumber - 1],
     bindLocalhost: params.mongoRunConfig.bindLocalhost || false,
   });
+
+  assert.ok(
+    bindIp.length > 0,
+    `instanceHostnames or bindLocalhost must be set for instance ${params.instanceNumber}`
+  );
+
   let config: MongoConfig = {
     systemLog: {
       destination: 'file',
@@ -138,9 +146,7 @@ export async function generateMongoConfigForMongod(params: {
       tls: {
         certificateKeyFile: `${params.mongoCertConfig.outDir}/${params.mongoCertConfig.files.crtAndKey}`,
         CAFile: `${params.caConfig.outDir}/${params.caConfig.files.cert}`,
-        // clusterFile: `${params.mongoCertConfig.outDir}/${params.mongoCertConfig.files.cert}`,
-        // clusterCAFile: `${params.caConfig.outDir}/${params.caConfig.files.cert}`,
-        mode: 'preferTLS',
+        mode: 'requireTLS',
         clusterAuthX509: {
           attributes: `O=${params.mongoCertConfig.subject.O}`,
         },
@@ -151,25 +157,31 @@ export async function generateMongoConfigForMongod(params: {
       dbPath: getMongodDataDir(params.mongoRunConfig, params.instanceNumber),
     },
     security: {
-      // keyFile: `${params.mongoCertConfig.outDir}/${params.mongoCertConfig.files.key}`,
       clusterAuthMode: 'x509',
-      authorization: 'enabled',
+      authorization:
+        params.mongoRunConfig.authorization !== 'disabled'
+          ? 'enabled'
+          : 'disabled',
       transitionToAuth: false,
     },
     processManagement: {
-      // we handle starting a background process for each mongod instance
+      // We handle starting a background process for each mongod instance
       // ourselves
       fork: false,
     },
-    replication: {
-      replSetName: params.mongoRunConfig.replicaSetName,
-    },
   };
+
+  if (params.mongoRunConfig.replicaSetName) {
+    config.replication = {
+      replSetName: params.mongoRunConfig.replicaSetName,
+    };
+  }
 
   await ensureFile(configFilePath);
   if (params.modifyConfig) {
     config = params.modifyConfig(config);
   }
+
   await fs.promises.writeFile(configFilePath, dump(config, {lineWidth: 120}));
   return config;
 }
@@ -181,7 +193,7 @@ export async function generateMongodConfigsMain(params: {
 }) {
   const {mongoRunConfig, overwrite, modifyConfig} = params;
   const caConfig = await generateCAConfigForMongo({overwrite, mongoRunConfig});
-  for (let i = 1; i <= mongoRunConfig.replicaCount; i++) {
+  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
     const mongoCertConfig = await generateCertConfigForMongod({
       instanceNumber: i,
       caConfig,

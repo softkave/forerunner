@@ -11,7 +11,7 @@ export interface PrintMongoUriOptions {
   username?: string;
   password?: string;
   preferLocalhost?: boolean;
-  serverSelectionTimeoutMS?: number;
+  serverSelectionTimeoutMs?: number;
 }
 
 export async function printMongoUriMain(options: PrintMongoUriOptions) {
@@ -23,7 +23,7 @@ export async function printMongoUriMain(options: PrintMongoUriOptions) {
     username,
     password,
     preferLocalhost = false,
-    serverSelectionTimeoutMS = 5000,
+    serverSelectionTimeoutMs = 5000,
   } = options;
 
   let uri: string;
@@ -42,7 +42,7 @@ export async function printMongoUriMain(options: PrintMongoUriOptions) {
       username,
       password,
       mongoRunConfig,
-      serverSelectionTimeoutMS,
+      serverSelectionTimeoutMs,
       logger,
       preferLocalhost,
     });

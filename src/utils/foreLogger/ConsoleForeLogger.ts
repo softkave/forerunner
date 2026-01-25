@@ -3,8 +3,8 @@ import {IForeLogger} from './types.js';
 export class ConsoleForeLogger implements IForeLogger {
   private silent: boolean;
 
-  constructor(params: {silent?: boolean}) {
-    this.silent = params.silent ?? false;
+  constructor(params?: {silent?: boolean}) {
+    this.silent = params?.silent ?? false;
   }
 
   log: (message: unknown, ...args: unknown[]) => void = (message, ...args) => {
