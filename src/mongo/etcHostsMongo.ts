@@ -3,7 +3,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getLocalIP} from '../utils/getLocalIP.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {getMongodConfigForInstance, getNonLocalhostBindIps} from './utils.js';
+import {compileHostnames, getNonLocalhostBindIps} from './utils.js';
 
 export async function setNonLocalhostNamesInEtcHosts(params: {
   instanceNumber: number;
@@ -15,12 +15,12 @@ export async function setNonLocalhostNamesInEtcHosts(params: {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
   } = params;
-  const mongodConfig = await getMongodConfigForInstance({
-    instanceNumber,
-    mongoRunConfig,
+
+  const hostnames = compileHostnames({
+    hostnames: mongoRunConfig.instancesHostnames[instanceNumber - 1],
+    bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
   });
-  const bindIp = mongodConfig.net.bindIp;
-  const nonLocalhostBindIp = getNonLocalhostBindIps({bindIp});
+  const nonLocalhostBindIp = getNonLocalhostBindIps({hostnames});
   if (!nonLocalhostBindIp) {
     return;
   }

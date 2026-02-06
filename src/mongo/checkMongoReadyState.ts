@@ -1,38 +1,31 @@
 import {range} from 'lodash-es';
 import pRetry from 'p-retry';
-import {waitTimeout} from 'softkave-js-utils';
+import {OmitFrom, waitTimeout} from 'softkave-js-utils';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
-import {IForeLogger} from '../utils/foreLogger/types.js';
-import {getInstanceRunName} from './constants.js';
-import {MongoRunConfig} from './mongoRunConfig.js';
-import {getReplMemberByInstanceNumber} from './replSetUtils.js';
 import {
   getMongoClientForInstance,
+  GetMongoClientForInstanceParams,
   getMongoClientForReplicaSet,
-} from './utils.js';
+  GetMongoClientForReplicaSetParams,
+} from './connection.js';
+import {getInstanceRunName} from './constants.js';
+import {getReplMemberByInstanceNumber} from './replSetUtils.js';
 
-export async function checkMongoInstanceListening(params: {
-  mongoRunConfig: MongoRunConfig;
-  instanceNumber: number;
-  logger?: IForeLogger;
-  retries?: number;
-}) {
+export async function checkMongoInstanceListening(
+  params: {
+    retries?: number;
+  } & GetMongoClientForInstanceParams
+) {
   const {
-    mongoRunConfig,
     instanceNumber,
     logger = new ConsoleForeLogger({silent: true}),
-    retries = 10,
+    retries = 5,
   } = params;
 
   try {
     await pRetry(
       async () => {
-        const client = await getMongoClientForInstance({
-          mongoRunConfig,
-          instanceNumber,
-          logger,
-          preferLocalhost: true,
-        });
+        const client = await getMongoClientForInstance(params);
         await client.close();
       },
       {
@@ -55,12 +48,11 @@ export async function checkMongoInstanceListening(params: {
   }
 }
 
-export async function assertMongoInstanceListening(params: {
-  mongoRunConfig: MongoRunConfig;
-  instanceNumber: number;
-  logger?: IForeLogger;
-  retries?: number;
-}): Promise<void> {
+export async function assertMongoInstanceListening(
+  params: {
+    retries?: number;
+  } & GetMongoClientForInstanceParams
+): Promise<void> {
   const result = await checkMongoInstanceListening(params);
   if (!result) {
     throw new Error(
@@ -69,56 +61,52 @@ export async function assertMongoInstanceListening(params: {
   }
 }
 
-export async function checkMongoInstancesListening(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger?: IForeLogger;
-  retries?: number;
-}) {
-  const {mongoRunConfig, logger, retries = 3} = params;
+export async function checkMongoInstancesListening(
+  params: {
+    retries?: number;
+  } & OmitFrom<GetMongoClientForInstanceParams, 'instanceNumber'>
+) {
+  const {mongoRunConfig} = params;
+
   const instanceNumbers = range(mongoRunConfig.instancePorts.length);
   const results = await Promise.all(
     instanceNumbers.map(instanceNumber =>
       checkMongoInstanceListening({
-        mongoRunConfig,
+        ...params,
         instanceNumber: instanceNumber + 1,
-        logger,
-        retries,
       })
     )
   );
   return results.every(result => result);
 }
 
-export async function assertMongoInstancesListening(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger?: IForeLogger;
-  retries?: number;
-}): Promise<void> {
+export async function assertMongoInstancesListening(
+  params: {
+    retries?: number;
+  } & OmitFrom<GetMongoClientForInstanceParams, 'instanceNumber'>
+): Promise<void> {
   const result = await checkMongoInstancesListening(params);
   if (!result) {
     throw new Error(`Failed to connect to MongoDB instances after retries`);
   }
 }
 
-export async function checkMongoReplicaSetReady(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger?: IForeLogger;
-  retries?: number;
-}) {
+export async function checkMongoReplicaSetReady(
+  params: {
+    retries?: number;
+  } & GetMongoClientForReplicaSetParams
+) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
-    retries = 3,
+    retries = 5,
   } = params;
 
   try {
     await pRetry(
       async () => {
-        const client = await getMongoClientForReplicaSet({
-          mongoRunConfig,
-          logger,
-          preferLocalhost: true,
-        });
+        const client = await getMongoClientForReplicaSet(params);
+        logger.log('Replica set ready');
         await client.close();
       },
       {
@@ -141,11 +129,11 @@ export async function checkMongoReplicaSetReady(params: {
   }
 }
 
-export async function assertMongoReplicaSetReady(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger?: IForeLogger;
-  retries?: number;
-}): Promise<void> {
+export async function assertMongoReplicaSetReady(
+  params: {
+    retries?: number;
+  } & GetMongoClientForReplicaSetParams
+): Promise<void> {
   const result = await checkMongoReplicaSetReady(params);
   if (!result) {
     throw new Error(
@@ -159,13 +147,13 @@ export async function assertMongoReplicaSetReady(params: {
  * Polls replica set status at specified intervals until timeout.
  * Throws error if timeout is reached before member reaches target state.
  */
-export async function waitForMemberState(params: {
-  instanceNumber: number;
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  timeoutMs?: number;
-  pollIntervalMs?: number;
-}): Promise<void> {
+export async function waitForMemberState(
+  params: {
+    instanceNumber: number;
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+  } & GetMongoClientForInstanceParams
+): Promise<void> {
   const {
     instanceNumber,
     mongoRunConfig,

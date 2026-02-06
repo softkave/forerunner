@@ -1,49 +1,8 @@
 import assert from 'assert';
-import fs from 'fs';
 import {generate} from 'generate-password';
-import {load} from 'js-yaml';
-import {MongoClient} from 'mongodb';
 import {convertToArray} from 'softkave-js-utils';
-import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {
-  getMongodConfigFilePath,
-  MongoConfigSchema,
-} from './generateMongodConfigs.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-
-export async function getMongodConfigForInstance(params: {
-  /** Instance number (1-based) */
-  instanceNumber: number;
-  mongoRunConfig: MongoRunConfig;
-}) {
-  const {mongoRunConfig} = params;
-  const {instanceNumber} = params;
-  const configFilePath = getMongodConfigFilePath(
-    mongoRunConfig,
-    instanceNumber
-  );
-  const config = MongoConfigSchema.parse(
-    load(await fs.promises.readFile(configFilePath, 'utf8'))
-  );
-  return config;
-}
-
-export async function getMongodConfigs(params: {
-  replicaCount: number;
-  mongoRunConfig: MongoRunConfig;
-}) {
-  const {replicaCount, mongoRunConfig} = params;
-  const configs = await Promise.all(
-    Array.from({length: replicaCount}, async (_, i) => {
-      return await getMongodConfigForInstance({
-        instanceNumber: i + 1,
-        mongoRunConfig,
-      });
-    })
-  );
-  return configs;
-}
 
 export function separateBindIps(bindIp: string) {
   return bindIp.split(',');
@@ -107,16 +66,15 @@ export async function getMongoUriForInstance(params: {
   preferLocalhost?: boolean;
 }) {
   const {instanceNumber, mongoRunConfig, logger} = params;
-  const mongodConfig = await getMongodConfigForInstance({
-    instanceNumber,
-    mongoRunConfig,
-  });
 
-  const bindIps = separateBindIps(mongodConfig.net.bindIp);
+  const hostnames = compileHostnames({
+    hostnames: mongoRunConfig.instancesHostnames[instanceNumber - 1],
+    bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
+  });
   const bindIp0 = params.preferLocalhost
-    ? getFirstLocalhostBindIp({bindIp: mongodConfig.net.bindIp}) || bindIps[0]
-    : bindIps[0];
-  let host = `${bindIp0}:${mongodConfig.net.port}`;
+    ? getFirstLocalhostBindIp({hostnames}) || hostnames[0]
+    : hostnames[0];
+  let host = `${bindIp0}:${mongoRunConfig.instancePorts[instanceNumber - 1]}`;
   let uri = `mongodb://${host}`;
   logger.log('Mongo URI:', uri);
   if (params.username && params.password) {
@@ -127,10 +85,10 @@ export async function getMongoUriForInstance(params: {
 }
 
 export function compileHostnames(params: {
-  initialHostnames: string[] | string;
+  hostnames: string[] | string;
   bindLocalhost: boolean;
 }) {
-  const {initialHostnames, bindLocalhost} = params;
+  const {hostnames: initialHostnames, bindLocalhost} = params;
   let hostnames = convertToArray(initialHostnames);
   if (bindLocalhost) {
     hostnames = [...hostnames, 'localhost', '127.0.0.1'];
@@ -151,7 +109,7 @@ export async function getMongoUriForReplicaSet(params: {
   const hostnamesPerInstance = mongoRunConfig.instancePorts.map(
     (_port, index) => {
       const hostnames = compileHostnames({
-        initialHostnames: mongoRunConfig.instancesHostnames[index] ?? [],
+        hostnames: mongoRunConfig.instancesHostnames[index] ?? [],
         bindLocalhost: mongoRunConfig.bindLocalhost || false,
       });
       let hostname: string | undefined;
@@ -191,82 +149,6 @@ export async function getMongoUriForReplicaSet(params: {
 
   const uri = `mongodb://${uriWithoutProtocol}`;
   return uri;
-}
-
-export async function getMongoClientForInstance(params: {
-  username?: string;
-  password?: string;
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  preferLocalhost?: boolean;
-  /** Instance number (1-based) */
-  instanceNumber?: number;
-  connectTimeoutMs?: number;
-}) {
-  const {
-    logger = new ConsoleForeLogger({silent: true}),
-    mongoRunConfig,
-    instanceNumber = 1,
-    connectTimeoutMs = 5_000,
-  } = params;
-
-  const uri = await getMongoUriForInstance({
-    instanceNumber,
-    username: params.username,
-    password: params.password,
-    mongoRunConfig: mongoRunConfig,
-    logger,
-    preferLocalhost: params.preferLocalhost,
-  });
-
-  const client = new MongoClient(uri, {
-    connectTimeoutMS: connectTimeoutMs,
-    directConnection: true,
-    tls: true,
-    tlsAllowInvalidCertificates: true,
-  });
-  await client.connect();
-  logger.log('Connected to MongoDB');
-
-  return client;
-}
-
-export async function getMongoClientForReplicaSet(params: {
-  username?: string;
-  password?: string;
-  mongoRunConfig: MongoRunConfig;
-  serverSelectionTimeoutMs?: number;
-  connectTimeoutMs?: number;
-  logger: IForeLogger;
-  preferLocalhost?: boolean;
-}) {
-  const {
-    serverSelectionTimeoutMs = 12_000,
-    connectTimeoutMs = 5_000,
-    logger = new ConsoleForeLogger({silent: true}),
-    mongoRunConfig,
-  } = params;
-
-  const uri = await getMongoUriForReplicaSet({
-    logger,
-    serverSelectionTimeoutMs,
-    username: params.username,
-    password: params.password,
-    mongoRunConfig: mongoRunConfig,
-    preferLocalhost: params.preferLocalhost,
-  });
-
-  const client = new MongoClient(uri, {
-    tls: true,
-    tlsAllowInvalidCertificates: true,
-    connectTimeoutMS: connectTimeoutMs,
-  });
-  await client.connect();
-  logger.log(
-    `Connected to MongoDB replica set ${mongoRunConfig.replicaSetName}`
-  );
-
-  return client;
 }
 
 export function generateMongoPassword() {

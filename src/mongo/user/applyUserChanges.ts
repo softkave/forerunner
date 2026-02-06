@@ -136,9 +136,7 @@ export async function updateMongoUserPassword(
       `Password update for user ${user.username}: ${result.ok ? 'success' : 'failed'}`
     );
   } finally {
-    if (client && !params.client) {
-      await closeMongoClient(client);
-    }
+    await closeMongoClient(client, params);
   }
 }
 
@@ -185,9 +183,7 @@ export async function updateMongoUserRoles(
       );
     }
   } finally {
-    if (client && !params.client) {
-      await closeMongoClient(client);
-    }
+    await closeMongoClient(client, params);
   }
 }
 
@@ -225,9 +221,7 @@ export async function updateMongoUser(
       });
     }
   } finally {
-    if (client && !params.client) {
-      await closeMongoClient(client);
-    }
+    await closeMongoClient(client, params);
   }
 }
 
@@ -254,9 +248,7 @@ export async function removeMongoUser(
       `Remove user ${user.username}: ${result.ok ? 'success' : 'failed'}`
     );
   } finally {
-    if (client && !params.client) {
-      await closeMongoClient(client);
-    }
+    await closeMongoClient(client, params);
   }
 }
 
@@ -323,7 +315,7 @@ export async function applyUserChanges(
       });
     }
   } finally {
-    await closeMongoClient(client);
+    await closeMongoClient(client, params);
   }
 
   logger.log('User changes applied successfully');

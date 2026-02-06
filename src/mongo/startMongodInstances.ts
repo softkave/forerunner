@@ -1,8 +1,7 @@
-import {ensureDir, ensureFile} from 'fs-extra';
-import fs from 'fs/promises';
-import {load} from 'js-yaml';
+import {execFileSync} from 'child_process';
+import crypto from 'crypto';
+import {ensureDir} from 'fs-extra';
 import path from 'path';
-import {startProcess} from '../process/startProcess.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {
@@ -11,55 +10,62 @@ import {
   assertMongoReplicaSetReady,
   waitForMemberState,
 } from './checkMongoReadyState.js';
-import {getInstancePaths} from './constants.js';
-import {getMongodBinFilePath} from './downloadMongo.js';
+import {getInstanceRunName} from './constants.js';
+import {getMongoCertOutDir} from './generateMongoCertConfigs.js';
 import {
-  getMongodConfigFilePath,
-  MongoConfigSchema,
+  generateMongoDockerConfigForMongod,
+  getMongodConfigDir,
+  getMongodDataDir,
+  getMongodDockerConfigFilePath,
+  getMongodSystemLogFilePath,
 } from './generateMongodConfigs.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
+import {findAdminUser} from './user/findUtils.js';
+import {compileHostnames, getNonLocalhostBindIps} from './utils.js';
 
-export async function generateRunShFile(params: {
-  instanceNumber: number;
-  mongoRunConfig: MongoRunConfig;
-  startShFilepath: string;
-}) {
-  const {instanceNumber, mongoRunConfig, startShFilepath} = params;
+const kDefaultMongoVersion = '8.2.3';
 
-  const mongodBinFilePath = getMongodBinFilePath(mongoRunConfig);
-  const mongodConfigFilePath = getMongodConfigFilePath(
-    mongoRunConfig,
-    instanceNumber
-  );
+/** Docker bridge IP: host as seen from inside containers; used so containers
+ * can reach each other via host port mappings. */
+const kDockerBridgeIp = '172.17.0.1';
 
-  const cmd = `${mongodBinFilePath} --config ${mongodConfigFilePath}`;
-  await ensureFile(startShFilepath);
-  await fs.writeFile(startShFilepath, cmd, 'utf8');
-
-  return startShFilepath;
+function getNonLocalhostInstanceHostnames(
+  mongoRunConfig: MongoRunConfig
+): string[] {
+  const seen = new Set<string>();
+  for (let i = 0; i < mongoRunConfig.instancesHostnames.length; i++) {
+    const hostnames = compileHostnames({
+      hostnames: mongoRunConfig.instancesHostnames[i] ?? [],
+      bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
+    });
+    const nonLocal = getNonLocalhostBindIps({hostnames});
+    for (const h of nonLocal) {
+      seen.add(h);
+    }
+  }
+  return Array.from(seen);
 }
 
-export async function ensureMongodInstanceFiles(params: {
-  instanceNumber: number;
-  mongoRunConfig: MongoRunConfig;
-}) {
-  const {instanceNumber, mongoRunConfig} = params;
+export function getDockerContainerName(
+  mongoRunConfig: MongoRunConfig,
+  instanceNumber: number
+): string {
+  const hash = crypto
+    .createHash('sha256')
+    .update(path.resolve(mongoRunConfig.workingDir))
+    .digest('hex')
+    .slice(0, 12);
+  return `mongo-${hash}-mongod-${instanceNumber}`;
+}
 
-  const mongodConfigFilePath = getMongodConfigFilePath(
-    mongoRunConfig,
-    instanceNumber
-  );
-  const mongodConfig = MongoConfigSchema.parse(
-    load(await fs.readFile(mongodConfigFilePath, 'utf8'))
-  );
-
-  const systemLogDir = path.dirname(mongodConfig.systemLog.path);
-  await Promise.all([
-    ensureDir(mongodConfig.storage.dbPath),
-    // Mongo config is set to daily rotate log files, so we need to ensure only
-    // the log directory exists, not the log files themselves.
-    ensureDir(systemLogDir),
-  ]);
+function ensureDockerAvailable(): void {
+  try {
+    execFileSync('docker', ['info'], {stdio: 'pipe', encoding: 'utf8'});
+  } catch {
+    throw new Error(
+      'Docker is not available. Please ensure Docker is installed and running.'
+    );
+  }
 }
 
 export async function startMongodInstance(params: {
@@ -68,6 +74,7 @@ export async function startMongodInstance(params: {
   logger: IForeLogger;
   waitUntilListening?: boolean;
   waitUntilReplicaSetReady?: boolean;
+  shouldInitDbRootUser?: boolean;
 }) {
   const {
     instanceNumber,
@@ -75,41 +82,99 @@ export async function startMongodInstance(params: {
     logger = new ConsoleForeLogger({silent: true}),
     waitUntilListening = false,
     waitUntilReplicaSetReady = false,
+    shouldInitDbRootUser = false,
   } = params;
 
-  const {
-    instanceRunDir,
-    instancePidFilepath,
-    instanceLogsDir,
-    instanceRunName,
-    startShFilepath,
-  } = getInstancePaths({instanceNumber, mongoRunConfig});
-  await ensureDir(instanceRunDir);
+  const instanceRunName = getInstanceRunName(instanceNumber);
+  const containerName = getDockerContainerName(mongoRunConfig, instanceNumber);
+  const port = mongoRunConfig.instancePorts[instanceNumber - 1];
+  const dataDir = getMongodDataDir(mongoRunConfig, instanceNumber);
+  const systemLogPath = getMongodSystemLogFilePath(
+    mongoRunConfig,
+    instanceNumber
+  );
+  const systemLogDir = path.dirname(systemLogPath);
+  const certsDir = getMongoCertOutDir(mongoRunConfig);
+  const configDir = getMongodConfigDir(mongoRunConfig);
+  const imageTag = mongoRunConfig.mongoVersion ?? kDefaultMongoVersion;
+  const image = `mongo:${imageTag}`;
 
-  await generateRunShFile({
+  await ensureDir(dataDir);
+  await ensureDir(systemLogDir);
+  await ensureDir(configDir);
+  await generateMongoDockerConfigForMongod({
     instanceNumber,
     mongoRunConfig,
-    startShFilepath,
   });
+
+  const adminUser = findAdminUser({
+    users: mongoRunConfig.users,
+    isRequired: false,
+  });
+
+  const nonLocalhostHostnames =
+    getNonLocalhostInstanceHostnames(mongoRunConfig);
+
+  const runArgs: string[] = [
+    'run',
+    '-d',
+    '--name',
+    containerName,
+    ...nonLocalhostHostnames.flatMap(hostname => [
+      '--add-host',
+      `${hostname}:${kDockerBridgeIp}`,
+    ]),
+    '-p',
+    // `${port}:27017`,
+    `${port}:${port}`,
+    '-v',
+    `${path.resolve(dataDir)}:/data/db`,
+    '-v',
+    `${path.resolve(systemLogDir)}:/var/log/mongodb`,
+    '-v',
+    `${path.resolve(certsDir)}:/certs:ro`,
+    '-v',
+    `${path.resolve(configDir)}:/etc/mongodb:ro`,
+  ];
+
+  if (
+    shouldInitDbRootUser &&
+    mongoRunConfig.authorization !== 'disabled' &&
+    adminUser?.username &&
+    adminUser?.password
+  ) {
+    runArgs.push('-e', `MONGO_INITDB_ROOT_USERNAME=${adminUser.username}`);
+    runArgs.push('-e', `MONGO_INITDB_ROOT_PASSWORD=${adminUser.password}`);
+  }
+
+  runArgs.push(image);
+
+  const dockerConfigFilename = path.basename(
+    getMongodDockerConfigFilePath(mongoRunConfig, instanceNumber)
+  );
+  const mongodArgs: string[] = [
+    'mongod',
+    '--config',
+    `/etc/mongodb/${dockerConfigFilename}`,
+  ];
+
+  runArgs.push(...mongodArgs);
 
   logger.log('Instance run name:', instanceRunName);
-  logger.log('Instance run dir:', instanceRunDir);
-  logger.log('Instance pid filepath:', instancePidFilepath);
-  logger.log('Instance logs dir:', instanceLogsDir);
-  logger.log('Instance start sh filepath:', startShFilepath);
+  logger.log('Container name:', containerName);
+  logger.log('Starting mongod via Docker...');
 
-  logger.log('Ensuring mongod instance files...');
-  await ensureMongodInstanceFiles({instanceNumber, mongoRunConfig});
-
-  logger.log('Starting mongod instance...\n');
-  await startProcess({
-    name: instanceRunName,
-    startCmdFilepath: startShFilepath,
-    pidsFilepath: instancePidFilepath,
-    // cwd: instanceRunDir,
-    logsFolderpath: instanceLogsDir,
-    runName: instanceRunName,
-  });
+  try {
+    execFileSync('docker', runArgs, {
+      stdio: 'inherit',
+      encoding: 'utf8',
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to start Docker container ${containerName}: ${msg}`
+    );
+  }
 
   if (waitUntilListening) {
     logger.log(`Waiting for ${instanceRunName} to begin listening...`);
@@ -137,16 +202,25 @@ export async function startMongodInstancesMain(params: {
   logger: IForeLogger;
   waitUntilListening?: boolean;
   waitUntilReplicaSetReady?: boolean;
+  shouldInitDbRootUser?: boolean;
 }) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
     waitUntilListening,
     waitUntilReplicaSetReady,
+    shouldInitDbRootUser,
   } = params;
 
+  ensureDockerAvailable();
+
   for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
-    await startMongodInstance({instanceNumber: i, mongoRunConfig, logger});
+    await startMongodInstance({
+      instanceNumber: i,
+      mongoRunConfig,
+      logger,
+      shouldInitDbRootUser,
+    });
   }
 
   if (waitUntilListening) {

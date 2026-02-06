@@ -14,19 +14,19 @@ export async function setupUser(
     user: MongoUser;
     mongoRunConfig: MongoRunConfig;
     logger: IForeLogger;
-    skipExistsCheck?: boolean;
+    skipExistenceCheck?: boolean;
   } & GetMongoClientParams
 ) {
   const {
     user,
     logger = new ConsoleForeLogger({silent: true}),
-    skipExistsCheck = false,
+    skipExistenceCheck = false,
   } = params;
 
   const client = await getMongoClient(params);
 
   try {
-    if (!skipExistsCheck) {
+    if (!skipExistenceCheck) {
       const userExists = await checkUserExists({
         ...params,
         username: user.username,
@@ -50,18 +50,11 @@ export async function setupUser(
       `User ${user.username} setup: ${result.ok ? 'success' : 'failed'}`
     );
   } finally {
-    if (client && !params.client) {
-      await closeMongoClient(client);
-    }
+    await closeMongoClient(client, params);
   }
 }
 
-export async function setupUsers(
-  params: {
-    mongoRunConfig: MongoRunConfig;
-    logger: IForeLogger;
-  } & GetMongoClientParams
-) {
+export async function setupUsers(params: GetMongoClientParams) {
   const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
     params;
 
@@ -70,15 +63,15 @@ export async function setupUsers(
     isRequired: mongoRunConfig.authorization !== 'disabled',
   });
 
-  if (adminUser) {
+  if (adminUser && adminUser.username !== params.authUser?.username) {
     logger.log(`Setting up admin user ${adminUser.username}`);
     await setupUser({
       user: adminUser,
       ...params,
-      // Skip exists check if there is no auth user, meaning we are probably
+      // Skip existence check if there is no auth user, meaning we are probably
       // setting up the first user using localhost auth bypass, which only
       // permits create user & setup replica set commands.
-      skipExistsCheck:
+      skipExistenceCheck:
         !params.authUser && mongoRunConfig.authorization !== 'disabled',
     });
   }

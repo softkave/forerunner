@@ -1,13 +1,9 @@
 import {IForeLogger} from '../utils/exports.js';
+import {compileHostnames, MongoRunConfig} from './index.js';
 import {
-  MongoRunConfig,
-  getMongodConfigForInstance,
-  separateBindIps,
-} from './index.js';
-import {
+  getReplicaSetStatus,
   ReplicaSetStatusMember,
   ReplicaSetStatusResponse,
-  getReplicaSetStatus,
 } from './replicaSetStatus.js';
 
 export async function findReplMemberByInstanceNumber(params: {
@@ -17,13 +13,12 @@ export async function findReplMemberByInstanceNumber(params: {
 }): Promise<ReplicaSetStatusMember | undefined> {
   const {instanceNumber, mongoRunConfig, status} = params;
 
-  const mongodConfig = await getMongodConfigForInstance({
-    instanceNumber,
-    mongoRunConfig,
+  const hostnames = compileHostnames({
+    hostnames: mongoRunConfig.instancesHostnames[instanceNumber - 1],
+    bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
   });
-  const bindIps = separateBindIps(mongodConfig.net.bindIp);
   return status.members.find(member =>
-    bindIps.some(bindIp => member.name.includes(bindIp))
+    hostnames.some(hostname => member.name.includes(hostname))
   );
 }
 

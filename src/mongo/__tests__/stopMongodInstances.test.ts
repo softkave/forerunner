@@ -2,18 +2,15 @@ import {range} from 'lodash-es';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
 import {checkMongoInstanceListening} from '../checkMongoReadyState.js';
-import {downloadMongo} from '../downloadMongo.js';
 import {
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
-  generateMongodConfigsMain,
   generateMongoPassword,
-  setupUsers,
   startMongodInstancesMain,
   stopMongodInstancesMain,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
-import {cleanupMongoTest, endMongoInstancesForTest} from '../testHelpers.js';
+import {cleanupMongoTest} from '../testHelpers.js';
 
 const logger = new ConsoleForeLogger();
 
@@ -36,54 +33,36 @@ const mongoRunConfig: MongoRunConfig = {
       roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
       password: generateMongoPassword(),
     },
-    {
-      username: 'test-user-cluster-admin',
-      roles: [{role: 'clusterAdmin', db: 'admin'}],
-      password: generateMongoPassword(),
-    },
   ],
   workingDir: 'testdir/mongo/test-softkave-forerunner-mongo',
   bindLocalhost: true,
   mongoVersion: '8.2.3',
+  authorization: 'enabled',
 };
 
 beforeAll(
   async () => {
-    await endMongoInstancesForTest({mongoRunConfig});
-
-    await downloadMongo({mongoRunConfig, logger});
+    await cleanupMongoTest({mongoRunConfig});
     await generateMongoCertConfigsMain({mongoRunConfig});
     await generateMongoCertsMain({logger, mongoRunConfig});
-    await generateMongodConfigsMain({mongoRunConfig});
     await startMongodInstancesMain({
       mongoRunConfig,
       logger,
       waitUntilListening: true,
-    });
-    await setupUsers({
-      connectionType: 'instance',
-      preferLocalhost: false,
-      mongoRunConfig,
-      logger,
     });
   },
   5 * 60 * 1000 // 5 minutes
 );
 
 afterAll(async () => {
-  await cleanupMongoTest({
-    mongoRunConfig,
-  });
+  await cleanupMongoTest({mongoRunConfig});
 });
 
 describe('stopMongodInstances', () => {
   test(
     'should stop mongod instances',
     async () => {
-      await stopMongodInstancesMain({
-        mongoRunConfig,
-        logger,
-      });
+      await stopMongodInstancesMain({mongoRunConfig, logger});
 
       // Confirm that the instances are not listening
       for (const instanceNumber of range(
@@ -95,6 +74,7 @@ describe('stopMongodInstances', () => {
           instanceNumber: instanceNumber + 1,
           logger,
           retries: 1,
+          connectTimeoutMs: 2_000,
         });
         expect(result).toBe(false);
       }

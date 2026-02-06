@@ -1,15 +1,14 @@
 import {afterAll, beforeAll, describe, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
-import {downloadMongo} from '../downloadMongo.js';
 import {
+  assertMongoInstancesListening,
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
-  generateMongodConfigsMain,
   generateMongoPassword,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {startMongodInstancesMain} from '../startMongodInstances.js';
-import {endMongoInstancesForTest} from '../testHelpers.js';
+import {cleanupMongoTest} from '../testHelpers.js';
 
 const logger = new ConsoleForeLogger();
 
@@ -42,25 +41,20 @@ const mongoRunConfig: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
-  authorization: 'disabled',
+  authorization: 'enabled',
 };
 
 beforeAll(
   async () => {
-    await endMongoInstancesForTest({mongoRunConfig});
-
-    await downloadMongo({mongoRunConfig, logger});
+    await cleanupMongoTest({mongoRunConfig});
     await generateMongoCertConfigsMain({mongoRunConfig});
     await generateMongoCertsMain({logger, mongoRunConfig});
-    await generateMongodConfigsMain({mongoRunConfig});
   },
   5 * 60 * 1000 // 5 minutes
 );
 
 afterAll(async () => {
-  // await cleanupMongoTest({
-  //   mongoRunConfig,
-  // });
+  // await cleanupMongoTest({mongoRunConfig});
 });
 
 describe('startMongodInstances', () => {
@@ -71,6 +65,11 @@ describe('startMongodInstances', () => {
         mongoRunConfig,
         logger: new ConsoleForeLogger(),
         waitUntilListening: true,
+      });
+      await assertMongoInstancesListening({
+        mongoRunConfig,
+        logger,
+        preferLocalhost: false,
       });
     },
     5 * 60 * 1000 // 5 minutes

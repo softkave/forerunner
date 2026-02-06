@@ -3,10 +3,11 @@ import {remove} from 'fs-extra';
 import {first} from 'lodash-es';
 import path from 'path';
 import {expect} from 'vitest';
-import {endPIDs} from '../pid/endPIDs.js';
 import {IForeLogger} from '../utils/exports.js';
+import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {closeMongoClient, getMongoClient} from './connection.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
+import {stopMongodInstancesMain} from './stopMongodInstances.js';
 import {findAdminUser} from './user/findUtils.js';
 
 export async function checkAdminCanConnect(params: {
@@ -32,7 +33,7 @@ export async function checkAdminCanConnect(params: {
       client.db('admin').command({ping: 1})
     ).resolves.toBeDefined();
   } finally {
-    await closeMongoClient(client);
+    await closeMongoClient(client, /** params */ {});
   }
 }
 
@@ -66,7 +67,7 @@ export async function checkTestDbUserCanConnect(params: {
       client.db(testDb).command({ping: 1})
     ).resolves.toBeDefined();
   } finally {
-    await closeMongoClient(client);
+    await closeMongoClient(client, /** params */ {});
   }
 }
 
@@ -89,7 +90,7 @@ export async function checkMongoVersion(params: {
     const version = result.version;
     expect(version).toBe(expectedVersion);
   } finally {
-    await closeMongoClient(client);
+    await closeMongoClient(client, /** params */ {});
   }
 }
 
@@ -133,7 +134,7 @@ export async function checkUserHasRole(params: {
       )
     ).toBe(true);
   } finally {
-    await closeMongoClient(client);
+    await closeMongoClient(client, /** params */ {});
   }
 }
 
@@ -141,11 +142,8 @@ export async function endMongoInstancesForTest(params: {
   mongoRunConfig: MongoRunConfig;
 }) {
   const {mongoRunConfig} = params;
-
-  await endPIDs({
-    ports: mongoRunConfig.instancePorts,
-    stopProcessGroup: true,
-  });
+  const logger = new ConsoleForeLogger({silent: true});
+  await stopMongodInstancesMain({mongoRunConfig, logger});
 }
 
 export async function cleanupMongoTest(params: {
@@ -164,21 +162,12 @@ export async function cleanupMongoTest(params: {
   if (cleanDirs) {
     const configsDir = path.join(mongoRunConfig.workingDir, 'mongo-configs');
     const dataDir = path.join(mongoRunConfig.workingDir, 'mongo-data');
-    const runDir = path.join(mongoRunConfig.workingDir, 'mongo-run');
-    const certsConfigsDir = path.join(
-      mongoRunConfig.workingDir,
-      'mongo-certs-configs'
-    );
-    const certsOutDir = path.join(mongoRunConfig.workingDir, 'mongo-certs-out');
     const systemLogsDir = path.join(
       mongoRunConfig.workingDir,
       'mongo-system-logs'
     );
     await remove(configsDir);
     await remove(dataDir);
-    await remove(runDir);
-    await remove(certsConfigsDir);
-    await remove(certsOutDir);
     await remove(systemLogsDir);
   }
 }

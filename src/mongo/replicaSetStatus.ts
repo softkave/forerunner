@@ -1,16 +1,17 @@
 import assert from 'assert';
+import {OmitFrom} from 'softkave-js-utils';
 import {ValueOf} from 'type-fest';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {closeMongoClient} from './connection.js';
-import {MongoRunConfig} from './mongoRunConfig.js';
+import {
+  closeMongoClient,
+  getMongoClientForInstance,
+  GetMongoClientForInstanceParams,
+  getMongoClientForReplicaSet,
+  GetMongoClientForReplicaSetParams,
+} from './connection.js';
 import {findReplMemberByInstanceNumber} from './replSetUtils.js';
 import {findClusterAdminUser} from './user/findUtils.js';
-import {MongoUser} from './user/types.js';
-import {
-  getMongoClientForInstance,
-  getMongoClientForReplicaSet,
-} from './utils.js';
 
 /**
  * Returns the status of the replica set. If the replica set is not initialized,
@@ -84,10 +85,7 @@ export type MemberHealth = ValueOf<typeof kMemberHealthStr>;
  */
 export type PingOption = 'repl' | 'all' | number | (string & {});
 
-export interface ReplicaSetStatusParams {
-  mongoRunConfig: MongoRunConfig;
-  logger?: IForeLogger;
-  preferLocalhost?: boolean;
+export interface GetReplicaSetStatusParams extends GetMongoClientForReplicaSetParams {
   printStatus?: boolean;
   ping?: PingOption;
 }
@@ -136,94 +134,45 @@ function rawStatusToReplicaSetStatusResponse(
   };
 }
 
-async function getReplStatusFromReplicaSet(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  preferLocalhost?: boolean;
-  adminUser?: MongoUser;
-}): Promise<ReplicaSetStatusResponse> {
-  const {
-    mongoRunConfig,
-    logger = new ConsoleForeLogger({silent: true}),
-    preferLocalhost,
-    adminUser,
-  } = params;
-
-  const client = await getMongoClientForReplicaSet({
-    mongoRunConfig,
-    logger,
-    preferLocalhost,
-    username: adminUser?.username,
-    password: adminUser?.password,
-  });
+async function getReplStatusFromReplicaSet(
+  params: GetMongoClientForReplicaSetParams
+): Promise<ReplicaSetStatusResponse> {
+  const client = await getMongoClientForReplicaSet(params);
 
   try {
     const adminDb = client.db('admin');
     const status = await adminDb.command({replSetGetStatus: 1});
-
     return rawStatusToReplicaSetStatusResponse(status);
   } finally {
-    await closeMongoClient(client);
+    await closeMongoClient(client, params);
   }
 }
 
-async function getReplStatusFromInstance(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  preferLocalhost?: boolean;
-  adminUser?: MongoUser;
-  /** Instance number (1-based) */
-  instanceNumber: number;
-}): Promise<ReplicaSetStatusResponse> {
-  const {
-    mongoRunConfig,
-    logger = new ConsoleForeLogger({silent: true}),
-    preferLocalhost,
-    adminUser,
-    instanceNumber,
-  } = params;
-
-  const client = await getMongoClientForInstance({
-    mongoRunConfig,
-    logger,
-    preferLocalhost,
-    username: adminUser?.username,
-    password: adminUser?.password,
-    instanceNumber,
-  });
+async function getReplStatusFromInstance(
+  params: GetMongoClientForInstanceParams
+): Promise<ReplicaSetStatusResponse> {
+  const client = await getMongoClientForInstance(params);
 
   try {
     const adminDb = client.db('admin');
     const status = await adminDb.command({replSetGetStatus: 1});
-
     return rawStatusToReplicaSetStatusResponse(status);
   } finally {
-    await closeMongoClient(client);
+    await closeMongoClient(client, params);
   }
 }
 
-async function getStatusFromAllMembers(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  preferLocalhost?: boolean;
-  adminUser?: MongoUser;
-}): Promise<ReplicaSetStatusResponse> {
-  const {
-    mongoRunConfig,
-    logger = new ConsoleForeLogger({silent: true}),
-    preferLocalhost,
-    adminUser,
-  } = params;
+async function getStatusFromAllMembers(
+  params: OmitFrom<GetMongoClientForInstanceParams, 'instanceNumber'>
+): Promise<ReplicaSetStatusResponse> {
+  const {mongoRunConfig} = params;
 
   // Get status from all members
   const statuses = await Promise.all(
     mongoRunConfig.instancePorts.map(async (_port, i) => {
       const instanceNumber = i + 1;
       const status = await getReplStatusFromInstance({
-        mongoRunConfig,
-        logger,
-        preferLocalhost,
-        adminUser,
+        ...params,
         instanceNumber,
       });
 
@@ -234,10 +183,7 @@ async function getStatusFromAllMembers(params: {
       });
 
       // Return the status and the member
-      return {
-        status,
-        member,
-      };
+      return {status, member};
     })
   );
 
@@ -276,11 +222,10 @@ function printStatusToLogger(
   });
 }
 
-export async function getReplicaSetStatus(params: ReplicaSetStatusParams) {
+export async function getReplicaSetStatus(params: GetReplicaSetStatusParams) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
-    preferLocalhost,
     printStatus = false,
     ping,
   } = params;
@@ -293,24 +238,18 @@ export async function getReplicaSetStatus(params: ReplicaSetStatusParams) {
   let status: ReplicaSetStatusResponse | undefined;
   if (ping === 'all') {
     status = await getStatusFromAllMembers({
-      mongoRunConfig,
-      logger,
-      preferLocalhost,
-      adminUser: clusterAdminUser,
+      ...params,
+      authUser: clusterAdminUser,
     });
   } else if (ping === 'repl') {
     status = await getReplStatusFromReplicaSet({
-      mongoRunConfig,
-      logger,
-      preferLocalhost,
-      adminUser: clusterAdminUser,
+      ...params,
+      authUser: clusterAdminUser,
     });
   } else if (!isNaN(Number(ping))) {
     status = await getReplStatusFromInstance({
-      mongoRunConfig,
-      logger,
-      preferLocalhost,
-      adminUser: clusterAdminUser,
+      ...params,
+      authUser: clusterAdminUser,
       instanceNumber: Number(ping),
     });
   }

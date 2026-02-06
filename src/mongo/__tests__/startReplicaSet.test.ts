@@ -1,6 +1,14 @@
-import {afterAll, beforeAll, describe, test} from 'vitest';
+import {beforeAll, describe, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
-import {generateMongoPassword, initMongo} from '../index.js';
+import {
+  assertMongoReplicaSetReady,
+  generateMongoCertConfigsMain,
+  generateMongoCertsMain,
+  generateMongoPassword,
+  setupReplicaSetMain,
+  setupUsers,
+  startMongodInstancesMain,
+} from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {
   checkAdminCanConnect,
@@ -47,6 +55,7 @@ const mongoRunConfig: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
+  authorization: 'disabled',
 };
 
 const logger = new ConsoleForeLogger();
@@ -54,38 +63,54 @@ const logger = new ConsoleForeLogger();
 beforeAll(
   async () => {
     await cleanupMongoTest({mongoRunConfig});
+    await generateMongoCertConfigsMain({mongoRunConfig});
+    await generateMongoCertsMain({logger, mongoRunConfig});
+    await startMongodInstancesMain({
+      mongoRunConfig,
+      logger,
+      waitUntilListening: true,
+      shouldInitDbRootUser: false,
+    });
+    // await setupUsers({
+    //   mongoRunConfig,
+    //   logger,
+    //   connectionType: 'instance',
+    //   preferLocalhost: true,
+    // });
   },
-  3 * 60 * 1000 // 3 minutes
+  5 * 60 * 1000 // 5 minutes
 );
 
-afterAll(async () => {
-  await cleanupMongoTest({
-    mongoRunConfig,
-    cleanInstances: true,
-    cleanDirs: false,
-  });
-});
+// afterAll(async () => {
+//   await cleanupMongoTest({
+//     mongoRunConfig,
+//     cleanInstances: true,
+//     cleanDirs: false,
+//   });
+// });
 
-describe('initMongo', () => {
+describe('startReplicaSet', () => {
   test(
-    'should init mongo',
+    'should start replica set',
     async () => {
-      await initMongo({
+      await setupReplicaSetMain({
         mongoRunConfig,
         logger,
+        // authUser: {
+        //   username: 'test-user-admin',
+        //   password: mongoRunConfig.users[0].password,
+        // },
       });
-
-      await checkAdminCanConnect({
-        mongoRunConfig,
-        logger,
-      });
-
+      await assertMongoReplicaSetReady({mongoRunConfig, logger});
+      await setupUsers({mongoRunConfig, logger});
+      await checkAdminCanConnect({mongoRunConfig, logger});
       await checkTestDbUserCanConnect({
         mongoRunConfig,
         logger,
         username: 'test-user-db',
       });
+      logger.log('Test db user connected');
     },
-    3 * 60 * 1000 // 3 minutes
+    5 * 60 * 1000 // 5 minutes
   );
 });

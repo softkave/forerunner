@@ -30,8 +30,6 @@ export async function checkUserExists(
     logger.log(`${username} exists: ${userExists}`);
     return userExists;
   } finally {
-    if (client && !params.client) {
-      await closeMongoClient(client);
-    }
+    await closeMongoClient(client, params);
   }
 }

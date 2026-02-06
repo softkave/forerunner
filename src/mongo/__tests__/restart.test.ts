@@ -1,6 +1,15 @@
 import {afterAll, beforeAll, describe, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
-import {generateMongoPassword, initMongo} from '../index.js';
+import {
+  assertMongoReplicaSetReady,
+  findAdminUser,
+  generateMongoCertConfigsMain,
+  generateMongoCertsMain,
+  generateMongoPassword,
+  setupReplicaSetMain,
+  setupUsers,
+  startMongodInstancesMain,
+} from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {restartMongo} from '../restart/restart.js';
 import {
@@ -48,37 +57,46 @@ const mongoRunConfig: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
+  authorization: 'enabled',
 };
 
 const logger = new ConsoleForeLogger();
 
-beforeAll(async () => {
-  await initMongo({
-    mongoRunConfig,
-    logger,
-  });
-});
+beforeAll(
+  async () => {
+    await cleanupMongoTest({mongoRunConfig});
+    await generateMongoCertConfigsMain({mongoRunConfig});
+    await generateMongoCertsMain({logger, mongoRunConfig});
+    await startMongodInstancesMain({
+      mongoRunConfig,
+      logger,
+      waitUntilListening: true,
+    });
+    await setupReplicaSetMain({mongoRunConfig, logger});
+    await assertMongoReplicaSetReady({mongoRunConfig, logger});
+    await setupUsers({
+      mongoRunConfig,
+      logger,
+      authUser: findAdminUser({users: mongoRunConfig.users, isRequired: true}),
+    });
+  },
+  5 * 60 * 1000 // 5 minutes
+);
 
 afterAll(async () => {
   await cleanupMongoTest({
     mongoRunConfig,
+    cleanInstances: true,
+    cleanDirs: false,
   });
 });
 
 describe('restartMongo', () => {
   test(
-    'should restart mongo',
+    'should restart replica set',
     async () => {
-      await restartMongo({
-        mongoRunConfig,
-        logger,
-      });
-
-      await checkAdminCanConnect({
-        mongoRunConfig,
-        logger,
-      });
-
+      await restartMongo({mongoRunConfig, logger});
+      await checkAdminCanConnect({mongoRunConfig, logger});
       await checkTestDbUserCanConnect({
         mongoRunConfig,
         logger,

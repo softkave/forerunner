@@ -30,7 +30,7 @@ The project provides a CLI and JS SDK. The CLI is split into sub-programs using 
 - Update existing documentation where needed when you make code changes.
 - Add documentation to complex code for human comprehension and maintenance.
 - If an assumption is made, add a short documentation justifying why.
-- Folder should generally have an `index.ts` file for files exported outside the folder. Files that export code for use within the folder do not need to be included in the index file.
+- Folders should generally have an `index.ts` file for files exported outside the folder. Files that export code for use within the folder do not need to be included in the index file.
 - Most functions are provided a `logger`, use it generously.
 - Use short comments to break functions into logical blocks as appropriate.
 

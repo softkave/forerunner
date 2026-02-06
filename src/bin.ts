@@ -16,9 +16,7 @@ import {
   downloadMongo,
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
-  generateMongodConfigsMain,
   getReplicaSetStatus,
-  initMongo,
   printMongoUriMain,
   setupReplicaSetMain,
   startMongodInstancesMain,
@@ -200,31 +198,6 @@ mongoProgram
     }
   });
 
-// Generate MongoDB configurations
-mongoProgram
-  .command('generate-configs')
-  .description('Generate MongoDB configurations')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-o, --overwrite', 'Overwrite existing config', false)
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await generateMongodConfigsMain({
-        mongoRunConfig,
-        overwrite: options.overwrite,
-      });
-      logger.log('✅ MongoDB configurations generation completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
 // Start MongoDB instances
 mongoProgram
   .command('start')
@@ -309,34 +282,6 @@ mongoProgram
       });
       await setupUsers({mongoRunConfig, logger});
       logger.log('✅ MongoDB users setup completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
-// Initialize MongoDB
-mongoProgram
-  .command('init')
-  .description('Initialize MongoDB with configuration')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('--overwriteConfig', 'Overwrite existing config', false)
-  .option('--overwriteCerts', 'Overwrite existing certs', false)
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await initMongo({
-        mongoRunConfig,
-        logger,
-        overwriteConfig: options.overwriteConfig,
-        overwriteCerts: options.overwriteCerts,
-      });
-      logger.log('✅ MongoDB initialization completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);

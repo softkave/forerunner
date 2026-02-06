@@ -1,44 +1,12 @@
-/**
- * MongoDB Upgrade and Restart Module
- *
- * Provides functionality to upgrade and restart MongoDB replica sets with minimal downtime.
- *
- * Overview:
- * - Detects changes between cached and current Mongo run configs using object diffing
- * - Handles version upgrades by downloading new versions and performing rolling restarts
- * - Manages user changes (additions, removals, password updates, role changes)
- * - Orchestrates rolling restarts of replica set members to maintain availability
- *
- * How it works:
- * - Config diffing: Uses @opentf/obj-diff to compare cached vs current configs
- * - Rolling restarts: Restarts secondaries first, then steps down and restarts primary
- * - User management: Applies user changes using MongoDB commands (changeUserPassword, grantRolesToUser, etc.)
- * - State verification: Polls replica set status to ensure members reach PRIMARY/SECONDARY states
- *
- * Assumptions:
- * - Replica set is already initialized and running
- * - Cluster admin user exists for administrative commands
- * - Admin user exists for user management operations
- * - All instances are accessible and healthy before starting upgrade/restart
- *
- * Considerations:
- * - Rolling restarts maintain availability by restarting one member at a time
- * - StepDown command causes brief write unavailability during primary transition
- * - User changes are applied atomically per user but not across all users
- * - Version changes require downloading new MongoDB binaries before restart
- *
- * Gotchas:
- * - If stepDown fails, the primary may not step down gracefully
- * - Member state polling may timeout if replica set is unhealthy
- * - User changes require admin privileges and may fail if user doesn't exist
- * - Config caching happens after successful upgrade, so failures don't update cache
- */
-
 import pRetry from 'p-retry';
 import {waitTimeout} from 'softkave-js-utils';
 import {ConsoleForeLogger} from '../../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../../utils/foreLogger/types.js';
-import {closeMongoClient} from '../connection.js';
+import {
+  closeMongoClient,
+  getMongoClientForReplicaSet,
+  GetMongoClientForReplicaSetParams,
+} from '../connection.js';
 import {getInstanceRunName} from '../constants.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {
@@ -52,11 +20,7 @@ import {
 import {startMongodInstance} from '../startMongodInstances.js';
 import {stopMongodInstance} from '../stopMongodInstances.js';
 import {findClusterAdminUser} from '../user/findUtils.js';
-import {
-  getMongoClientForReplicaSet,
-  getMongodConfigForInstance,
-  separateBindIps,
-} from '../utils.js';
+import {compileHostnames} from '../utils.js';
 
 /**
  * Step down primary member using replSetStepDown command.
@@ -64,14 +28,14 @@ import {
  * Retries on failure with configurable retry count.
  * Requires cluster admin user for execution.
  */
-export async function stepDownPrimary(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  force?: boolean;
-  stepDownSeconds?: number;
-  secondaryCatchUpPeriodSecs?: number;
-  retries?: number;
-}): Promise<void> {
+export async function stepDownPrimary(
+  params: {
+    force?: boolean;
+    stepDownSeconds?: number;
+    secondaryCatchUpPeriodSecs?: number;
+    retries?: number;
+  } & GetMongoClientForReplicaSetParams
+): Promise<void> {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
@@ -93,11 +57,8 @@ export async function stepDownPrimary(params: {
   });
 
   const client = await getMongoClientForReplicaSet({
-    mongoRunConfig,
-    logger,
-    preferLocalhost: true,
-    username: clusterAdminUser?.username,
-    password: clusterAdminUser?.password,
+    ...params,
+    authUser: clusterAdminUser,
   });
 
   await pRetry(
@@ -119,7 +80,7 @@ export async function stepDownPrimary(params: {
         logger.log(`StepDown command failed: ${errorMessage}`);
         throw error;
       } finally {
-        await closeMongoClient(client);
+        await closeMongoClient(client, params);
       }
     },
     {
@@ -191,19 +152,16 @@ async function getInstanceNumberFromMember(
   mongoRunConfig: MongoRunConfig
 ): Promise<number | undefined> {
   for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
-    const mongodConfig = await getMongodConfigForInstance({
-      instanceNumber: i,
-      mongoRunConfig,
+    const hostnames = compileHostnames({
+      hostnames: mongoRunConfig.instancesHostnames[i - 1],
+      bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
     });
-    const bindIps = separateBindIps(mongodConfig.net.bindIp);
-    if (bindIps.some(bindIp => member.name.includes(bindIp))) {
+    if (hostnames.some(hostname => member.name.includes(hostname))) {
       return i;
     }
   }
-
   return undefined;
 }
-
 async function getNextNonPrimaryMember(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;

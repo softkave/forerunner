@@ -1,6 +1,16 @@
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
-import {generateMongoPassword, initMongo, upgradeMongo} from '../index.js';
+import {
+  assertMongoReplicaSetReady,
+  findAdminUser,
+  generateMongoCertConfigsMain,
+  generateMongoCertsMain,
+  generateMongoPassword,
+  setupReplicaSetMain,
+  setupUsers,
+  startMongodInstancesMain,
+  upgradeMongo,
+} from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {
   checkMongoVersion,
@@ -53,20 +63,43 @@ const mongoRunConfig01: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.2',
   replicaSetName: 'test-softkave-forerunner-mongo',
+  authorization: 'enabled',
 };
 
 const logger = new ConsoleForeLogger();
 
-beforeAll(async () => {
-  await initMongo({
-    mongoRunConfig: mongoRunConfig01,
-    logger,
-  });
-});
+beforeAll(
+  async () => {
+    await cleanupMongoTest({mongoRunConfig: mongoRunConfig01});
+    await generateMongoCertConfigsMain({mongoRunConfig: mongoRunConfig01});
+    await generateMongoCertsMain({logger, mongoRunConfig: mongoRunConfig01});
+    await startMongodInstancesMain({
+      mongoRunConfig: mongoRunConfig01,
+      logger,
+      waitUntilListening: true,
+    });
+    await setupReplicaSetMain({mongoRunConfig: mongoRunConfig01, logger});
+    await assertMongoReplicaSetReady({
+      mongoRunConfig: mongoRunConfig01,
+      logger,
+    });
+    await setupUsers({
+      mongoRunConfig: mongoRunConfig01,
+      logger,
+      authUser: findAdminUser({
+        users: mongoRunConfig01.users,
+        isRequired: true,
+      }),
+    });
+  },
+  5 * 60 * 1000 // 5 minutes
+);
 
 afterAll(async () => {
   await cleanupMongoTest({
     mongoRunConfig: mongoRunConfig01,
+    cleanInstances: true,
+    cleanDirs: false,
   });
 });
 

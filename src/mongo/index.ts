@@ -5,7 +5,6 @@ export * from './downloadMongo.js';
 export * from './generateMongoCertConfigs.js';
 export * from './generateMongoCerts.js';
 export * from './generateMongodConfigs.js';
-export * from './initMongo.js';
 export * from './mongoRunConfig.js';
 export * from './printMongoUri.js';
 export * from './replicaSetStatus.js';
