@@ -1,5 +1,10 @@
 import fs from 'fs-extra';
 import {readFile, writeFile} from 'fs/promises';
+import path from 'path';
+import {fileURLToPath} from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const versionTxtPath = path.join(__dirname, '..', 'version.txt');
 
 async function getVersionFromPackageJson(
   defaultVersion: string
@@ -14,12 +19,12 @@ async function getVersionFromPackageJson(
 
 async function writeVersionFile(): Promise<void> {
   const version = await getVersionFromPackageJson('unknown');
-  await writeFile('version.txt', version);
+  await writeFile(versionTxtPath, version);
 }
 
 export async function getVersion(defaultVersion: string): Promise<string> {
   try {
-    const version = await readFile('version.txt');
+    const version = await readFile(versionTxtPath);
     return version.toString() || defaultVersion;
   } catch (error) {
     const version = await getVersionFromPackageJson(defaultVersion);
