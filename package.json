@@ -1,6 +1,6 @@
 {
   "name": "softkave-forerunner",
-  "version": "0.13.10",
+  "version": "0.13.0",
   "description": "softkave internal application runner & helpers",
   "author": {
     "email": "ywordk@gmail.com",
@@ -60,6 +60,8 @@
     "vitest": "^4.0.2"
   },
   "dependencies": {
+    "@inquirer/select": "^5.0.4",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "find-process": "^2.0.0",
     "fs-extra": "^11.2.0",

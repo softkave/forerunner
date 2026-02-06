@@ -40,6 +40,9 @@ import {
 // Import process management functionality
 import {findChildrenPIDs} from './pid/findChildrenPIDs.js';
 
+// Import run-env functionality
+import {runWithEnvMain} from './runEnv/index.js';
+
 const program = new Command();
 
 program
@@ -663,6 +666,47 @@ pmProgram
   });
 
 // ============================================================================
+// RUN-ENV SUB-PROGRAM
+// ============================================================================
+program
+  .command('run-env')
+  .allowExcessArguments()
+  .description(
+    'Run a command with a selected .env* file (pass command after --)'
+  )
+  .option(
+    '-w, --cwd <path>',
+    'Working directory to scan for .env* and run the command'
+  )
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    const dashIndex = process.argv.indexOf('--');
+    const command =
+      dashIndex >= 0 ? process.argv.slice(dashIndex + 1).join(' ') : '';
+    if (!command.trim()) {
+      logger.error(
+        'Usage: forerunner run-env [options] -- <command> [args...]\nExample: forerunner run-env -- npm run dev'
+      );
+      logger.onSilentFail(new Error('Missing command after --'));
+      process.exit(1);
+    }
+    const cwd = options.cwd ? String(options.cwd) : process.cwd();
+    try {
+      await runWithEnvMain({
+        cwd,
+        command: command.trim(),
+        silent: options.silent,
+        logger,
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
 // HELP AND DEFAULT ACTIONS
 // ============================================================================
 
@@ -707,6 +751,9 @@ COMMANDS:
   pm                       Process management utilities
     children-pids          Find all child PIDs of a given parent PID
 
+  run-env                  Run a command with a selected .env* file
+                           Usage: run-env [options] -- <command> [args...]
+
   help                     Show this help message
 
 EXAMPLES:
@@ -733,6 +780,9 @@ EXAMPLES:
 
   # Find child processes of a PID
   forerunner pm children-pids 1234
+
+  # Run a command with a selected .env file
+  forerunner run-env -- npm run dev
 
 For more information about a specific command, use:
   forerunner <command> --help
