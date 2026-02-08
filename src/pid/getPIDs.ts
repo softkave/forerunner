@@ -13,6 +13,11 @@ export async function getPIDsFromFile(
       cwd && !path.isAbsolute(opts.pidsFilepath)
         ? path.join(cwd, opts.pidsFilepath)
         : opts.pidsFilepath;
+
+    if (!(await fse.pathExists(pidsFilepath))) {
+      return {pids: [], pidsByName: {}};
+    }
+
     const untypedJson = await fse.readJson(pidsFilepath, 'utf-8');
     const pids = untypedJson as ProcessIdFileParsed;
     const pidsByName = keyBy(pids, pid => pid.name);
