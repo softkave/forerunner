@@ -29,9 +29,7 @@ export async function checkAdminCanConnect(params: {
 
   try {
     // Check if the client is connected to the admin DB
-    await expect(() =>
-      client.db('admin').command({ping: 1})
-    ).resolves.toBeDefined();
+    await expect(client.db('admin').command({ping: 1})).resolves.toBeDefined();
   } finally {
     await closeMongoClient(client, /** params */ {});
   }
@@ -63,9 +61,7 @@ export async function checkTestDbUserCanConnect(params: {
 
   try {
     // Check if the client is connected to the test DB
-    await expect(() =>
-      client.db(testDb).command({ping: 1})
-    ).resolves.toBeDefined();
+    await expect(client.db(testDb).command({ping: 1})).resolves.toBeDefined();
   } finally {
     await closeMongoClient(client, /** params */ {});
   }

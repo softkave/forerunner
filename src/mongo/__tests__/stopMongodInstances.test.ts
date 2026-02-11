@@ -73,7 +73,7 @@ describe('stopMongodInstances', () => {
           mongoRunConfig,
           instanceNumber: instanceNumber + 1,
           logger,
-          retries: 1,
+          retries: 0,
           connectTimeoutMs: 2_000,
         });
         expect(result).toBe(false);

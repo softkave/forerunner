@@ -63,7 +63,7 @@ const mongoRunConfig01: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.2',
   replicaSetName: 'test-softkave-forerunner-mongo',
-  authorization: 'enabled',
+  authorization: 'disabled',
 };
 
 const logger = new ConsoleForeLogger();

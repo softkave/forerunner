@@ -51,10 +51,13 @@ export async function stepDownPrimary(
     );
   }
 
-  const clusterAdminUser = findClusterAdminUser({
-    users: mongoRunConfig.users,
-    isRequired: mongoRunConfig.authorization !== 'disabled',
-  });
+  const clusterAdminUser =
+    mongoRunConfig.authorization !== 'disabled'
+      ? findClusterAdminUser({
+          users: mongoRunConfig.users,
+          isRequired: true,
+        })
+      : undefined;
 
   const client = await getMongoClientForReplicaSet({
     ...params,

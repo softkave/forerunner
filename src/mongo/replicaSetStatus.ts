@@ -230,10 +230,13 @@ export async function getReplicaSetStatus(params: GetReplicaSetStatusParams) {
     ping,
   } = params;
 
-  const clusterAdminUser = await findClusterAdminUser({
-    users: mongoRunConfig.users,
-    isRequired: mongoRunConfig.authorization !== 'disabled',
-  });
+  const clusterAdminUser =
+    mongoRunConfig.authorization !== 'disabled'
+      ? await findClusterAdminUser({
+          users: mongoRunConfig.users,
+          isRequired: true,
+        })
+      : undefined;
 
   let status: ReplicaSetStatusResponse | undefined;
   if (ping === 'all') {

@@ -1,4 +1,4 @@
-import {beforeAll, describe, test} from 'vitest';
+import {afterAll, beforeAll, describe, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
 import {
   assertMongoReplicaSetReady,
@@ -81,13 +81,13 @@ beforeAll(
   5 * 60 * 1000 // 5 minutes
 );
 
-// afterAll(async () => {
-//   await cleanupMongoTest({
-//     mongoRunConfig,
-//     cleanInstances: true,
-//     cleanDirs: false,
-//   });
-// });
+afterAll(async () => {
+  await cleanupMongoTest({
+    mongoRunConfig,
+    cleanInstances: true,
+    cleanDirs: false,
+  });
+});
 
 describe('startReplicaSet', () => {
   test(

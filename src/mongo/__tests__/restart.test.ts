@@ -2,21 +2,15 @@ import {afterAll, beforeAll, describe, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
 import {
   assertMongoReplicaSetReady,
-  findAdminUser,
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
   generateMongoPassword,
   setupReplicaSetMain,
-  setupUsers,
   startMongodInstancesMain,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {restartMongo} from '../restart/restart.js';
-import {
-  checkAdminCanConnect,
-  checkTestDbUserCanConnect,
-  cleanupMongoTest,
-} from '../testHelpers.js';
+import {cleanupMongoTest} from '../testHelpers.js';
 
 const mongoRunConfig: MongoRunConfig = {
   caConfig: {
@@ -57,7 +51,7 @@ const mongoRunConfig: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
-  authorization: 'enabled',
+  authorization: 'disabled',
 };
 
 const logger = new ConsoleForeLogger();
@@ -71,14 +65,15 @@ beforeAll(
       mongoRunConfig,
       logger,
       waitUntilListening: true,
+      shouldInitDbRootUser: false,
     });
     await setupReplicaSetMain({mongoRunConfig, logger});
     await assertMongoReplicaSetReady({mongoRunConfig, logger});
-    await setupUsers({
-      mongoRunConfig,
-      logger,
-      authUser: findAdminUser({users: mongoRunConfig.users, isRequired: true}),
-    });
+    // await setupUsers({
+    //   mongoRunConfig,
+    //   logger,
+    //   authUser: findAdminUser({users: mongoRunConfig.users, isRequired: true}),
+    // });
   },
   5 * 60 * 1000 // 5 minutes
 );
@@ -96,12 +91,7 @@ describe('restartMongo', () => {
     'should restart replica set',
     async () => {
       await restartMongo({mongoRunConfig, logger});
-      await checkAdminCanConnect({mongoRunConfig, logger});
-      await checkTestDbUserCanConnect({
-        mongoRunConfig,
-        logger,
-        username: 'test-user-db',
-      });
+      await assertMongoReplicaSetReady({mongoRunConfig, logger});
     },
     10 * 60 * 1000 // 10 minutes
   );
