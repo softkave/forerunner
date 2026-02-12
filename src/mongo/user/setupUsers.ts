@@ -117,7 +117,7 @@ export async function setupUsers(params: GetMongoClientParams) {
 
   const adminUser = findAdminUser({
     users: mongoRunConfig.users,
-    isRequired: mongoRunConfig.authorization !== 'disabled',
+    isRequired: false,
   });
 
   // When authorization is enabled and no authUser is passed, create the first
@@ -136,6 +136,12 @@ export async function setupUsers(params: GetMongoClientParams) {
   }
 
   const effectiveAuthUser = params.authUser ?? adminUser ?? undefined;
+
+  if (mongoRunConfig.authorization !== 'disabled' && !effectiveAuthUser) {
+    throw new Error(
+      'authUser or an admin user in config is required when authorization is enabled'
+    );
+  }
 
   const client = await getMongoClient({
     ...params,

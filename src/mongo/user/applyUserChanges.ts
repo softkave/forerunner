@@ -20,7 +20,7 @@ export interface UserChanges {
 }
 
 /**
- * Update MongoDB user password using changeUserPassword command.
+ * Update MongoDB user password using updateUser command.
  * Requires admin user with userAdmin privileges on the user's authDb.
  */
 export async function updateMongoUserPassword(
@@ -35,7 +35,7 @@ export async function updateMongoUserPassword(
   try {
     const db = client.db(user.authDb || 'admin');
     const result = await db.command({
-      changeUserPassword: user.username,
+      updateUser: user.username,
       pwd: user.password,
     });
 
