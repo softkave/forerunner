@@ -13,7 +13,5 @@ export * from './restart/index.js';
 export * from './setupReplicaSet.js';
 export * from './startMongodInstances.js';
 export * from './stopMongodInstances.js';
-export * from './upgrade/index.js';
-export * from './upgrade/upgrade.js';
 export * from './user/index.js';
 export * from './utils.js';
