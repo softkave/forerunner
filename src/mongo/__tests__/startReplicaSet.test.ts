@@ -1,14 +1,6 @@
 import {afterAll, beforeAll, describe, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
-import {
-  assertMongoReplicaSetReady,
-  generateMongoCertConfigsMain,
-  generateMongoCertsMain,
-  generateMongoPassword,
-  setupReplicaSetMain,
-  setupUsers,
-  startMongodInstancesMain,
-} from '../index.js';
+import {generateMongoPassword, setupReplicaSetMain} from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {
   checkAdminCanConnect,
@@ -55,7 +47,7 @@ const mongoRunConfig: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
-  authorization: 'disabled',
+  authorization: 'enabled',
 };
 
 const logger = new ConsoleForeLogger();
@@ -63,22 +55,8 @@ const logger = new ConsoleForeLogger();
 beforeAll(
   async () => {
     await cleanupMongoTest({mongoRunConfig});
-    await generateMongoCertConfigsMain({mongoRunConfig});
-    await generateMongoCertsMain({logger, mongoRunConfig});
-    await startMongodInstancesMain({
-      mongoRunConfig,
-      logger,
-      waitUntilListening: true,
-      shouldInitDbRootUser: false,
-    });
-    // await setupUsers({
-    //   mongoRunConfig,
-    //   logger,
-    //   connectionType: 'instance',
-    //   preferLocalhost: true,
-    // });
   },
-  5 * 60 * 1000 // 5 minutes
+  1 * 60 * 1000 // 1 minute
 );
 
 afterAll(async () => {
@@ -96,20 +74,14 @@ describe('startReplicaSet', () => {
       await setupReplicaSetMain({
         mongoRunConfig,
         logger,
-        // authUser: {
-        //   username: 'test-user-admin',
-        //   password: mongoRunConfig.users[0].password,
-        // },
+        shouldSetupUsers: true,
       });
-      await assertMongoReplicaSetReady({mongoRunConfig, logger});
-      await setupUsers({mongoRunConfig, logger});
       await checkAdminCanConnect({mongoRunConfig, logger});
       await checkTestDbUserCanConnect({
         mongoRunConfig,
         logger,
         username: 'test-user-db',
       });
-      logger.log('Test db user connected');
     },
     5 * 60 * 1000 // 5 minutes
   );

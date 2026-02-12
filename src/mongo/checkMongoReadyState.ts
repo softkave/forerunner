@@ -157,7 +157,7 @@ export async function waitForMemberState(
   const {
     instanceNumber,
     mongoRunConfig,
-    logger,
+    logger = new ConsoleForeLogger({silent: true}),
     timeoutMs = 120000, // 2 minutes default
     pollIntervalMs = 10_000, // 10 seconds default
   } = params;

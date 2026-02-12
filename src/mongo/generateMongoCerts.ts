@@ -1,5 +1,6 @@
 import {generateCA} from '../certs/caGenerator.js';
 import {generateCert} from '../certs/certGenerator.js';
+import {ConsoleForeLogger} from '../utils/exports.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {
   generateMongoCertConfigsMain,
@@ -13,9 +14,14 @@ export async function generateMongoCertsMain(params: {
   overwriteCA?: boolean;
   overwriteCerts?: boolean;
   mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
+  logger?: IForeLogger;
 }) {
-  const {overwriteConfig, overwriteCA, mongoRunConfig, logger} = params;
+  const {
+    overwriteConfig,
+    overwriteCA,
+    mongoRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+  } = params;
 
   await generateMongoCertConfigsMain({
     mongoRunConfig,

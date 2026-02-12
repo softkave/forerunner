@@ -199,7 +199,7 @@ export async function startMongodInstance(params: {
 
 export async function startMongodInstancesMain(params: {
   mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
+  logger?: IForeLogger;
   waitUntilListening?: boolean;
   waitUntilReplicaSetReady?: boolean;
   shouldInitDbRootUser?: boolean;

@@ -2,8 +2,15 @@ import assert from 'assert';
 import {execFileSync} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {assertMongoReplicaSetReady} from './checkMongoReadyState.js';
+import {generateMongoCertConfigsMain} from './generateMongoCertConfigs.js';
+import {generateMongoCertsMain} from './generateMongoCerts.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {getDockerContainerName} from './startMongodInstances.js';
+import {
+  getDockerContainerName,
+  startMongodInstancesMain,
+} from './startMongodInstances.js';
+import {setupUsers} from './user/setupUsers.js';
 import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
 
 const kMongoshFirstInstance = 1;
@@ -103,7 +110,7 @@ function runMongoshInContainerOrThrow(params: {
   }
 }
 
-export async function setupReplicaSetMain(params: {
+async function setupReplicaSet(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   authUser?: {username: string; password: string};
@@ -154,5 +161,26 @@ export async function setupReplicaSetMain(params: {
       logger,
     });
     logger.log('Replica set initialization completed');
+  }
+}
+
+export async function setupReplicaSetMain(params: {
+  mongoRunConfig: MongoRunConfig;
+  logger?: IForeLogger;
+  shouldSetupUsers?: boolean;
+}) {
+  const {shouldSetupUsers = true} = params;
+  await generateMongoCertConfigsMain(params);
+  await generateMongoCertsMain(params);
+  await startMongodInstancesMain({
+    ...params,
+    waitUntilListening: true,
+    shouldInitDbRootUser: false,
+  });
+  await setupReplicaSet(params);
+  await assertMongoReplicaSetReady(params);
+
+  if (shouldSetupUsers) {
+    await setupUsers(params);
   }
 }

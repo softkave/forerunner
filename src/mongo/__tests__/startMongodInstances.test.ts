@@ -50,11 +50,15 @@ beforeAll(
     await generateMongoCertConfigsMain({mongoRunConfig});
     await generateMongoCertsMain({logger, mongoRunConfig});
   },
-  5 * 60 * 1000 // 5 minutes
+  1 * 60 * 1000 // 1 minute
 );
 
 afterAll(async () => {
-  // await cleanupMongoTest({mongoRunConfig});
+  await cleanupMongoTest({
+    mongoRunConfig,
+    cleanInstances: true,
+    cleanDirs: false,
+  });
 });
 
 describe('startMongodInstances', () => {

@@ -9,7 +9,7 @@ import {MongoUser} from './user/types.js';
 
 export interface GetMongoClientForInstanceParams {
   mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
+  logger?: IForeLogger;
   authUser?: Pick<MongoUser, 'username' | 'password'>;
   client?: MongoClient;
   preferLocalhost?: boolean;
@@ -20,7 +20,7 @@ export interface GetMongoClientForInstanceParams {
 
 export interface GetMongoClientForReplicaSetParams {
   mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
+  logger?: IForeLogger;
   authUser?: Pick<MongoUser, 'username' | 'password'>;
   client?: MongoClient;
   preferLocalhost?: boolean;
