@@ -21,12 +21,14 @@ export async function printMongoUriMain(options: PrintMongoUriOptions) {
     connectionType = 'replicaSet',
     instanceNumber = 1,
     username,
-    password,
     preferLocalhost = false,
     serverSelectionTimeoutMs = 5000,
   } = options;
 
   let uri: string;
+  const password =
+    options.password ??
+    mongoRunConfig.users?.find(user => user.username === username)?.password;
 
   if (connectionType === 'instance') {
     uri = await getMongoUriForInstance({
