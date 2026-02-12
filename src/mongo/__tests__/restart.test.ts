@@ -2,11 +2,8 @@ import {afterAll, beforeAll, describe, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
 import {
   assertMongoReplicaSetReady,
-  generateMongoCertConfigsMain,
-  generateMongoCertsMain,
   generateMongoPassword,
   setupReplicaSetMain,
-  startMongodInstancesMain,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {restartMongo} from '../restart/restart.js';
@@ -51,7 +48,7 @@ const mongoRunConfig: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
-  authorization: 'disabled',
+  authorization: 'enabled',
 };
 
 const logger = new ConsoleForeLogger();
@@ -59,23 +56,9 @@ const logger = new ConsoleForeLogger();
 beforeAll(
   async () => {
     await cleanupMongoTest({mongoRunConfig});
-    await generateMongoCertConfigsMain({mongoRunConfig});
-    await generateMongoCertsMain({logger, mongoRunConfig});
-    await startMongodInstancesMain({
-      mongoRunConfig,
-      logger,
-      waitUntilListening: true,
-      shouldInitDbRootUser: false,
-    });
-    await setupReplicaSetMain({mongoRunConfig, logger});
-    await assertMongoReplicaSetReady({mongoRunConfig, logger});
-    // await setupUsers({
-    //   mongoRunConfig,
-    //   logger,
-    //   authUser: findAdminUser({users: mongoRunConfig.users, isRequired: true}),
-    // });
+    await setupReplicaSetMain({mongoRunConfig, logger, shouldSetupUsers: true});
   },
-  5 * 60 * 1000 // 5 minutes
+  2 * 60 * 1000 // 2 minutes
 );
 
 afterAll(async () => {
@@ -93,6 +76,6 @@ describe('restartMongo', () => {
       await restartMongo({mongoRunConfig, logger});
       await assertMongoReplicaSetReady({mongoRunConfig, logger});
     },
-    10 * 60 * 1000 // 10 minutes
+    5 * 60 * 1000 // 5 minutes
   );
 });
