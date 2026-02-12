@@ -11,9 +11,7 @@ import {generateCert} from './certs/certGenerator.js';
 import {GenerateCertsCLIOptionsSchema} from './certs/types.js';
 
 // Import mongo functionality
-import {setNonLocalhostNamesInEtcHostsMain} from './mongo/etcHostsMongo.js';
 import {
-  downloadMongo,
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
   getReplicaSetStatus,
@@ -119,27 +117,6 @@ certsProgram
 const mongoProgram = program
   .command('mongo')
   .description('MongoDB management utilities');
-
-// Download MongoDB
-mongoProgram
-  .command('download')
-  .description('Download MongoDB binaries')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await downloadMongo({mongoRunConfig, logger});
-      logger.log('✅ MongoDB download completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
 
 // Generate MongoDB certificates
 mongoProgram
@@ -282,29 +259,6 @@ mongoProgram
       });
       await setupUsers({mongoRunConfig, logger});
       logger.log('✅ MongoDB users setup completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
-// Setup MongoDB etc hosts
-mongoProgram
-  .command('etc-hosts')
-  .description(
-    'Setup non-localhost hostnames in /etc/hosts for MongoDB instances'
-  )
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await setNonLocalhostNamesInEtcHostsMain({mongoRunConfig, logger});
-      logger.log('✅ MongoDB etc hosts setup completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
