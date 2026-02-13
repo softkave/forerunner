@@ -1,6 +1,7 @@
 import {execFileSync} from 'child_process';
 import crypto from 'crypto';
 import {ensureDir} from 'fs-extra';
+import {chmod} from 'fs/promises';
 import path from 'path';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
@@ -62,9 +63,10 @@ export function getDockerContainerName(
 function ensureDockerAvailable(): void {
   try {
     execFileSync('docker', ['info'], {stdio: 'pipe', encoding: 'utf8'});
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      'Docker is not available. Please ensure Docker is installed and running.'
+      `Docker is not available. Please ensure Docker is installed and running: ${msg}`
     );
   }
 }
@@ -116,10 +118,19 @@ export async function startMongodInstance(params: {
   await ensureDir(dataDir);
   await ensureDir(systemLogDir);
   await ensureDir(configDir);
+  // Mongo container runs as user 'mongodb' (UID 999); make data and log dirs
+  // writable so it can create files.
+  await chmod(path.resolve(dataDir), 0o777);
+  await chmod(path.resolve(systemLogDir), 0o777);
   await generateMongoDockerConfigForMongod({
     instanceNumber,
     mongoRunConfig,
   });
+
+  logger.log('Data dir:', dataDir);
+  logger.log('System log dir:', systemLogDir);
+  logger.log('Certs dir:', certsDir);
+  logger.log('Config dir:', configDir);
 
   const nonLocalhostHostnames =
     getNonLocalhostInstanceHostnames(mongoRunConfig);
