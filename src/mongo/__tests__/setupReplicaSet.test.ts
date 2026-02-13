@@ -22,10 +22,12 @@ const mongoRunConfig: MongoRunConfig = {
   instancesHostnames: [
     'test-1.softkave-forerunner-mongo.fimidara.com',
     'test-2.softkave-forerunner-mongo.fimidara.com',
-    'test-3.softkave-forerunner-mongo.fimidara.com',
+    {
+      hostname: 'test-3.softkave-forerunner-mongo.fimidara.com',
+      resolution: 'local',
+    },
   ],
   instancePorts: [27030, 27031, 27032],
-  replicaCount: 3,
   users: [
     {
       username: 'test-user-admin',
@@ -67,14 +69,15 @@ afterAll(async () => {
   });
 });
 
-describe('startReplicaSet', () => {
+describe('setupReplicaSet', () => {
   test(
-    'should start replica set',
+    'should setup replica set',
     async () => {
       await setupReplicaSetMain({
         mongoRunConfig,
         logger,
         shouldSetupUsers: true,
+        authUser: mongoRunConfig.users[0],
       });
       await checkAdminCanConnect({mongoRunConfig, logger});
       await checkTestDbUserCanConnect({

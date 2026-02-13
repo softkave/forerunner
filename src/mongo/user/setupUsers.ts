@@ -117,23 +117,10 @@ export async function setupUsers(params: GetMongoClientParams) {
 
   const adminUser = findAdminUser({
     users: mongoRunConfig.users,
-    isRequired: false,
+    // Expects a running replica set with at least one admin user (which is
+    // automatically setup by setupReplicaSet)
+    isRequired: params.authUser ? false : true,
   });
-
-  // When authorization is enabled and no authUser is passed, create the first
-  // admin user from config (localhost auth bypass), then use it for the rest.
-  if (
-    mongoRunConfig.authorization === 'enabled' &&
-    !params.authUser &&
-    adminUser
-  ) {
-    logger.log(`Setting up admin user ${adminUser.username}`);
-    await setupUser({
-      user: adminUser,
-      ...params,
-      skipExistenceCheck: true,
-    });
-  }
 
   const effectiveAuthUser = params.authUser ?? adminUser ?? undefined;
 

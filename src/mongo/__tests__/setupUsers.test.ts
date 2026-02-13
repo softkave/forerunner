@@ -32,7 +32,6 @@ const baseConfig: MongoRunConfig = {
     'test-3.softkave-forerunner-mongo.fimidara.com',
   ],
   instancePorts: [27040, 27041, 27042],
-  replicaCount: 3,
   users: [
     {
       username: 'test-setup-admin',
@@ -66,6 +65,7 @@ beforeAll(
       mongoRunConfig: baseConfig,
       logger,
       shouldSetupUsers: false,
+      authUser: baseConfig.users[0],
     });
   },
   5 * 60 * 1000 // 5 minutes
@@ -80,23 +80,6 @@ afterAll(async () => {
 });
 
 describe('setupUsers', () => {
-  test(
-    'when authorization enabled and no authUser, creates admin first then all config users',
-    async () => {
-      await setupUsers({
-        mongoRunConfig: baseConfig,
-        logger,
-      });
-      await checkAdminCanConnect({mongoRunConfig: baseConfig, logger});
-      await checkTestDbUserCanConnect({
-        mongoRunConfig: baseConfig,
-        logger,
-        username: 'test-setup-db-user',
-      });
-    },
-    2 * 60 * 1000
-  );
-
   test(
     'adds new user when not in DB',
     async () => {

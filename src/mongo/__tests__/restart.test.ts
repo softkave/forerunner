@@ -26,7 +26,6 @@ const mongoRunConfig: MongoRunConfig = {
     'test-3.softkave-forerunner-mongo.fimidara.com',
   ],
   instancePorts: [27030, 27031, 27032],
-  replicaCount: 3,
   users: [
     {
       username: 'test-user-admin',
@@ -56,7 +55,12 @@ const logger = new ConsoleForeLogger();
 beforeAll(
   async () => {
     await cleanupMongoTest({mongoRunConfig});
-    await setupReplicaSetMain({mongoRunConfig, logger, shouldSetupUsers: true});
+    await setupReplicaSetMain({
+      mongoRunConfig,
+      logger,
+      shouldSetupUsers: true,
+      authUser: mongoRunConfig.users[0],
+    });
   },
   2 * 60 * 1000 // 2 minutes
 );

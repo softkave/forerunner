@@ -29,7 +29,6 @@ const mongoRunConfig: MongoRunConfig = {
     'test-3.softkave-forerunner-mongo.fimidara.com',
   ],
   instancePorts: [27030, 27031, 27032],
-  replicaCount: 3,
   users: [
     {
       username: 'test-user-admin',

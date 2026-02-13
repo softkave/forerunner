@@ -162,8 +162,18 @@ export async function cleanupMongoTest(params: {
       mongoRunConfig.workingDir,
       'mongo-system-logs'
     );
+    // const certsOutDir = path.join(
+    //   mongoRunConfig.workingDir,
+    //   'mongo-certs-out'
+    // );
+    // const certsConfigsDir = path.join(
+    //   mongoRunConfig.workingDir,
+    //   'mongo-certs-configs'
+    // );
     await remove(configsDir);
     await remove(dataDir);
     await remove(systemLogsDir);
+    // await remove(certsOutDir);
+    // await remove(certsConfigsDir);
   }
 }

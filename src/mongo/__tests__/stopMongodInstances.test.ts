@@ -38,6 +38,7 @@ const mongoRunConfig: MongoRunConfig = {
   bindLocalhost: true,
   mongoVersion: '8.2.3',
   authorization: 'enabled',
+  replicaSetName: 'test-softkave-forerunner-mongo',
 };
 
 beforeAll(
