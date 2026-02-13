@@ -16,6 +16,7 @@ import {
   generateMongoCertsMain,
   getReplicaSetStatus,
   printMongoUriMain,
+  restartMongo,
   setupReplicaSetMain,
   startMongodInstancesMain,
   stopMongodInstancesMain,
@@ -356,6 +357,32 @@ mongoProgram
     }
   });
 
+// Restart MongoDB replica set (rolling restart)
+mongoProgram
+  .command('restart')
+  .description('Rolling restart of MongoDB replica set members')
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('--force', 'Force restart without step-down', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const mongoRunConfig = await getMongoRunConfig({
+        mongoRunConfigFilepath: options.config,
+      });
+      await restartMongo({
+        mongoRunConfig,
+        logger,
+        force: options.force,
+      });
+      logger.log('✅ MongoDB rolling restart completed successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
 // ============================================================================
 // ETC HOSTS SUB-PROGRAM
 // ============================================================================
@@ -546,19 +573,15 @@ COMMANDS:
     cert                   Generate a signed certificate using a CA
 
   mongo                    MongoDB management utilities
-    download               Download MongoDB binaries
     generate-certs         Generate MongoDB certificates
     generate-cert-configs  Generate MongoDB certificate configurations
-    generate-configs       Generate MongoDB configurations
     start                  Start MongoDB instances
     stop                   Stop MongoDB instances
     setup-replica-set      Setup MongoDB replica set
     setup-users            Setup MongoDB users
-    write-users            Write MongoDB users configuration (users file optional)
-    init                   Initialize MongoDB with configuration
-    etc-hosts              Setup non-localhost hostnames in /etc/hosts for MongoDB instances
     print-uri              Print MongoDB connection URI using configuration
     replica-set-status     Print MongoDB replica set status
+    restart                Rolling restart of replica set members
 
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP
@@ -579,11 +602,8 @@ EXAMPLES:
   # Generate a certificate
   forerunner certs cert -c cert-config.json
 
-  # Download MongoDB (requires config file)
-  forerunner mongo download -c mongo-config.json
-
-  # Initialize MongoDB (requires config file)
-  forerunner mongo init -c mongo-config.json
+  # Setup MongoDB replica set (requires config file)
+  forerunner mongo setup-replica-set -c mongo-config.json
 
   # Set a host entry
   forerunner etc-hosts set example.com 127.0.0.1
