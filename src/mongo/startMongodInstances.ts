@@ -19,9 +19,11 @@ import {
   getMongodDockerConfigFilePath,
   getMongodSystemLogFilePath,
 } from './generateMongodConfigs.js';
-import {MongoRunConfig} from './mongoRunConfig.js';
+import {
+  extractHostnamesForDockerBinding,
+  MongoRunConfig,
+} from './mongoRunConfig.js';
 import {findAdminUser} from './user/findUtils.js';
-import {extractHostnamesForDockerBinding} from './mongoRunConfig.js';
 
 const kDefaultMongoVersion = '8.2.3';
 
@@ -119,11 +121,6 @@ export async function startMongodInstance(params: {
     mongoRunConfig,
   });
 
-  const adminUser = findAdminUser({
-    users: mongoRunConfig.users,
-    isRequired: false,
-  });
-
   const nonLocalhostHostnames =
     getNonLocalhostInstanceHostnames(mongoRunConfig);
 
@@ -149,12 +146,11 @@ export async function startMongodInstance(params: {
     `${path.resolve(configDir)}:/etc/mongodb:ro`,
   ];
 
-  if (
-    shouldInitDbRootUser &&
-    mongoRunConfig.authorization !== 'disabled' &&
-    adminUser?.username &&
-    adminUser?.password
-  ) {
+  if (shouldInitDbRootUser) {
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
     runArgs.push('-e', `MONGO_INITDB_ROOT_USERNAME=${adminUser.username}`);
     runArgs.push('-e', `MONGO_INITDB_ROOT_PASSWORD=${adminUser.password}`);
   }
