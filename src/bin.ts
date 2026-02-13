@@ -11,22 +11,17 @@ import {generateCert} from './certs/certGenerator.js';
 import {GenerateCertsCLIOptionsSchema} from './certs/types.js';
 
 // Import mongo functionality
-import {setNonLocalhostNamesInEtcHostsMain} from './mongo/etcHostsMongo.js';
 import {
-  downloadMongo,
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
-  generateMongodConfigsMain,
-  initMongo,
+  getReplicaSetStatus,
   printMongoUriMain,
-  replicaSetStatus,
+  restartMongo,
   setupReplicaSetMain,
   startMongodInstancesMain,
   stopMongodInstancesMain,
-  writeMongoUsersFromConfig,
 } from './mongo/index.js';
 import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
-import {setupMongoUsersMain} from './mongo/setupMongoUsers.js';
 
 // Import etcHosts functionality
 import {
@@ -38,6 +33,7 @@ import {
 } from './etcHosts/helpers.js';
 
 // Import process management functionality
+import {setupUsers} from './mongo/user/setupUsers.js';
 import {findChildrenPIDs} from './pid/findChildrenPIDs.js';
 
 // Import run-env functionality
@@ -126,27 +122,6 @@ const mongoProgram = program
   .command('mongo')
   .description('MongoDB management utilities');
 
-// Download MongoDB
-mongoProgram
-  .command('download')
-  .description('Download MongoDB binaries')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await downloadMongo({mongoRunConfig, logger});
-      logger.log('✅ MongoDB download completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
 // Generate MongoDB certificates
 mongoProgram
   .command('generate-certs')
@@ -197,31 +172,6 @@ mongoProgram
       logger.log(
         '✅ MongoDB certificate configs generation completed successfully'
       );
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
-// Generate MongoDB configurations
-mongoProgram
-  .command('generate-configs')
-  .description('Generate MongoDB configurations')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-o, --overwrite', 'Overwrite existing config', false)
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await generateMongodConfigsMain({
-        mongoRunConfig,
-        overwrite: options.overwrite,
-      });
-      logger.log('✅ MongoDB configurations generation completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -311,94 +261,8 @@ mongoProgram
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
       });
-      await setupMongoUsersMain({mongoRunConfig, logger});
+      await setupUsers({mongoRunConfig, logger});
       logger.log('✅ MongoDB users setup completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
-// Write MongoDB users
-mongoProgram
-  .command('write-users')
-  .description('Write MongoDB users configuration')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-u, --users <path>', 'Path to users JSON file (optional)')
-  .option('--create-admin', 'Create admin user if not found', false)
-  .option(
-    '--create-cluster-admin',
-    'Create cluster admin user if not found',
-    false
-  )
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-
-      await writeMongoUsersFromConfig({
-        mongoRunConfig,
-        usersFilePath: options.users,
-        createAdmin: options.createAdmin,
-        createClusterAdmin: options.createClusterAdmin,
-        logger,
-      });
-      logger.log('✅ MongoDB users configuration written successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
-// Initialize MongoDB
-mongoProgram
-  .command('init')
-  .description('Initialize MongoDB with configuration')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('--overwriteConfig', 'Overwrite existing config', false)
-  .option('--overwriteCerts', 'Overwrite existing certs', false)
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await initMongo({
-        mongoRunConfig,
-        logger,
-        overwriteConfig: options.overwriteConfig,
-        overwriteCerts: options.overwriteCerts,
-      });
-      logger.log('✅ MongoDB initialization completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
-// Setup MongoDB etc hosts
-mongoProgram
-  .command('etc-hosts')
-  .description(
-    'Setup non-localhost hostnames in /etc/hosts for MongoDB instances'
-  )
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await setNonLocalhostNamesInEtcHostsMain({mongoRunConfig, logger});
-      logger.log('✅ MongoDB etc hosts setup completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -441,7 +305,7 @@ mongoProgram
         | 'instance'
         | 'replicaSet';
       const instanceNumber = parseInt(options.instanceNumber, 10);
-      const serverSelectionTimeoutMS = parseInt(
+      const serverSelectionTimeoutMs = parseInt(
         options.serverSelectionTimeout,
         10_000 // 10 seconds
       );
@@ -454,7 +318,7 @@ mongoProgram
         username: options.username,
         password: options.password,
         preferLocalhost: options.preferLocalhost,
-        serverSelectionTimeoutMS,
+        serverSelectionTimeoutMs,
       });
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -482,13 +346,39 @@ mongoProgram
         mongoRunConfigFilepath: options.config,
       });
 
-      await replicaSetStatus({
+      await getReplicaSetStatus({
         mongoRunConfig,
         logger,
         preferLocalhost: options.preferLocalhost,
         printStatus: true,
         ping: options.ping,
       });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Restart MongoDB replica set (rolling restart)
+mongoProgram
+  .command('restart')
+  .description('Rolling restart of MongoDB replica set members')
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('--force', 'Force restart without step-down', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const mongoRunConfig = await getMongoRunConfig({
+        mongoRunConfigFilepath: options.config,
+      });
+      await restartMongo({
+        mongoRunConfig,
+        logger,
+        force: options.force,
+      });
+      logger.log('✅ MongoDB rolling restart completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -727,19 +617,15 @@ COMMANDS:
     cert                   Generate a signed certificate using a CA
 
   mongo                    MongoDB management utilities
-    download               Download MongoDB binaries
     generate-certs         Generate MongoDB certificates
     generate-cert-configs  Generate MongoDB certificate configurations
-    generate-configs       Generate MongoDB configurations
     start                  Start MongoDB instances
     stop                   Stop MongoDB instances
     setup-replica-set      Setup MongoDB replica set
     setup-users            Setup MongoDB users
-    write-users            Write MongoDB users configuration (users file optional)
-    init                   Initialize MongoDB with configuration
-    etc-hosts              Setup non-localhost hostnames in /etc/hosts for MongoDB instances
     print-uri              Print MongoDB connection URI using configuration
     replica-set-status     Print MongoDB replica set status
+    restart                Rolling restart of replica set members
 
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP
@@ -763,11 +649,8 @@ EXAMPLES:
   # Generate a certificate
   forerunner certs cert -c cert-config.json
 
-  # Download MongoDB (requires config file)
-  forerunner mongo download -c mongo-config.json
-
-  # Initialize MongoDB (requires config file)
-  forerunner mongo init -c mongo-config.json
+  # Setup MongoDB replica set (requires config file)
+  forerunner mongo setup-replica-set -c mongo-config.json
 
   # Set a host entry
   forerunner etc-hosts set example.com 127.0.0.1

@@ -1,6 +1,6 @@
 # softkave-forerunner
 
-Softkave's internal application runner & helpers - A CLI tool and SDK for managing certificates, MongoDB instances, and system hosts file.
+Application runner & helpers - A CLI tool and SDK for managing certificates, MongoDB instances, system hosts file, etc.
 
 ## Overview
 
@@ -9,15 +9,14 @@ Forerunner is a command-line utility and Node.js SDK designed to streamline deve
 - **Certificate Management**: Generate Certificate Authorities (CAs) and signed certificates
 - **MongoDB Management**: Download, configure, and run MongoDB instances with replica sets
 - **Hosts File Management**: Manage `/etc/hosts` entries for local development
-
-Forerunner can be used both as a CLI tool and as a programmatic SDK in your Node.js applications.
+- **Process Management**: Find, start, and end processes
 
 ## Installation
 
 ### CLI Installation
 
 ```bash
-npm install -g softkave-forerunner
+npm install softkave-forerunner
 # or
 npx softkave-forerunner
 ```
@@ -56,18 +55,15 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 
 #### MongoDB Management
 
-- [`mongo download`](#download-mongodb) - Download MongoDB binary
+- [`mongo setup-replica-set`](#setup-replica-set) - Setup replica set
 - [`mongo generate-certs`](#generate-certificates) - Generate MongoDB certificates
 - [`mongo generate-cert-configs`](#generate-certificate-configurations) - Generate certificate configs
-- [`mongo generate-configs`](#generate-mongodb-configurations) - Generate MongoDB configs
 - [`mongo start`](#start-mongodb-instances) - Start MongoDB instances
 - [`mongo stop`](#stop-mongodb-instances) - Stop MongoDB instances
-- [`mongo setup-replica-set`](#setup-replica-set) - Setup replica set
 - [`mongo setup-users`](#setup-mongodb-users) - Setup MongoDB users
-- [`mongo write-users`](#write-mongodb-users) - Write users to file
-- [`mongo init`](#initialize-mongodb-complete-setup) - Complete MongoDB setup
-- [`mongo etc-hosts`](#setup-etchosts-for-mongodb) - Setup etc/hosts for MongoDB
+- [`mongo print-uri`](#print-mongodb-uri) - Print MongoDB connection URI
 - [`mongo replica-set-status`](#print-replica-set-status) - Print replica set status
+- [`mongo restart`](#restart-mongodb-rolling-restart) - Rolling restart of replica set members
 
 #### Hosts File Management
 
@@ -117,13 +113,30 @@ softkave-forerunner certs cert -c <config-path> [options]
 
 ### MongoDB Management (`mongo`)
 
-Comprehensive MongoDB instance management with replica set support.
+MongoDB replica set management. **Only replica sets are supported**; standalone (single-node) instances are not supported.
 
-#### Download MongoDB
+**Docker is required** for mongo operations (start, stop, setup-replica-set, restart, etc.); instances run as Docker containers.
+
+**When authorization is enabled:** An admin user (with `userAdminAnyDatabase`) is required in config for user management. A cluster admin user (with `clusterAdmin`) is necessary for replica set and other operations after initial setup (e.g. restart, status, reconfig).
+
+#### Setup Replica Set
 
 ```bash
-softkave-forerunner mongo download -c <config-path> [options]
+softkave-forerunner mongo setup-replica-set -c <config-path> [options]
 ```
+
+**Description**: This command initializes the replica set and adds all configured instances as members.
+
+**If not already present**, this command will run the following before configuring the replica set:
+
+- Generate MongoDB certificate configs
+- Generate MongoDB certificates
+- Start MongoDB instances
+- Creates the first admin user defined in config as the auth user for setting up the replica set
+
+Then it initializes the replica set, waits until the replica set is ready, and optionally sets up users (default: yes).
+
+**Options:** `-c, --config <path>` (required), `-s, --silent`
 
 #### Generate Certificates
 
@@ -133,9 +146,11 @@ softkave-forerunner mongo generate-certs -c <config-path> [options]
 
 **Options:**
 
-- `--overwriteConfig` - Overwrite existing config
-- `--overwriteCA` - Overwrite existing CA
-- `--overwriteCerts` - Overwrite existing certs
+- `-c, --config <path>` - Path to mongo run config file (required)
+- `--overwriteConfig` - Overwrite existing config (default: false)
+- `--overwriteCA` - Overwrite existing CA (default: false)
+- `--overwriteCerts` - Overwrite existing certs (default: false)
+- `-s, --silent` - Silent mode
 
 #### Generate Certificate Configurations
 
@@ -143,11 +158,7 @@ softkave-forerunner mongo generate-certs -c <config-path> [options]
 softkave-forerunner mongo generate-cert-configs -c <config-path> [options]
 ```
 
-#### Generate MongoDB Configurations
-
-```bash
-softkave-forerunner mongo generate-configs -c <config-path> [options]
-```
+**Options:** `-c, --config <path>` (required), `-o, --overwrite`, `-s, --silent`
 
 #### Start MongoDB Instances
 
@@ -155,23 +166,15 @@ softkave-forerunner mongo generate-configs -c <config-path> [options]
 softkave-forerunner mongo start -c <config-path> [options]
 ```
 
+**Options:** `-c, --config <path>` (required), `-s, --silent`
+
 #### Stop MongoDB Instances
 
 ```bash
 softkave-forerunner mongo stop -c <config-path> [options]
 ```
 
-#### Setup Replica Set
-
-```bash
-softkave-forerunner mongo setup-replica-set -c <config-path> [options]
-```
-
-**Description**: Configures a MongoDB replica set by connecting directly to the first instance in the configuration. This command initializes the replica set and adds all configured instances as members.
-
-**Connection Method**: Uses a direct connection to the first instance (typically the primary) to configure the replica set.
-
-**Important:** If you are using non-IP hostnames (e.g., `mongo-1.fimidara.local`) in your MongoDB configuration, you must add these hostnames to your `/etc/hosts` file (on Mac/Linux or equivalent on other Operating Systems) before running this command, if they are not discoverable through DNS. Use the `etc-hosts` command to manage host entries.
+**Options:** `-c, --config <path>` (required), `-s, --silent`
 
 #### Setup MongoDB Users
 
@@ -179,74 +182,11 @@ softkave-forerunner mongo setup-replica-set -c <config-path> [options]
 softkave-forerunner mongo setup-users -c <config-path> [options]
 ```
 
-**Description**: Creates and adds users directly to the MongoDB database. This command connects to MongoDB and creates user accounts with the specified roles and permissions.
+**Description**: Creates and syncs users with the MongoDB database. It authenticates using the first admin user in config (which is setup when setting up the replica set), then creates or updates all other users from config. On subsequent runs, it applies changes made in config: adds new users, updates roles (grant/revoke) and password for existing users, and removes users no longer in config (except it will not remove the sole admin if there is no other admin in config).
 
 **Prerequisites**: Expects a replica set to be running and connects to the replica set using the configuration provided.
 
-**What it does**:
-
-- Connects to the MongoDB replica set
-- Creates user accounts in the database
-- Assigns roles and permissions to users
-- Users are immediately available for authentication
-
-#### Write MongoDB Users
-
-```bash
-softkave-forerunner mongo write-users -c <config-path> [options]
-```
-
-**Description**: Writes user configuration from the MongoDB config (and/or `--users` path provided) to a `mongo-users.json` file in the working directory. This command extracts user information from the configuration and saves it to a separate file for reference or backup purposes.
-
-**What it does**:
-
-- Reads user configuration from the MongoDB config file (and/or `--users` path provided)
-- Writes user data to `mongo-users.json` in the working directory
-- Does not connect to or modify the MongoDB database
-
-**Options:**
-
-- `-u, --users <path>` - Path to users JSON file (optional - if not provided, users are read from mongo config)
-- `--create-admin` - Create admin user if not found (default: false)
-- `--create-cluster-admin` - Create cluster admin user if not found (default: false)
-
-#### Initialize MongoDB (Complete Setup)
-
-```bash
-softkave-forerunner mongo init -c <config-path> [options]
-```
-
-**Note:** This command is currently designed to run on a single computer. It sets up a complete MongoDB replica set locally. **This command should be run once** to set up the initial MongoDB infrastructure. After the initial setup, use other commands like `start` and `stop`, for ongoing operations.
-
-**Important:** If you are using non-IP hostnames (e.g., `mongo-1.fimidara.local`) in your MongoDB configuration, you must add these hostnames to your `/etc/hosts` file before running this command. Use the `etc-hosts` command to manage host entries.
-
-**Automatic User Creation:** Admin and cluster admin users will be automatically created if they don't exist in your configuration. This ensures the replica set has the necessary administrative users for proper operation. Users are written to `mongo-users.json` in the working directory from the configuration.
-
-**Configuration Management:** An updated configuration file will be created in the working directory with the name `mongo-run-config.json`. This file contains the merged configuration used during the MongoDB setup process.
-
-**Options:**
-
-- `--overwriteConfig` - Overwrite existing config
-- `--overwriteCerts` - Overwrite existing certs
-
-#### Setup etc/hosts for MongoDB
-
-```bash
-softkave-forerunner mongo etc-hosts -c <config-path> [options]
-```
-
-**Description**: Adds non-IP hostnames from the MongoDB configuration to the `/etc/hosts` file. This command extracts hostnames from the `instancesHostnames` configuration and maps them to the local IPv4 address or 127.0.0.1 in the system hosts file.
-
-**What it does**:
-
-- Reads `instancesHostnames` from the MongoDB configuration
-- Identifies non-IP hostnames (e.g., `mongo-1.fimidara.local`)
-- Adds hostname-to-IP mappings to `/etc/hosts` file
-- Maps hostnames to the local IPv4 address or 127.0.0.1 for local development
-
-**Important**: This is a convenience command that should only be run if the hostnames are not discoverable through DNS. The command maps all hostnames in the configuration without checking whether they are already discoverable through DNS or not.
-
-**Platform Support**: This command only works on Mac/Linux systems. On other operating systems, you'll need to manually manage host entries using the system's equivalent functionality.
+**Options:** `-c, --config <path>` (required), `-s, --silent`
 
 #### Print Replica Set Status
 
@@ -255,19 +195,6 @@ softkave-forerunner mongo replica-set-status -c <config-path> [options]
 ```
 
 **Description**: Displays the current status of the MongoDB replica set, including member information, health status, and connection details. This command connects to the replica set and retrieves real-time status information using MongoDB's `replSetGetStatus` command.
-
-**What it does**:
-
-- Connects to the MongoDB replica set using admin credentials
-- Retrieves replica set status information
-- Displays replica set name, date, and current state
-- Shows detailed member information including hostnames, status, health, and heartbeat data
-- Provides real-time visibility into replica set operations
-
-**Options**:
-
-- `--prefer-localhost` - Prefer localhost over other hostnames when connecting
-- `--ping <ping>` - Ping option: `all` (to ping all members individually and combine the results), `repl` (to ping the replica set for status), or instance number (to ping a specific instance, it is `1`-based not `0`-based.) (default: "`all`")
 
 **Example Output**:
 
@@ -291,15 +218,58 @@ Members:
     Last Heartbeat: 2024-01-15T10:29:58.000Z
 ```
 
-**Prerequisites**: Expects a replica set to be running and accessible with admin credentials from the configuration.
+**Options**:
+
+- `-c, --config <path>` - Path to mongo run config file (required)
+- `--prefer-localhost` - Prefer localhost over other hostnames when connecting (default: false)
+- `--ping <ping>` - Ping option: `all`, `repl`, or instance number (default: "all")
+- `-s, --silent` - Silent mode
+
+#### Print MongoDB URI
+
+```bash
+softkave-forerunner mongo print-uri -c <config-path> [options]
+```
+
+**Description**: Prints the MongoDB connection URI for the given config (replica set or single instance).
+
+**Options**:
+
+- `-c, --config <path>` - Path to mongo run config file (required)
+- `--connection-type <type>` - `instance` or `replicaSet` (default: "replicaSet")
+- `--instance-number <number>` - Instance number for instance connection type (default: "1")
+- `-u, --username <username>` - Username for authentication
+- `-p, --password <password>` - Password for authentication
+- `--prefer-localhost` - Prefer localhost over other hostnames (default: false)
+- `--server-selection-timeout <ms>` - Server selection timeout in milliseconds (default: "5000")
+- `-s, --silent` - Silent mode
+
+#### Restart MongoDB (Rolling Restart)
+
+```bash
+softkave-forerunner mongo restart -c <config-path> [options]
+```
+
+**Description**: Performs a **rolling restart** of the replica set members. A rolling restart restarts one member at a time (typically stepping down the primary first so a secondary becomes primary, then restarting the old primary, then secondaries), so the replica set stays available and no election is required for normal operation. This avoids downtime and keeps the majority of nodes up at all times.
+
+**Use cases**:
+
+- **Upgrade MongoDB version**: After updating the `mongoVersion` in config, run `restart` so each member comes back with the new version.
+- **Apply configuration changes**: After upgrading forerunner to pick up how it manages MongoDB (e.g. changes to generated `mongod` config), run `restart` so running instances pick up the new configuration.
+
+**Options**:
+
+- `-c, --config <path>` - Path to mongo run config file (required)
+- `--force` - Force stop MongoDB instances (default: false)
+- `-s, --silent` - Silent mode
 
 ### Hosts File Management (`etc-hosts`)
 
 Manage `/etc/hosts` file entries for local development.
 
-**Platform Support:** These commands only work on Mac/Linux systems. On other operating systems, you'll need to manually manage host entries using the system's equivalent functionality.
+**Platform Support:** These commands only work on Mac/Linux systems.
 
-**Note:** Commands that write to the `/etc/hosts` file (set, backup, restore) will require sudo password unless you have configured passwordless sudo access for `/etc/hosts` in your sudoers file.
+**Note:** Commands that write to the `/etc/hosts` file (set, backup, restore) will require sudo password unless you have configured passwordless sudo access for `/etc/hosts`.
 
 #### Set Host Entry
 
@@ -315,6 +285,7 @@ softkave-forerunner etc-hosts set <hostname> [ip] [options]
 **Options:**
 
 - `-f, --hosts-file <path>` - Path to hosts file (default: /etc/hosts)
+- `-s, --silent` - Silent mode
 
 #### Remove Host Entry
 
@@ -322,11 +293,17 @@ softkave-forerunner etc-hosts set <hostname> [ip] [options]
 softkave-forerunner etc-hosts remove <hostname> [options]
 ```
 
+**Arguments:** `hostname` (required)
+
+**Options:** `-f, --hosts-file <path>` (default: /etc/hosts), `-s, --silent`
+
 #### List Host Entries
 
 ```bash
 softkave-forerunner etc-hosts list [options]
 ```
+
+**Options:** `-f, --hosts-file <path>` (default: /etc/hosts), `-s, --silent`
 
 #### Backup Hosts File
 
@@ -336,7 +313,9 @@ softkave-forerunner etc-hosts backup [options]
 
 **Options:**
 
+- `-f, --hosts-file <path>` - Path to hosts file (default: /etc/hosts)
 - `-b, --backup-file <path>` - Path to backup file (default: /etc/hosts.backup)
+- `-s, --silent` - Silent mode
 
 #### Restore Hosts File
 
@@ -344,9 +323,9 @@ softkave-forerunner etc-hosts backup [options]
 softkave-forerunner etc-hosts restore [options]
 ```
 
-### Process Management (`pm`)
+**Options:** `-f, --hosts-file <path>` (default: /etc/hosts), `-b, --backup-file <path>` (default: /etc/hosts.backup), `-s, --silent`
 
-Process management utilities for finding and managing child processes.
+### Process Management (`pm`)
 
 **Platform Support:** These commands only work on Linux and macOS systems. On other operating systems, the functionality may not be available.
 
@@ -366,14 +345,6 @@ softkave-forerunner pm children-pids <pid> [options]
 
 - `-s, --silent` - Silent mode (suppress output)
 
-**What it does:**
-
-- Takes a parent PID as input
-- Uses `pgrep -P` to find direct children of the parent process
-- Recursively traverses the process tree to find all descendant processes
-- Returns a list of all child PIDs found
-- Displays the total count of child processes
-
 **Example Output:**
 
 ```
@@ -384,12 +355,6 @@ Child PIDs of 1234:
   5681
 Total: 4 child process(es)
 ```
-
-**Error Handling:**
-
-- Validates that the provided PID is a valid number
-- Handles cases where no child processes exist (displays appropriate message)
-- Provides clear error messages for invalid inputs or system errors
 
 **Use Cases:**
 
@@ -453,29 +418,23 @@ softkave-forerunner certs cert -c cert-config.json
 ### MongoDB Management
 
 ```bash
-# Complete MongoDB setup
-softkave-forerunner mongo init -c mongo-config.json
-
-# Download MongoDB only
-softkave-forerunner mongo download -c mongo-config.json
+# Setup replica set (generates certs, starts instances, then sets up replica set and users)
+softkave-forerunner mongo setup-replica-set -c mongo-config.json
 
 # Start existing MongoDB instances
 softkave-forerunner mongo start -c mongo-config.json
 
-# Write users from config only
-softkave-forerunner mongo write-users -c mongo-config.json
-
-# Write users from config with admin users
-softkave-forerunner mongo write-users -c mongo-config.json --create-admin --create-cluster-admin
-
-# Write users from file and config
-softkave-forerunner mongo write-users -c mongo-config.json -u users.json
+# Setup or sync users
+softkave-forerunner mongo setup-users -c mongo-config.json
 
 # Check replica set status
 softkave-forerunner mongo replica-set-status -c mongo-config.json
 
-# Check replica set status with specific ping option
-softkave-forerunner mongo replica-set-status -c mongo-config.json --ping repl
+# Rolling restart (e.g. after upgrading Mongo version or changing mongod config)
+softkave-forerunner mongo restart -c mongo-config.json
+
+# Print connection URI
+softkave-forerunner mongo print-uri -c mongo-config.json
 ```
 
 ### Hosts File Management
@@ -548,33 +507,63 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 
 **`instancesHostnames`** (array, required)
 
-- **Description**: Hostnames for each MongoDB instance in the replica set
-- **Example**: `["mongo-1.fimidara.local", "mongo-2.fimidara.local", "mongo-3.fimidara.local", "0.0.0.0", "localhost", "127.0.0.1"]`
-- **Note**: Must match the number of instances specified in `replicaCount`
+- **Description**: Hostnames for each MongoDB instance in the replica set (one entry per instance). Each entry can be:
+  - A **string** (single hostname)
+  - An **array** that can mix **strings** and **objects** (multiple hostnames for the instance)
+  - An **object** with `hostname` (string) and `resolution` (`"dns"` or `"local"`) - indicates how the hostname should be resolved
+- **Resolution field**:
+  - When `resolution` is `"dns"`, the hostname is resolved via DNS and is **not** bound to Docker bridge IP (`172.17.0.1`). Use this when the hostname is resolvable via DNS and containers can reach it directly.
+  - When `resolution` is `"local"` or missing, the hostname is bound to Docker bridge IP (`172.17.0.1`) so containers can reach it via the bridge. Use this for hostnames that are not resolvable via DNS (e.g., entries in `/etc/hosts`).
+- **Docker binding**: When starting MongoDB instances, only non-localhost hostnames with missing `resolution` or `resolution: "local"` are bound to Docker bridge. Hostnames with `resolution: "dns"` are not bound, assuming DNS resolution works from within containers.
+- **Example (with string array & local resolution)**:
+  ```json
+  ["mongo-1.fimidara.local", "mongo-2.fimidara.local", "mongo-3.fimidara.local"]
+  ```
+- **Example (with resolution)**:
+  ```json
+  [
+    {"hostname": "mongo-1.fimidara.local", "resolution": "dns"},
+    {"hostname": "mongo-2.fimidara.local", "resolution": "local"},
+    "mongo-3.fimidara.local"
+  ]
+  ```
+- **Example (mixed array format)**:
+  ```json
+  [
+    "mongo-1.fimidara.local",
+    {"hostname": "mongo-2.fimidara.local", "resolution": "local"},
+    [
+      "mongo-3a.fimidara.local",
+      {"hostname": "mongo-3b.fimidara.local", "resolution": "dns"}
+    ]
+  ]
+  ```
+- **Note**: Length must match `instancePorts` and must be at least 3.
 
 **`bindLocalhost`** (boolean, optional)
 
 - **Description**: Whether to bind MongoDB instances to localhost (`127.0.0.1`)
 - **Example**: `true`
-- **Default**: `false`
+- **Default**: `true`
 
 **`instancePorts`** (array, required)
 
-- **Description**: Port numbers for each MongoDB instance
+- **Description**: Port numbers for each MongoDB instance (one per instance)
 - **Example**: `[27017, 27018, 27019]`
-- **Note**: Must match the number of instances and be unique ports
-
-**`replicaCount`** (number, required)
-
-- **Description**: Number of MongoDB instances in the replica set
-- **Example**: `3`
-- **Minimum**: 3 (required for replica set functionality)
+- **Note**: Length must match `instancesHostnames` (minimum 3); ports must be unique
 
 **`replicaSetName`** (string, required)
 
 - **Description**: Name of the MongoDB replica set
 - **Example**: `"fimidara-rs"`
 - **Note**: All instances in the replica set must use the same name
+
+**`authorization`** (`"enabled"` | `"disabled"`, optional)
+
+- **Description**: Whether MongoDB authentication/authorization is enabled
+- **Example**: `"enabled"`
+- **Default**: `"enabled"`
+- **Note**: When enabled, admin and cluster admin users in config are required for post-setup operations
 
 **`users`** (array, required)
 
@@ -593,6 +582,7 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 - `clusterAdmin`: Cluster administration privileges (use with "admin" db)
 - `readWrite`: Read and write privileges for a specific database
 - `read`: Read-only privileges for a specific database
+- Any string. See [MongoDB self-managed built-in roles](https://www.mongodb.com/docs/manual/reference/built-in-roles/?deployment-type=self)
 
 **Example MongoDB Configuration** (`src/mongo/examples/mongo-run-config.json`):
 
@@ -618,9 +608,14 @@ The MongoDB commands require a configuration file that specifies MongoDB version
     "mongo-2.fimidara.local",
     "mongo-3.fimidara.local"
   ],
+  // Alternative with resolution (DNS-resolved hostnames are not bound to Docker bridge):
+  // "instancesHostnames": [
+  //   {"hostname": "mongo-1.fimidara.local", "resolution": "dns"},
+  //   {"hostname": "mongo-2.fimidara.local", "resolution": "local"},
+  //   "mongo-3.fimidara.local"
+  // ],
   "bindLocalhost": true,
   "instancePorts": [27017, 27018, 27019],
-  "replicaCount": 3,
   "replicaSetName": "fimidara-rs",
   "users": [
     {
@@ -819,14 +814,6 @@ Certificate generation requires JSON configuration files for both Certificate Au
 }
 ```
 
-### Example Files
-
-Complete example configuration files are available in the repository:
-
-- **MongoDB**: [`src/mongo/examples/mongo-run-config.json`](src/mongo/examples/mongo-run-config.json)
-- **CA**: [`src/certs/examples/ca-config.json`](src/certs/examples/ca-config.json)
-- **Certificate**: [`src/certs/examples/cert-config.json`](src/certs/examples/cert-config.json)
-
 ## SDK Usage
 
 Forerunner can also be used as a Node.js SDK for programmatic access to all functionality.
@@ -933,10 +920,10 @@ await generateCert({
 
 ### MongoDB Management
 
-#### Complete MongoDB Setup
+#### MongoDB Replicaset Setup
 
 ```typescript
-import {initMongo, MongoRunConfig} from 'softkave-forerunner';
+import {setupReplicaSetMain, MongoRunConfig} from 'softkave-forerunner';
 
 const mongoConfig: MongoRunConfig = {
   workingDir: './mongo-setup',
@@ -957,7 +944,6 @@ const mongoConfig: MongoRunConfig = {
   instancesHostnames: ['mongo1.local', 'mongo2.local', 'mongo3.local'],
   bindLocalhost: true,
   instancePorts: [27017, 27018, 27019],
-  replicaCount: 3,
   replicaSetName: 'rs0',
   users: [
     {
@@ -985,55 +971,10 @@ const mongoConfig: MongoRunConfig = {
   ],
 };
 
-await initMongo({
+await setupReplicaSetMain({
   mongoRunConfig: mongoConfig,
-  overwriteConfig: false,
-  overwriteCerts: false,
   logger,
 });
-```
-
-#### Individual MongoDB Operations
-
-```typescript
-import {
-  downloadMongo,
-  generateMongoCertsMain,
-  replicaSetStatus,
-  startMongodInstancesMain,
-  stopMongodInstancesMain,
-  setupReplicaSetMain,
-} from 'softkave-forerunner';
-
-// Download MongoDB
-await downloadMongo({mongoRunConfig, logger});
-
-// Generate certificates
-await generateMongoCertsMain({
-  mongoRunConfig,
-  overwriteConfig: false,
-  overwriteCA: false,
-  overwriteCerts: false,
-  logger,
-});
-
-// Start instances
-await startMongodInstancesMain({mongoRunConfig, logger});
-
-// Setup replica set
-await setupReplicaSetMain({mongoRunConfig, logger});
-
-// Check replica set status
-const status = await replicaSetStatus({
-  mongoRunConfig,
-  logger,
-  preferLocalhost: false,
-  printStatus: true,
-  ping: 'all',
-});
-
-// Stop instances
-await stopMongodInstancesMain({mongoRunConfig, logger});
 ```
 
 ### Hosts File Management
@@ -1109,7 +1050,7 @@ console.log(`Found ${childrenPids.length} child processes:`, childrenPids);
 **Important Notes:**
 
 - `startProcess` starts a background process that continues running even after the terminal or the initial program that started it stops
-- Background processes can be stopped by sending a kill signal to the process ID from the PID filepath provided or using `stopProcess`
+- Background processes can be stopped by calling `endPIDs` with the PID filepath passed to `startProcess`
 - Process management functions have only been tested on Mac and Linux systems
 
 ```typescript
@@ -1182,35 +1123,9 @@ class CustomLogger implements IForeLogger {
 }
 ```
 
-### Type Definitions
-
-The SDK exports comprehensive TypeScript types:
-
-- `CAConfig` - Certificate Authority configuration
-- `CertConfig` - Certificate configuration
-- `MongoRunConfig` - MongoDB run configuration
-- `HostEntry` - Host file entry structure
-- `IProcessIdItem` - Process ID item structure
-- `IForeLogger` - Logger interface
-- `IInstanceOpts` - Process instance options
-- `findChildrenPIDs` - Function to find child process IDs
-
-### Error Handling
-
-All SDK functions include proper error handling and can be used with try-catch blocks:
-
-```typescript
-try {
-  await initMongo({mongoRunConfig, logger});
-} catch (error) {
-  console.error('MongoDB setup failed:', error);
-  process.exit(1);
-}
-```
-
 ## Release Notes
 
-For detailed information about changes, new features, and bug fixes in each version:
+For information about changes, new features, and bug fixes in each version:
 
 - **[v0 Series Release Notes](notes/releases/v0.md)** - Complete changelog for v0.x.x versions
 

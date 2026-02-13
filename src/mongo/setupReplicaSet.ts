@@ -1,167 +1,186 @@
 import assert from 'assert';
-import {MongoClient} from 'mongodb';
+import {execFileSync} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {assertMongoReplicaSetReady} from './checkMongoReadyState.js';
+import {generateMongoCertConfigsMain} from './generateMongoCertConfigs.js';
+import {generateMongoCertsMain} from './generateMongoCerts.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {
-  findAdminMongoUser,
-  findClusterAdminMongoUser,
-  getMongoUsersConfigFilePath,
-  readMongoUsers,
-  setupSingleMongoUser,
-} from './setupMongoUsers.js';
-import {
-  getFirstNonLocalhostBindIp,
-  getMongoClientForInstance,
-  getMongodConfigs,
-  separateBindIps,
-} from './utils.js';
+  getDockerContainerName,
+  startMongodInstancesMain,
+} from './startMongodInstances.js';
+import {setupUsers} from './user/setupUsers.js';
+import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
 
-export async function setupFirstUsers(params: {
+const kMongoshFirstInstance = 1;
+
+function buildMembers(
+  mongoRunConfig: MongoRunConfig
+): {_id: number; host: string}[] {
+  return mongoRunConfig.instancePorts.map((port, index) => {
+    const hostnames = compileHostnames({
+      hostnames: mongoRunConfig.instancesHostnames[index],
+      bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
+    });
+    const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
+    assert.ok(hostname, `hostname must be set for instance ${index + 1}`);
+    return {_id: index, host: `${hostname}:${port}`};
+  });
+}
+
+function getMongoshConnectionUri(params: {
   mongoRunConfig: MongoRunConfig;
+  authUser?: {username: string; password: string};
+}): string {
+  const {mongoRunConfig, authUser} = params;
+  // const base = 'mongodb://localhost:27017';
+  // if (
+  //   mongoRunConfig.authorization !== 'disabled' &&
+  //   mongoRunConfig.users?.length
+  // ) {
+  //   const adminUser = findAdminUser({
+  //     users: mongoRunConfig.users,
+  //     isRequired: false,
+  //   });
+  //   if (adminUser?.username && adminUser?.password) {
+  //     const user = encodeURIComponent(adminUser.username);
+  //     const pass = encodeURIComponent(adminUser.password);
+  //     return `mongodb://${user}:${pass}@localhost:27017`;
+  //   }
+  // }
+  // return base;
+
+  const hostnames = compileHostnames({
+    hostnames: mongoRunConfig.instancesHostnames[0],
+    bindLocalhost: false,
+  });
+  const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
+  assert.ok(hostname, `hostname must be set for instance 1`);
+  const port = mongoRunConfig.instancePorts[0];
+  const auth =
+    authUser?.username && authUser?.password
+      ? `${encodeURIComponent(authUser.username)}:${encodeURIComponent(
+          authUser.password
+        )}@`
+      : '';
+  return `mongodb://${auth}${hostname}:${port}`;
+}
+
+function runMongoshInContainer(params: {
+  containerName: string;
+  uri: string;
+  script: string;
   logger: IForeLogger;
-  client?: MongoClient;
-  /** Only used if a client is provided */
-  connectionType?: 'replicaSet' | 'instance';
+}): {stdout: string; stderr: string} {
+  const {containerName, uri, script, logger} = params;
+  const args = [
+    'exec',
+    containerName,
+    'mongosh',
+    '--tls',
+    '--tlsCAFile',
+    '/certs/ca.crt.pem',
+    '--tlsAllowInvalidCertificates',
+    uri,
+    '--eval',
+    script,
+    '--quiet',
+  ];
+  logger.log('Running mongosh in container:', containerName);
+  const result = execFileSync('docker', args, {
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+  });
+  return {stdout: result, stderr: ''};
+}
+
+function runMongoshInContainerOrThrow(params: {
+  containerName: string;
+  uri: string;
+  script: string;
+  logger: IForeLogger;
+}): string {
+  try {
+    const {stdout} = runMongoshInContainer(params);
+    return stdout;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `mongosh failed in container ${params.containerName}: ${msg}`
+    );
+  }
+}
+
+async function setupReplicaSet(params: {
+  mongoRunConfig: MongoRunConfig;
+  logger?: IForeLogger;
+  authUser?: {username: string; password: string};
 }) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
-    client,
-    connectionType = 'replicaSet',
+    authUser,
   } = params;
 
-  const mongoUsers = await readMongoUsers({
-    configFilePath: getMongoUsersConfigFilePath(mongoRunConfig),
-  });
-  const adminUser = await findAdminMongoUser({
-    mongoUsers,
-    createIfNotFound: true,
-  });
+  logger.log('Setting up replica set...');
 
-  // If a client is provided, we don't want to close it after setting up a user
-  // because it's externally managed.
-  const retainClient = !!client;
+  const replicaSetName = mongoRunConfig.replicaSetName;
 
-  if (adminUser) {
-    logger.log('Admin user found, setting up');
-    await setupSingleMongoUser({
-      user: adminUser,
-      mongoRunConfig,
-      logger,
-      preferLocalhost: true,
-      client,
-      retainClient,
-      connectionType,
-    });
-  }
-
-  const clusterAdminUser = await findClusterAdminMongoUser({
-    mongoUsers,
-    createIfNotFound: true,
-  });
-  if (clusterAdminUser) {
-    logger.log('Cluster admin user found, setting up');
-    await setupSingleMongoUser({
-      user: clusterAdminUser,
-      adminUser,
-      mongoRunConfig,
-      logger,
-      preferLocalhost: true,
-      client,
-      retainClient,
-      connectionType,
-    });
-  }
-
-  const regularUsers = mongoUsers.filter(
-    user =>
-      user.username !== adminUser.username &&
-      user.username !== clusterAdminUser?.username
+  const containerName = getDockerContainerName(
+    mongoRunConfig,
+    kMongoshFirstInstance
   );
-  if (regularUsers.length > 0) {
-    logger.log('Setting up regular users', regularUsers.length);
-    await Promise.all(
-      regularUsers.map(user =>
-        setupSingleMongoUser({
-          user,
-          adminUser,
-          mongoRunConfig,
-          logger,
-          preferLocalhost: true,
-          client,
-          retainClient,
-          connectionType,
-        })
-      )
-    );
+  const uri = getMongoshConnectionUri({mongoRunConfig, authUser});
+
+  // Check if replica set is already initialized using mongosh
+  let alreadyInitialized = false;
+  try {
+    runMongoshInContainer({
+      containerName,
+      uri,
+      script: 'rs.status()',
+      logger,
+    });
+    alreadyInitialized = true;
+    logger.log('Replica set already initialized');
+  } catch {
+    // rs.status() failed => not initialized or other error; we will try to initiate
+  }
+
+  if (!alreadyInitialized) {
+    logger.log('Initializing replica set...');
+    const members = buildMembers(mongoRunConfig);
+    const config = {_id: replicaSetName, members};
+    const script = `rs.initiate(${JSON.stringify(config)})`;
+    runMongoshInContainerOrThrow({
+      containerName,
+      uri,
+      script,
+      logger,
+    });
+    logger.log('Replica set initialization completed');
   }
 }
 
 export async function setupReplicaSetMain(params: {
   mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
-  retainClient?: boolean;
+  logger?: IForeLogger;
+  shouldSetupUsers?: boolean;
+  authUser?: {username: string; password: string};
 }) {
-  const {
-    mongoRunConfig,
-    logger = new ConsoleForeLogger({silent: true}),
-    retainClient,
-  } = params;
+  const {shouldSetupUsers = true} = params;
+  await generateMongoCertConfigsMain(params);
+  await generateMongoCertsMain(params);
+  await startMongodInstancesMain({
+    ...params,
+    waitUntilListening: true,
+    shouldInitDbRootUser: true,
+  });
+  await setupReplicaSet(params);
+  await assertMongoReplicaSetReady(params);
 
-  const replicaCount = mongoRunConfig.replicaCount;
-  const mongodConfigs = await getMongodConfigs({replicaCount, mongoRunConfig});
-  const mongoConfig0 = mongodConfigs[0];
-  let client: MongoClient | null = null;
-
-  try {
-    client = await getMongoClientForInstance({
-      mongoRunConfig,
-      logger,
-      preferLocalhost: true,
-    });
-    const adminDb = client.db('admin');
-
-    // Check if replica set is already initialized
-    try {
-      const rsStatus = await adminDb.command({replSetGetStatus: 1});
-      logger.log('Replica set already initialized, status:', rsStatus);
-    } catch (error) {
-      if ((error as any).code === 23) {
-        // AlreadyInitialized
-        logger.log('Replica set already initialized');
-      } else {
-        // Try to initialize the replica set
-        logger.log('Initializing replica set...');
-        const result = await adminDb.command({
-          replSetInitiate: {
-            _id: mongoConfig0.replication.replSetName,
-            members: mongodConfigs.map((config, index) => {
-              const hostnames = separateBindIps(config.net.bindIp);
-              const bindIp0 =
-                getFirstNonLocalhostBindIp({hostnames}) || hostnames[0];
-              assert.ok(bindIp0, 'bindIp0 must be set');
-              let host = `${bindIp0}:${config.net.port}`;
-              logger.log('host:', host);
-              return {
-                _id: index,
-                host: host,
-              };
-            }),
-          },
-        });
-        logger.log(
-          'Replica set initialization result:',
-          result.ok ? 'success' : 'failed'
-        );
-      }
-    }
-
-    return retainClient ? client : undefined;
-  } finally {
-    // Close the database connection on completion or error
-    if (!retainClient) {
-      await client?.close();
-    }
+  if (shouldSetupUsers) {
+    await setupUsers(params);
   }
 }

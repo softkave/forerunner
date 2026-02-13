@@ -1,55 +1,100 @@
-import {ensureDir, ensureFile} from 'fs-extra';
-import path from 'path';
-import {endPIDs} from '../pid/endPIDs.js';
+import {execFileSync} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {getInstanceRunName} from './constants.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {getMongodConfigForInstance} from './utils.js';
+import {getDockerContainerName} from './startMongodInstances.js';
+
+function containerExists(containerName: string): boolean {
+  try {
+    execFileSync('docker', ['inspect', '-f', '{{.Id}}', containerName], {
+      stdio: 'pipe',
+      encoding: 'utf8',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function stopMongodInstance(params: {
   instanceNumber: number;
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  force?: boolean;
 }) {
   const {
     instanceNumber,
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
+    force = false,
   } = params;
-  const instanceRunName = `mongod-${instanceNumber}`;
-  const instanceRunDir = path.join(
-    mongoRunConfig.workingDir,
-    'mongo-run',
-    instanceRunName
-  );
-  const instancePidFilename = `${instanceRunName}.pid`;
-  const instancePidFilepath = path.join(instanceRunDir, instancePidFilename);
-  await ensureDir(instanceRunDir);
-  await ensureFile(instancePidFilepath);
 
-  const config = await getMongodConfigForInstance({
-    instanceNumber,
-    mongoRunConfig,
-  });
-  logger.log('Stopping mongod instance', instanceRunName);
-  logger.log('Instance port', config.net.port);
-  await endPIDs({
-    pidsFilepath: instancePidFilepath,
-    cwd: instanceRunDir,
-    ports: [config.net.port],
-  });
+  const instanceRunName = getInstanceRunName(instanceNumber);
+  const containerName = getDockerContainerName(mongoRunConfig, instanceNumber);
+
+  if (!containerExists(containerName)) {
+    logger.log(
+      `Container ${containerName} does not exist for ${instanceRunName}`
+    );
+    return;
+  }
+
+  logger.log(`Stopping ${instanceRunName} (container ${containerName})...`);
+
+  const stopOpts = force ? ['kill', containerName] : ['stop', containerName];
+  try {
+    execFileSync('docker', stopOpts, {stdio: 'pipe', encoding: 'utf8'});
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to stop Docker container ${containerName}: ${msg}`);
+  }
+
+  try {
+    execFileSync('docker', ['rm', containerName], {
+      stdio: 'pipe',
+      encoding: 'utf8',
+    });
+    logger.log(`Removed container ${containerName}`);
+  } catch {
+    // Container may already be removed or remove failed; log and continue
+    logger.log(
+      `Could not remove container ${containerName} (may already be removed)`
+    );
+  }
 }
 
 export async function stopMongodInstancesMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
+  force?: boolean;
 }) {
-  const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
-    params;
-  const replicaCount = mongoRunConfig.replicaCount;
-  await Promise.all(
-    Array.from({length: replicaCount}, async (_, i) => {
-      await stopMongodInstance({instanceNumber: i + 1, mongoRunConfig, logger});
+  const {
+    mongoRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+    force = false,
+  } = params;
+
+  const results = await Promise.allSettled(
+    Array.from({length: mongoRunConfig.instancePorts.length}, async (_, i) => {
+      await stopMongodInstance({
+        instanceNumber: i + 1,
+        mongoRunConfig,
+        logger,
+        force,
+      });
     })
   );
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      logger.log(`mongod-${index + 1} stopped successfully`);
+    } else {
+      const errorMessage =
+        result.reason instanceof Error
+          ? result.reason.message
+          : String(result.reason);
+      logger.log(`mongod-${index + 1} failed to stop: ${errorMessage}`);
+    }
+  });
 }

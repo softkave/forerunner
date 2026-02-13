@@ -1,15 +1,8 @@
-import assert from 'assert';
 import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
 import {dump, load} from 'js-yaml';
 import path from 'path';
 import {z} from 'zod';
-import {CAConfig, CertConfig} from '../certs/types.js';
-import {compileHostnames} from '../index.js';
-import {
-  generateCAConfigForMongo,
-  generateCertConfigForMongod,
-} from './generateMongoCertConfigs.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
 export const MongoConfigSchema = z.object({
@@ -43,9 +36,11 @@ export const MongoConfigSchema = z.object({
     keyFile: z.string().optional(),
     clusterAuthMode: z.literal('x509'),
   }),
-  replication: z.object({
-    replSetName: z.string(),
-  }),
+  replication: z
+    .object({
+      replSetName: z.string(),
+    })
+    .optional(),
   storage: z.object({
     dbPath: z.string(),
   }),
@@ -53,20 +48,22 @@ export const MongoConfigSchema = z.object({
 
 export type MongoConfig = z.infer<typeof MongoConfigSchema>;
 
-export function getMongodConfigFilePath(
+export function getMongodDockerConfigFilePath(
   mongoRunConfig: MongoRunConfig,
   /** Instance number (1-based) */
   instanceNumber: number
 ) {
-  const dir = path.resolve(
+  return path.resolve(
     path.join(
       mongoRunConfig.workingDir,
       'mongo-configs',
-      `mongod-${instanceNumber}.conf`
+      `mongod-${instanceNumber}.docker.conf`
     )
   );
+}
 
-  return dir;
+export function getMongodConfigDir(mongoRunConfig: MongoRunConfig) {
+  return path.resolve(path.join(mongoRunConfig.workingDir, 'mongo-configs'));
 }
 
 export function getMongodSystemLogFilePath(
@@ -96,104 +93,67 @@ export function getMongodDataDir(
   return dir;
 }
 
-export async function generateMongoConfigForMongod(params: {
+/**
+ * Generates a mongod config file with container paths for use when starting
+ * mongod inside Docker. The config is written to mongod-{instanceNumber}.docker.conf.
+ */
+export async function generateMongoDockerConfigForMongod(params: {
   /** Instance number (1-based) */
   instanceNumber: number;
-  mongoCertConfig: CertConfig;
-  caConfig: CAConfig;
-  overwrite?: boolean;
   mongoRunConfig: MongoRunConfig;
-  modifyConfig?: (config: MongoConfig) => MongoConfig;
+  overwrite?: boolean;
 }) {
-  const configFilePath = getMongodConfigFilePath(
-    params.mongoRunConfig,
-    params.instanceNumber
+  const {instanceNumber, mongoRunConfig, overwrite = true} = params;
+  const configFilePath = getMongodDockerConfigFilePath(
+    mongoRunConfig,
+    instanceNumber
   );
-  if ((await exists(configFilePath)) && !params.overwrite) {
+  if ((await exists(configFilePath)) && !overwrite) {
     const config = load(await fs.promises.readFile(configFilePath, 'utf8'));
-    return config;
+    return config as MongoConfig;
   }
 
-  const port = params.mongoRunConfig.instancePorts[params.instanceNumber - 1];
-  assert.ok(port, 'port must be set');
-
-  const bindIp = compileHostnames({
-    initialHostnames:
-      params.mongoRunConfig.instancesHostnames[params.instanceNumber - 1],
-    bindLocalhost: params.mongoRunConfig.bindLocalhost || false,
-  });
-  let config: MongoConfig = {
+  const config: MongoConfig = {
     systemLog: {
       destination: 'file',
       logAppend: true,
       logRotate: 'rename',
-      path: getMongodSystemLogFilePath(
-        params.mongoRunConfig,
-        params.instanceNumber
-      ),
+      path: `/var/log/mongodb/mongod-${instanceNumber}.log`,
     },
     net: {
-      port,
-      bindIp: bindIp.join(','),
+      port: mongoRunConfig.instancePorts[instanceNumber - 1],
+      bindIp: ['0.0.0.0'].join(','),
       tls: {
-        certificateKeyFile: `${params.mongoCertConfig.outDir}/${params.mongoCertConfig.files.crtAndKey}`,
-        CAFile: `${params.caConfig.outDir}/${params.caConfig.files.cert}`,
-        // clusterFile: `${params.mongoCertConfig.outDir}/${params.mongoCertConfig.files.cert}`,
-        // clusterCAFile: `${params.caConfig.outDir}/${params.caConfig.files.cert}`,
-        mode: 'preferTLS',
+        certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,
+        CAFile: '/certs/ca.crt.pem',
+        mode: 'requireTLS',
         clusterAuthX509: {
-          attributes: `O=${params.mongoCertConfig.subject.O}`,
+          attributes: `O=${mongoRunConfig.caConfig.subject.O}`,
         },
         allowConnectionsWithoutCertificates: true,
       },
     },
     storage: {
-      dbPath: getMongodDataDir(params.mongoRunConfig, params.instanceNumber),
+      dbPath: '/data/db',
     },
     security: {
-      // keyFile: `${params.mongoCertConfig.outDir}/${params.mongoCertConfig.files.key}`,
       clusterAuthMode: 'x509',
-      authorization: 'enabled',
+      authorization:
+        mongoRunConfig.authorization !== 'disabled' ? 'enabled' : 'disabled',
       transitionToAuth: false,
     },
     processManagement: {
-      // we handle starting a background process for each mongod instance
-      // ourselves
       fork: false,
-    },
-    replication: {
-      replSetName: params.mongoRunConfig.replicaSetName,
     },
   };
 
-  await ensureFile(configFilePath);
-  if (params.modifyConfig) {
-    config = params.modifyConfig(config);
+  if (mongoRunConfig.replicaSetName) {
+    config.replication = {
+      replSetName: mongoRunConfig.replicaSetName,
+    };
   }
+
+  await ensureFile(configFilePath);
   await fs.promises.writeFile(configFilePath, dump(config, {lineWidth: 120}));
   return config;
-}
-
-export async function generateMongodConfigsMain(params: {
-  mongoRunConfig: MongoRunConfig;
-  overwrite?: boolean;
-  modifyConfig?: (config: MongoConfig) => MongoConfig;
-}) {
-  const {mongoRunConfig, overwrite, modifyConfig} = params;
-  const caConfig = await generateCAConfigForMongo({overwrite, mongoRunConfig});
-  for (let i = 1; i <= mongoRunConfig.replicaCount; i++) {
-    const mongoCertConfig = await generateCertConfigForMongod({
-      instanceNumber: i,
-      caConfig,
-      mongoRunConfig,
-    });
-    await generateMongoConfigForMongod({
-      instanceNumber: i,
-      mongoRunConfig,
-      mongoCertConfig,
-      caConfig,
-      overwrite,
-      modifyConfig,
-    });
-  }
 }
