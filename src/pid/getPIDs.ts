@@ -2,11 +2,14 @@ import fse from 'fs-extra';
 import {keyBy} from 'lodash-es';
 import path from 'path';
 import {IRunnerOpts} from '../process/types.js';
-import {ProcessIdFileParsed} from './types.js';
+import {IProcessIdItem, ProcessIdFileParsed} from './types.js';
 
 export async function getPIDsFromFile(
   opts: Pick<IRunnerOpts, 'pidsFilepath'> & Partial<Pick<IRunnerOpts, 'cwd'>>
-) {
+): Promise<{
+  pids: ProcessIdFileParsed;
+  pidsByName: Record<string, IProcessIdItem>;
+}> {
   const {cwd} = opts;
   try {
     const pidsFilepath =
