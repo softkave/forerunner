@@ -121,15 +121,8 @@ export async function generateMongoDockerConfigForMongod(params: {
       path: `/var/log/mongodb/mongod-${instanceNumber}.log`,
     },
     net: {
-      // port: 27017,
       port: mongoRunConfig.instancePorts[instanceNumber - 1],
-      bindIp: [
-        '0.0.0.0',
-        // ...compileHostnames({
-        //   hostnames: mongoRunConfig.instancesHostnames[instanceNumber - 1],
-        //   bindLocalhost: false,
-        // }),
-      ].join(','),
+      bindIp: ['0.0.0.0'].join(','),
       tls: {
         certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,
         CAFile: '/certs/ca.crt.pem',
@@ -147,7 +140,7 @@ export async function generateMongoDockerConfigForMongod(params: {
       clusterAuthMode: 'x509',
       authorization:
         mongoRunConfig.authorization !== 'disabled' ? 'enabled' : 'disabled',
-      transitionToAuth: true,
+      transitionToAuth: false,
     },
     processManagement: {
       fork: false,

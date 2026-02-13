@@ -21,7 +21,7 @@ import {
 } from './generateMongodConfigs.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {findAdminUser} from './user/findUtils.js';
-import {compileHostnames, getNonLocalhostBindIps} from './utils.js';
+import {extractHostnamesForDockerBinding} from './mongoRunConfig.js';
 
 const kDefaultMongoVersion = '8.2.3';
 
@@ -34,12 +34,11 @@ function getNonLocalhostInstanceHostnames(
 ): string[] {
   const seen = new Set<string>();
   for (let i = 0; i < mongoRunConfig.instancesHostnames.length; i++) {
-    const hostnames = compileHostnames({
-      hostnames: mongoRunConfig.instancesHostnames[i] ?? [],
-      bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
-    });
-    const nonLocal = getNonLocalhostBindIps({hostnames});
-    for (const h of nonLocal) {
+    const entry = mongoRunConfig.instancesHostnames[i];
+    if (!entry) continue;
+    // Only bind hostnames to Docker bridge if resolution is missing or 'local' (not 'dns')
+    const hostnamesForBinding = extractHostnamesForDockerBinding(entry);
+    for (const h of hostnamesForBinding) {
       seen.add(h);
     }
   }
@@ -65,6 +64,19 @@ function ensureDockerAvailable(): void {
     throw new Error(
       'Docker is not available. Please ensure Docker is installed and running.'
     );
+  }
+}
+
+function isContainerRunning(containerName: string): boolean {
+  try {
+    const out = execFileSync(
+      'docker',
+      ['inspect', '-f', '{{.State.Running}}', containerName],
+      {stdio: 'pipe', encoding: 'utf8'}
+    );
+    return out.trim() === 'true';
+  } catch {
+    return false;
   }
 }
 
@@ -160,20 +172,26 @@ export async function startMongodInstance(params: {
 
   runArgs.push(...mongodArgs);
 
-  logger.log('Instance run name:', instanceRunName);
-  logger.log('Container name:', containerName);
-  logger.log('Starting mongod via Docker...');
-
-  try {
-    execFileSync('docker', runArgs, {
-      stdio: 'inherit',
-      encoding: 'utf8',
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Failed to start Docker container ${containerName}: ${msg}`
+  if (isContainerRunning(containerName)) {
+    logger.log(
+      `${instanceRunName} (container ${containerName}) is already running; skipping start`
     );
+  } else {
+    logger.log('Instance run name:', instanceRunName);
+    logger.log('Container name:', containerName);
+    logger.log('Starting mongod via Docker...');
+
+    try {
+      execFileSync('docker', runArgs, {
+        stdio: 'inherit',
+        encoding: 'utf8',
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to start Docker container ${containerName}: ${msg}`
+      );
+    }
   }
 
   if (waitUntilListening) {

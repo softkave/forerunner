@@ -60,7 +60,9 @@ function getMongoshConnectionUri(params: {
   const port = mongoRunConfig.instancePorts[0];
   const auth =
     authUser?.username && authUser?.password
-      ? `${encodeURIComponent(authUser.username)}:${encodeURIComponent(authUser.password)}@`
+      ? `${encodeURIComponent(authUser.username)}:${encodeURIComponent(
+          authUser.password
+        )}@`
       : '';
   return `mongodb://${auth}${hostname}:${port}`;
 }
@@ -123,10 +125,7 @@ async function setupReplicaSet(params: {
 
   logger.log('Setting up replica set...');
 
-  const replicaCount = mongoRunConfig.replicaCount;
   const replicaSetName = mongoRunConfig.replicaSetName;
-  assert.ok(replicaSetName, 'replicaSetName must be set');
-  assert.ok(replicaCount, 'replicaCount must be set');
 
   const containerName = getDockerContainerName(
     mongoRunConfig,
@@ -168,6 +167,7 @@ export async function setupReplicaSetMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   shouldSetupUsers?: boolean;
+  authUser?: {username: string; password: string};
 }) {
   const {shouldSetupUsers = true} = params;
   await generateMongoCertConfigsMain(params);
@@ -175,7 +175,7 @@ export async function setupReplicaSetMain(params: {
   await startMongodInstancesMain({
     ...params,
     waitUntilListening: true,
-    shouldInitDbRootUser: false,
+    shouldInitDbRootUser: true,
   });
   await setupReplicaSet(params);
   await assertMongoReplicaSetReady(params);

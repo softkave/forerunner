@@ -2,7 +2,11 @@ import assert from 'assert';
 import {generate} from 'generate-password';
 import {convertToArray} from 'softkave-js-utils';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {MongoRunConfig} from './mongoRunConfig.js';
+import {
+  extractHostnames,
+  InstanceHostnameEntry,
+  MongoRunConfig,
+} from './mongoRunConfig.js';
 
 export function separateBindIps(bindIp: string) {
   return bindIp.split(',');
@@ -78,18 +82,20 @@ export async function getMongoUriForInstance(params: {
   let uri = `mongodb://${host}`;
   logger.log('Mongo URI:', uri);
   if (params.username && params.password) {
-    uri = `mongodb://${encodeURIComponent(params.username)}:${encodeURIComponent(params.password)}@${host}`;
+    uri = `mongodb://${encodeURIComponent(
+      params.username
+    )}:${encodeURIComponent(params.password)}@${host}`;
   }
 
   return uri;
 }
 
 export function compileHostnames(params: {
-  hostnames: string[] | string;
+  hostnames: InstanceHostnameEntry;
   bindLocalhost: boolean;
-}) {
+}): string[] {
   const {hostnames: initialHostnames, bindLocalhost} = params;
-  let hostnames = convertToArray(initialHostnames);
+  let hostnames = extractHostnames(initialHostnames);
   if (bindLocalhost) {
     hostnames = [...hostnames, 'localhost', '127.0.0.1'];
   }
@@ -122,7 +128,9 @@ export async function getMongoUriForReplicaSet(params: {
       const preferredHostname = hostname || hostnames[0];
       assert.ok(
         preferredHostname,
-        `instanceHostnames or bindLocalhost must be set for instance ${index + 1}`
+        `instanceHostnames or bindLocalhost must be set for instance ${
+          index + 1
+        }`
       );
 
       return preferredHostname;
