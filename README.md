@@ -77,6 +77,10 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 
 - [`pm children-pids`](#find-children-pids) - Find all child PIDs of a parent PID
 
+#### Run env
+
+- [`run-env`](#run-with-selected-env-file) - Run a command with a selected `.env*` file
+
 ### Certificate Management (`certs`)
 
 Generate and manage SSL/TLS certificates for development and infrastructure.
@@ -368,6 +372,29 @@ softkave-forerunner pm children-pids 1234
 # Find child processes in silent mode
 softkave-forerunner pm children-pids 1234 --silent
 ```
+
+### Run with selected env file (`run-env`)
+
+Discovers `.env*` files in the current directory (e.g. `.env`, `.env.local`, `.env.development`), lets you choose one interactively, then runs the given command with that env. I/O is piped to the terminal.
+
+**Usage:**
+
+```bash
+softkave-forerunner run-env [options] -- <command> [args...]
+```
+
+**Example:**
+
+```bash
+softkave-forerunner run-env -- npm run dev
+```
+
+**Options:**
+
+- `-w, --cwd <path>` - Working directory to scan for `.env*` files and to run the command in (default: current directory)
+- `-s, --silent` - Silent mode (suppress non-essential output such as "Using .env.foo")
+
+**Behavior:** If no `.env*` files exist in the chosen directory, the command exits with an error. If exactly one file exists, it is used without prompting; if multiple exist, an interactive list is shown to select one.
 
 ## Common Options
 
