@@ -109,7 +109,6 @@ export async function restartReplicaSetMember(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
   waitUntilListening?: boolean;
   waitUntilReplicaSetReady?: boolean;
 }): Promise<void> {
@@ -118,7 +117,6 @@ export async function restartReplicaSetMember(params: {
     mongoRunConfig,
     logger,
     force = false,
-    fallbackToKill = false,
     waitUntilListening = true,
     waitUntilReplicaSetReady = true,
   } = params;
@@ -132,7 +130,6 @@ export async function restartReplicaSetMember(params: {
     mongoRunConfig,
     logger,
     force,
-    fallbackToKill,
   });
 
   logger.log(`Starting ${instanceRunName}...`);
@@ -226,11 +223,9 @@ async function restartNextNonPrimaryMember(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
   restartedInstances: Set<number>;
 }): Promise<boolean> {
-  const {mongoRunConfig, logger, force, fallbackToKill, restartedInstances} =
-    params;
+  const {mongoRunConfig, logger, force, restartedInstances} = params;
 
   // Find a non-primary member that hasn't been restarted
   const {member: memberToRestart, instanceNumber: instanceToRestart} =
@@ -254,7 +249,6 @@ async function restartNextNonPrimaryMember(params: {
     mongoRunConfig,
     logger,
     force,
-    fallbackToKill,
   });
 
   await verifyMemberHealthAfterRestart({
@@ -273,18 +267,15 @@ async function restartNonPrimaryMembers(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
   restartedInstances: Set<number>;
 }): Promise<void> {
-  const {mongoRunConfig, logger, force, fallbackToKill, restartedInstances} =
-    params;
+  const {mongoRunConfig, logger, force, restartedInstances} = params;
 
   while (true) {
     const restarted = await restartNextNonPrimaryMember({
       mongoRunConfig,
       logger,
       force,
-      fallbackToKill,
       restartedInstances,
     });
 
@@ -343,7 +334,6 @@ async function restartPrimaryMember(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
   stepDownSeconds?: number;
   secondaryCatchUpPeriodSecs?: number;
   restartedInstances: Set<number>;
@@ -352,7 +342,6 @@ async function restartPrimaryMember(params: {
     mongoRunConfig,
     logger,
     force,
-    fallbackToKill,
     stepDownSeconds,
     secondaryCatchUpPeriodSecs,
     restartedInstances,
@@ -411,7 +400,6 @@ async function restartPrimaryMember(params: {
     mongoRunConfig,
     logger,
     force,
-    fallbackToKill,
   });
 
   await verifyMemberHealthAfterRestart({
@@ -461,7 +449,6 @@ export async function restartReplicaSetMembersRolling(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
   stepDownSeconds?: number;
   secondaryCatchUpPeriodSecs?: number;
 }): Promise<void> {
@@ -469,7 +456,6 @@ export async function restartReplicaSetMembersRolling(params: {
     mongoRunConfig,
     logger,
     force = false,
-    fallbackToKill = false,
     stepDownSeconds = 120,
     secondaryCatchUpPeriodSecs,
   } = params;
@@ -483,7 +469,6 @@ export async function restartReplicaSetMembersRolling(params: {
     mongoRunConfig,
     logger,
     force,
-    fallbackToKill,
     restartedInstances,
   });
 
@@ -492,7 +477,6 @@ export async function restartReplicaSetMembersRolling(params: {
     mongoRunConfig,
     logger,
     force,
-    fallbackToKill,
     stepDownSeconds,
     secondaryCatchUpPeriodSecs,
     restartedInstances,

@@ -11,7 +11,6 @@ export async function restartMongo(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
   stepDownSeconds?: number;
   secondaryCatchUpPeriodSecs?: number;
 }): Promise<void> {
@@ -19,7 +18,6 @@ export async function restartMongo(params: {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
     force = false,
-    fallbackToKill = false,
     stepDownSeconds = 120,
     secondaryCatchUpPeriodSecs,
   } = params;
@@ -30,7 +28,6 @@ export async function restartMongo(params: {
     mongoRunConfig,
     logger,
     force,
-    fallbackToKill,
     stepDownSeconds,
     secondaryCatchUpPeriodSecs,
   });

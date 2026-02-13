@@ -22,7 +22,6 @@ export async function stopMongodInstance(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
 }) {
   const {
     instanceNumber,
@@ -69,7 +68,6 @@ export async function stopMongodInstancesMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
-  fallbackToKill?: boolean;
 }) {
   const {
     mongoRunConfig,
