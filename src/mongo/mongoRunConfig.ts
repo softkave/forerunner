@@ -72,10 +72,11 @@ export const mongoRunConfigSchema = z
     // Working dir
     workingDir: z.string(),
 
-    // Download Mongo
+    // Mongo version
     mongoVersion: z.string().optional(),
-    systemLinux: z.string().optional(),
-    os: z.string().optional(),
+
+    // Container name (optional, for backwards compatibility)
+    containerName: z.string().optional(),
 
     // Mongo certs
     caConfig: z.object({
