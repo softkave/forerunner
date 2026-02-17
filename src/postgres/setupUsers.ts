@@ -66,6 +66,100 @@ function pgHbaUsesTrust(content: string): boolean {
 }
 
 /**
+ * Get databases a user currently has CONNECT privilege on
+ * Checks all databases in the config's dbs list
+ */
+async function getUserDatabases(
+  client: Client,
+  username: string,
+  allDatabases: string[]
+): Promise<Set<string>> {
+  const databasesWithAccess = new Set<string>();
+
+  for (const db of allDatabases) {
+    try {
+      // Check if user has CONNECT privilege on this database
+      const result = await client.query(
+        `SELECT has_database_privilege($1, $2, 'CONNECT') as has_access`,
+        [username, db]
+      );
+      if (result.rows[0]?.has_access === true) {
+        databasesWithAccess.add(db);
+      }
+    } catch (err) {
+      // If database doesn't exist or other error, skip it
+      continue;
+    }
+  }
+
+  return databasesWithAccess;
+}
+
+/**
+ * Revoke database permissions from a user
+ */
+async function revokeDatabasePermissions(
+  postgresRunConfig: PostgresRunConfig,
+  username: string,
+  databases: string[],
+  logger: IForeLogger
+): Promise<void> {
+  // Get a client connected to the postgres database for cluster-level revokes
+  const adminClient = await getPostgresClient({
+    postgresRunConfig,
+    database: 'postgres',
+  });
+
+  try {
+    for (const db of databases) {
+      try {
+        // Revoke CREATE privilege on database
+        await adminClient.query(
+          `REVOKE CREATE ON DATABASE ${adminClient.escapeIdentifier(db)} FROM ${adminClient.escapeIdentifier(username)}`
+        );
+        // Revoke CONNECT privilege (cluster-level, can be done from any database)
+        await adminClient.query(
+          `REVOKE CONNECT ON DATABASE ${adminClient.escapeIdentifier(db)} FROM ${adminClient.escapeIdentifier(username)}`
+        );
+
+        // For schema-level privileges, we MUST connect to the target database
+        const dbClient = await getPostgresClient({
+          postgresRunConfig,
+          database: db,
+        });
+
+        try {
+          // Revoke schema privileges
+          await dbClient.query(
+            `REVOKE ALL ON SCHEMA public FROM ${dbClient.escapeIdentifier(username)}`
+          );
+          await dbClient.query(
+            `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${dbClient.escapeIdentifier(username)}`
+          );
+          await dbClient.query(
+            `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ${dbClient.escapeIdentifier(username)}`
+          );
+          // Note: We can't easily revoke default privileges, but they won't apply
+          // if the user doesn't have access to the database
+          logger.log(
+            `Revoked permissions on database ${db} from user ${username}`
+          );
+        } finally {
+          await dbClient.end();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.log(
+          `Warning: Could not revoke permissions on database ${db} from user ${username}: ${msg}`
+        );
+      }
+    }
+  } finally {
+    await adminClient.end();
+  }
+}
+
+/**
  * Grant database permissions to a user
  * Note: Schema-level privileges must be granted while connected to the target database
  * because schemas are database-scoped in PostgreSQL
@@ -149,6 +243,80 @@ async function grantDatabasePermissions(
   }
 }
 
+/**
+ * Sync database permissions for a user - grants and revokes as needed
+ */
+async function syncDatabasePermissions(
+  client: Client,
+  postgresRunConfig: PostgresRunConfig,
+  username: string,
+  desiredDatabases: string[] | undefined,
+  logger: IForeLogger
+): Promise<void> {
+  // If no specific databases, user should have access to all (default PostgreSQL behavior)
+  // We don't manage "all databases" explicitly, so skip sync
+  if (!desiredDatabases || desiredDatabases.length === 0) {
+    return;
+  }
+
+  // Get all databases from config to check against
+  const allDatabases = postgresRunConfig.dbs || [];
+
+  // Get currently granted databases
+  const currentDatabases = await getUserDatabases(
+    client,
+    username,
+    allDatabases
+  );
+  const desiredSet = new Set(desiredDatabases);
+
+  // Find databases to revoke (in current but not in desired)
+  const toRevoke = Array.from(currentDatabases).filter(
+    db => !desiredSet.has(db)
+  );
+
+  // Find databases to grant (in desired but not in current)
+  const toGrant = desiredDatabases.filter(db => !currentDatabases.has(db));
+
+  // Revoke permissions from removed databases
+  if (toRevoke.length > 0) {
+    logger.log(
+      `Revoking database access for user ${username}: ${toRevoke.join(', ')}`
+    );
+    await revokeDatabasePermissions(
+      postgresRunConfig,
+      username,
+      toRevoke,
+      logger
+    );
+  }
+
+  // Grant permissions to new databases
+  if (toGrant.length > 0) {
+    logger.log(
+      `Granting database access for user ${username}: ${toGrant.join(', ')}`
+    );
+    await grantDatabasePermissions(
+      postgresRunConfig,
+      username,
+      toGrant,
+      logger
+    );
+  }
+
+  // Re-grant permissions to existing databases (in case permissions were modified)
+  // This ensures permissions are always in sync with config
+  const toRegrant = desiredDatabases.filter(db => currentDatabases.has(db));
+  if (toRegrant.length > 0) {
+    await grantDatabasePermissions(
+      postgresRunConfig,
+      username,
+      toRegrant,
+      logger
+    );
+  }
+}
+
 async function syncAllUsers(
   client: Client,
   postgresRunConfig: PostgresRunConfig,
@@ -169,8 +337,9 @@ async function syncAllUsers(
       );
     }
 
-    // Grant database permissions (requires separate database connections)
-    await grantDatabasePermissions(
+    // Sync database permissions (grants and revokes as needed)
+    await syncDatabasePermissions(
+      client,
       postgresRunConfig,
       user.username,
       user.databases,
