@@ -1,3 +1,4 @@
+import {randomBytes} from 'crypto';
 import {Client} from 'pg';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
@@ -25,15 +26,20 @@ async function checkIfUserExists(
   return result.rows.length > 0;
 }
 
+function dollarQuotedPassword(password: string): string {
+  const tag = 'pw_' + randomBytes(8).toString('hex');
+  return `$${tag}$${password}$${tag}$`;
+}
+
 async function createUser(
   client: Client,
   username: string,
   password?: string
 ): Promise<void> {
   if (password) {
+    const quoted = dollarQuotedPassword(password);
     await client.query(
-      `CREATE USER ${client.escapeIdentifier(username)} WITH PASSWORD $1`,
-      [password]
+      `CREATE USER ${client.escapeIdentifier(username)} WITH PASSWORD ${quoted}`
     );
   } else {
     await client.query(`CREATE USER ${client.escapeIdentifier(username)}`);
@@ -45,9 +51,10 @@ async function setUserPassword(
   username: string,
   password: string
 ): Promise<void> {
+  // Dollar-quoted literal: Postgres does not support $1 for PASSWORD
+  const quoted = dollarQuotedPassword(password);
   await client.query(
-    `ALTER USER ${client.escapeIdentifier(username)} WITH PASSWORD $1`,
-    [password]
+    `ALTER USER ${client.escapeIdentifier(username)} WITH PASSWORD ${quoted}`
   );
 }
 
@@ -66,8 +73,8 @@ function pgHbaUsesTrust(content: string): boolean {
 }
 
 /**
- * Get databases a user currently has CONNECT privilege on
- * Checks all databases in the config's dbs list
+ * Get databases a user currently has CONNECT privilege on. Checks all databases
+ * in the config's dbs list
  */
 async function getUserDatabases(
   client: Client,
@@ -117,7 +124,8 @@ async function revokeDatabasePermissions(
         await adminClient.query(
           `REVOKE CREATE ON DATABASE ${adminClient.escapeIdentifier(db)} FROM ${adminClient.escapeIdentifier(username)}`
         );
-        // Revoke CONNECT privilege (cluster-level, can be done from any database)
+        // Revoke CONNECT privilege (cluster-level, can be done from any
+        // database)
         await adminClient.query(
           `REVOKE CONNECT ON DATABASE ${adminClient.escapeIdentifier(db)} FROM ${adminClient.escapeIdentifier(username)}`
         );
@@ -139,8 +147,8 @@ async function revokeDatabasePermissions(
           await dbClient.query(
             `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ${dbClient.escapeIdentifier(username)}`
           );
-          // Note: We can't easily revoke default privileges, but they won't apply
-          // if the user doesn't have access to the database
+          // Note: We can't easily revoke default privileges, but they won't
+          // apply if the user doesn't have access to the database
           logger.log(
             `Revoked permissions on database ${db} from user ${username}`
           );
@@ -160,9 +168,9 @@ async function revokeDatabasePermissions(
 }
 
 /**
- * Grant database permissions to a user
- * Note: Schema-level privileges must be granted while connected to the target database
- * because schemas are database-scoped in PostgreSQL
+ * Grant database permissions to a user. Note: Schema-level privileges must be
+ * granted while connected to the target database. because schemas are
+ * database-scoped in PostgreSQL
  */
 async function grantDatabasePermissions(
   postgresRunConfig: PostgresRunConfig,
@@ -184,17 +192,20 @@ async function grantDatabasePermissions(
   try {
     for (const db of databases) {
       try {
-        // Grant CONNECT privilege (cluster-level, can be done from any database)
+        // Grant CONNECT privilege (cluster-level, can be done from any
+        // database)
         await adminClient.query(
           `GRANT CONNECT ON DATABASE ${adminClient.escapeIdentifier(db)} TO ${adminClient.escapeIdentifier(username)}`
         );
-        // Grant CREATE privilege on database to allow user to create schemas (namespaces)
+        // Grant CREATE privilege on database to allow user to create schemas
+        // (namespaces)
         await adminClient.query(
           `GRANT CREATE ON DATABASE ${adminClient.escapeIdentifier(db)} TO ${adminClient.escapeIdentifier(username)}`
         );
 
         // For schema-level privileges, we MUST connect to the target database
-        // because schemas are database-scoped - each database has its own 'public' schema
+        // because schemas are database-scoped - each database has its own
+        // 'public' schema
         const dbClient = await getPostgresClient({
           postgresRunConfig,
           database: db,
@@ -253,8 +264,9 @@ async function syncDatabasePermissions(
   desiredDatabases: string[] | undefined,
   logger: IForeLogger
 ): Promise<void> {
-  // If no specific databases, user should have access to all (default PostgreSQL behavior)
-  // We don't manage "all databases" explicitly, so skip sync
+  // If no specific databases, user should have access to all (default
+  // PostgreSQL behavior). We don't manage "all databases" explicitly, so skip
+  // sync
   if (!desiredDatabases || desiredDatabases.length === 0) {
     return;
   }
@@ -304,8 +316,8 @@ async function syncDatabasePermissions(
     );
   }
 
-  // Re-grant permissions to existing databases (in case permissions were modified)
-  // This ensures permissions are always in sync with config
+  // Re-grant permissions to existing databases (in case permissions were
+  // modified). This ensures permissions are always in sync with config
   const toRegrant = desiredDatabases.filter(db => currentDatabases.has(db));
   if (toRegrant.length > 0) {
     await grantDatabasePermissions(
@@ -413,7 +425,8 @@ export async function setupUsers(params: {
       );
     }
 
-    // Authorization was disabled, now enabled: sync users first (so we don't lock out), then pg_hba to scram
+    // Authorization was disabled, now enabled: sync users first (so we don't
+    // lock out), then pg_hba to scram
     let didSyncForScramTransition = false;
     if (authEnabled && pgHbaContent && pgHbaUsesTrust(pgHbaContent)) {
       logger.log(
@@ -448,7 +461,8 @@ export async function setupUsers(params: {
       );
     }
 
-    // Update pg_hba.conf with user-specific database entries if not already done
+    // Update pg_hba.conf with user-specific database entries if not already
+    // done
     if (!didSyncForScramTransition && authEnabled) {
       const newPgHba = pgHbaEntries.join('\n') + '\n';
       // Only update if content has changed
@@ -459,17 +473,22 @@ export async function setupUsers(params: {
       }
     }
 
-    // When authorization enabled and postgres not in user list: set postgres superuser to random (unusable)
+    // When authorization enabled and postgres not in user list: set postgres
+    // superuser to random (unusable). Only if the postgres role exists (it is
+    // not created when POSTGRES_USER is set)
     if (authEnabled) {
       const postgresInConfig = postgresRunConfig.users.some(
         u => u.username === 'postgres'
       );
       if (!postgresInConfig) {
-        const randomPw = generateRandomPassword();
-        await setUserPassword(client, 'postgres', randomPw);
-        logger.log(
-          'Set postgres superuser to random password (not in user list)'
-        );
+        const postgresExists = await checkIfUserExists(client, 'postgres');
+        if (postgresExists) {
+          const randomPw = generateRandomPassword();
+          await setUserPassword(client, 'postgres', randomPw);
+          logger.log(
+            'Set postgres superuser to random password (not in user list)'
+          );
+        }
       }
     }
 

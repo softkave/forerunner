@@ -95,16 +95,23 @@ export function generatePgHbaEntriesForUser(params: {
   const allowLocal = connectionTypes.includes('local');
   const connectionType = requireSSL ? 'hostssl' : 'host';
 
+  // Docker bridge: when host connects via -p 127.0.0.1:port:5432, container
+  // sees client as 172.17.0.1
+  const tcpAddresses = [
+    '127.0.0.1/32',
+    '::1/128',
+    '172.17.0.0/16', // Docker default bridge
+  ];
+
   if (databases && databases.length > 0) {
     // User has specific database access
     for (const db of databases) {
       if (allowTCP) {
-        entries.push(
-          `${connectionType} ${db} ${username} 127.0.0.1/32 ${authMethod}`
-        );
-        entries.push(
-          `${connectionType} ${db} ${username} ::1/128 ${authMethod}`
-        );
+        for (const addr of tcpAddresses) {
+          entries.push(
+            `${connectionType} ${db} ${username} ${addr} ${authMethod}`
+          );
+        }
       }
       if (allowLocal) {
         entries.push(`local ${db} ${username} ${authMethod}`);
@@ -113,10 +120,9 @@ export function generatePgHbaEntriesForUser(params: {
   } else {
     // User has access to all databases
     if (allowTCP) {
-      entries.push(
-        `${connectionType} all ${username} 127.0.0.1/32 ${authMethod}`
-      );
-      entries.push(`${connectionType} all ${username} ::1/128 ${authMethod}`);
+      for (const addr of tcpAddresses) {
+        entries.push(`${connectionType} all ${username} ${addr} ${authMethod}`);
+      }
     }
     if (allowLocal) {
       entries.push(`local all ${username} ${authMethod}`);
@@ -224,13 +230,19 @@ export async function getPostgresClient(params: {
   postgresRunConfig: PostgresRunConfig;
   user?: {username: string; password?: string};
   database?: string;
+  /** Override config SSL (e.g. false when connecting to configure SSL before it
+   * is enabled) */
+  ssl?: boolean;
 }): Promise<Client> {
-  const {postgresRunConfig, user, database} = params;
+  const {postgresRunConfig, user, database, ssl: sslOverride} = params;
 
   const effectiveUser =
     user ?? getAuthUserFromConfig(postgresRunConfig) ?? undefined;
 
-  const sslEnabled = postgresRunConfig.ssl === 'enabled';
+  const sslEnabled =
+    sslOverride !== undefined
+      ? sslOverride
+      : postgresRunConfig.ssl === 'enabled';
 
   const clientConfig: ConstructorParameters<typeof Client>[0] = {
     host: '127.0.0.1',

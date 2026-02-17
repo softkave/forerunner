@@ -235,11 +235,21 @@ async function configurePostgresAuthorization(params: {
     u => u.username === 'postgres'
   );
 
-  // Set postgres superuser password if not in users list
+  // Set postgres superuser password if not in users list (only if role exists;
+  // when POSTGRES_USER is set, the image may not create the postgres role)
   if (!postgresSuperuser?.password) {
-    const randomPw = generateRandomPassword();
-    await client.query(`ALTER USER postgres WITH PASSWORD $1`, [randomPw]);
-    logger.log('Set postgres superuser to random password (not in user list)');
+    const roleCheck = await client.query(
+      "SELECT 1 FROM pg_roles WHERE rolname = 'postgres'"
+    );
+    if (roleCheck.rows.length > 0) {
+      const randomPw = generateRandomPassword();
+      await client.query(
+        `ALTER USER postgres WITH PASSWORD $pg$${randomPw}$pg$`
+      );
+      logger.log(
+        'Set postgres superuser to random password (not in user list)'
+      );
+    }
   }
 
   // Update postgresql.conf for scram-sha-256
@@ -391,20 +401,24 @@ export async function startPostgresInstance(params: {
 
   // Wait and configure if requested
   if (waitUntilListening) {
+    // Wait without SSL first; SSL is configured below and required only after
+    // that
     await waitForPostgresReady({
       postgresRunConfig,
       containerName,
       port,
-      sslEnabled,
+      sslEnabled: false,
       logger,
       maxAttempts: 10,
       retryIntervalMs: 1000,
     });
 
-    // Configure authorization and SSL
+    // Connect without SSL to configure auth and SSL (SSL not enabled in
+    // container yet)
     const client = await getPostgresClient({
       postgresRunConfig,
       database: 'postgres',
+      ssl: false,
     });
 
     try {

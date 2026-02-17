@@ -45,10 +45,17 @@ export async function generateCAConfigForPostgres(params: {
 
   const password = generateRandomPassword();
   const postgresCAConfig: CAConfig = {
-    ...params.postgresRunConfig.caConfig!,
-    passphrase: params.postgresRunConfig.caConfig!.passphrase || password,
+    passphrase: params.postgresRunConfig.caConfig?.passphrase ?? password,
     outDir: getPostgresCertOutDir(params.postgresRunConfig),
-    files: {
+    days: params.postgresRunConfig.caConfig?.days ?? 3650,
+    subject: params.postgresRunConfig.caConfig?.subject ?? {
+      C: 'NG',
+      ST: 'LA',
+      L: 'Ikeja',
+      O: 'MyOrg',
+      CN: 'MyOrg PostgreSQL CA',
+    },
+    files: params.postgresRunConfig.caConfig?.files ?? {
       key: 'ca.key.pem',
       cert: 'ca.crt.pem',
       csr: 'ca.csr.pem',
