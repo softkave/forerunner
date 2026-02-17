@@ -1,7 +1,10 @@
 import {execFileSync} from 'child_process';
+import path from 'path';
 import {Client} from 'pg';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {getPostgresCertOutDir} from './generatePostgresCertConfigs.js';
+import {generatePostgresCertsMain} from './generatePostgresCerts.js';
 import {getAuthUserFromConfig, PostgresRunConfig} from './postgresRunConfig.js';
 import {
   containerExists,
@@ -9,37 +12,51 @@ import {
   generateRandomPassword,
   getPostgresClient,
   isContainerRunning,
+  pgHbaRequiresSSL,
   readPgHbaConf,
   readPostgresConfig,
   reloadPostgresConfigViaClient,
+  setPgHbaRequireSSL,
   setPgHbaToScram,
   setPostgresConfPasswordEncryption,
+  setPostgresConfSSL,
   volumeExists,
   writePgHbaConf,
   writePostgresConfig,
 } from './utils.js';
 
-export async function startPostgresInstance(params: {
+/**
+ * Ensures SSL certificates are generated if SSL is enabled
+ */
+async function ensureSSLCertificates(params: {
   postgresRunConfig: PostgresRunConfig;
-  logger?: IForeLogger;
-  waitUntilListening?: boolean;
-}) {
-  const {
-    postgresRunConfig,
-    logger = new ConsoleForeLogger({silent: true}),
-    waitUntilListening = false,
-  } = params;
+  logger: IForeLogger;
+}): Promise<void> {
+  const {postgresRunConfig, logger} = params;
+  if (postgresRunConfig.ssl === 'enabled') {
+    logger.log('Generating SSL certificates...');
+    await generatePostgresCertsMain({
+      postgresRunConfig,
+      overwriteConfig: false,
+      overwriteCA: false,
+      overwriteCerts: false,
+      logger,
+    });
+  }
+}
 
-  ensureDockerAvailable();
-
-  const containerName = postgresRunConfig.containerName;
-  const volumeName = postgresRunConfig.volumeName;
-  const port = postgresRunConfig.port;
-  const image = `postgres:${postgresRunConfig.postgresVersion}`;
-
-  // Handle volume management
+/**
+ * Ensures the Docker volume exists, removing it first if keep=false
+ */
+function ensureVolume(params: {
+  volumeName: string;
+  keep: boolean;
+  logger: IForeLogger;
+}): void {
+  const {volumeName, keep, logger} = params;
   const volumeExistsCheck = volumeExists(volumeName);
-  if (!postgresRunConfig.keep && volumeExistsCheck) {
+
+  if (!keep && volumeExistsCheck) {
     logger.log(`Removing existing volume ${volumeName} (keep=false)...`);
     try {
       execFileSync('docker', ['volume', 'rm', volumeName], {
@@ -59,14 +76,22 @@ export async function startPostgresInstance(params: {
       encoding: 'utf8',
     });
   }
+}
 
-  // Check if container is already running
+/**
+ * Ensures container is not running, removing it if it exists but is stopped
+ */
+function ensureContainerNotRunning(params: {
+  containerName: string;
+  logger: IForeLogger;
+}): void {
+  const {containerName, logger} = params;
+
   if (isContainerRunning(containerName)) {
     logger.log(`Container ${containerName} is already running; skipping start`);
     return;
   }
 
-  // Remove existing container if it exists but is not running
   if (containerExists(containerName)) {
     logger.log(`Removing existing stopped container ${containerName}...`);
     try {
@@ -81,11 +106,17 @@ export async function startPostgresInstance(params: {
       );
     }
   }
+}
 
-  // Prepare environment variables
+/**
+ * Builds Docker environment variables for PostgreSQL container
+ */
+function buildDockerEnvVars(params: {
+  postgresRunConfig: PostgresRunConfig;
+}): string[] {
+  const {postgresRunConfig} = params;
   const firstUser = postgresRunConfig.users?.[0];
   const envVars: string[] = [];
-
   const authEnabled = postgresRunConfig.authorization === 'enabled';
 
   if (authEnabled && firstUser) {
@@ -105,7 +136,24 @@ export async function startPostgresInstance(params: {
     envVars.push('-e', `POSTGRES_DB=${postgresRunConfig.dbs[0]}`);
   }
 
-  // Build docker run command
+  return envVars;
+}
+
+/**
+ * Builds Docker run command arguments
+ */
+function buildDockerRunArgs(params: {
+  postgresRunConfig: PostgresRunConfig;
+  envVars: string[];
+  logger: IForeLogger;
+}): string[] {
+  const {postgresRunConfig, envVars, logger} = params;
+  const containerName = postgresRunConfig.containerName;
+  const volumeName = postgresRunConfig.volumeName;
+  const port = postgresRunConfig.port;
+  const image = `postgres:${postgresRunConfig.postgresVersion}`;
+  const sslEnabled = postgresRunConfig.ssl === 'enabled';
+
   const runArgs: string[] = [
     'run',
     '-d',
@@ -116,8 +164,36 @@ export async function startPostgresInstance(params: {
     '-v',
     `${volumeName}:/var/lib/postgresql/data`,
     ...envVars,
-    image,
   ];
+
+  // Mount SSL certificates if SSL is enabled
+  if (sslEnabled) {
+    const certsDir = getPostgresCertOutDir(postgresRunConfig);
+    const certsDirResolved = path.resolve(
+      postgresRunConfig.workingDir,
+      certsDir
+    );
+    runArgs.push('-v', `${certsDirResolved}:/var/lib/postgresql/certs:ro`);
+    logger.log(`Mounting SSL certificates from: ${certsDirResolved}`);
+  }
+
+  runArgs.push(image);
+
+  return runArgs;
+}
+
+/**
+ * Starts the Docker container
+ */
+function startDockerContainer(params: {
+  containerName: string;
+  port: number;
+  volumeName: string;
+  image: string;
+  runArgs: string[];
+  logger: IForeLogger;
+}): void {
+  const {containerName, port, volumeName, image, runArgs, logger} = params;
 
   logger.log(`Starting PostgreSQL container ${containerName}...`);
   logger.log(`Port: ${port}`);
@@ -135,82 +211,244 @@ export async function startPostgresInstance(params: {
       `Failed to start Docker container ${containerName}: ${msg}`
     );
   }
+}
 
-  if (waitUntilListening) {
-    logger.log(`Waiting for PostgreSQL to begin listening...`);
-    const authUser = getAuthUserFromConfig(postgresRunConfig);
-    let attempts = 0;
-    const maxAttempts = 10;
-    while (attempts < maxAttempts) {
-      if (isContainerRunning(containerName)) {
-        try {
-          const client = new Client({
-            host: '127.0.0.1',
-            port: port,
-            user: authUser?.username ?? firstUser?.username ?? 'postgres',
-            password: authUser?.password ?? firstUser?.password ?? undefined,
-            database: postgresRunConfig.dbs?.[0] ?? 'postgres',
-            connectionTimeoutMillis: 2000,
-          });
-          await client.connect();
-          await client.end();
-          logger.log('PostgreSQL is ready');
-          break;
-        } catch {
-          // Not ready yet, continue waiting
-        }
-      }
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      attempts++;
-    }
-    if (attempts >= maxAttempts) {
-      throw new Error(
-        `PostgreSQL container ${containerName} did not become ready within ${maxAttempts} seconds`
-      );
-    }
+/**
+ * Waits for PostgreSQL to become ready and accept connections
+ */
+async function waitForPostgresReady(params: {
+  postgresRunConfig: PostgresRunConfig;
+  containerName: string;
+  port: number;
+  sslEnabled: boolean;
+  logger: IForeLogger;
+}): Promise<void> {
+  const {postgresRunConfig, containerName, port, sslEnabled, logger} = params;
+  logger.log(`Waiting for PostgreSQL to begin listening...`);
 
-    // When authorization enabled: set postgres superuser password if not in
-    // users, ensure pg_hba/scram
-    if (authEnabled && firstUser) {
-      const client = await getPostgresClient({
-        postgresRunConfig,
-        database: 'postgres',
-      });
-      const postgresSuperuser = postgresRunConfig.users?.find(
-        u => u.username === 'postgres'
-      );
+  const authUser = getAuthUserFromConfig(postgresRunConfig);
+  const firstUser = postgresRunConfig.users?.[0];
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  while (attempts < maxAttempts) {
+    if (isContainerRunning(containerName)) {
       try {
-        if (!postgresSuperuser?.password) {
-          const randomPw = generateRandomPassword();
-          await client.query(`ALTER USER postgres WITH PASSWORD $1`, [
-            randomPw,
-          ]);
-          logger.log(
-            'Set postgres superuser to random password (not in user list)'
-          );
+        const clientConfig: ConstructorParameters<typeof Client>[0] = {
+          host: '127.0.0.1',
+          port: port,
+          user: authUser?.username ?? firstUser?.username ?? 'postgres',
+          password: authUser?.password ?? firstUser?.password ?? undefined,
+          database: postgresRunConfig.dbs?.[0] ?? 'postgres',
+          connectionTimeoutMillis: 2000,
+        };
+        if (sslEnabled) {
+          clientConfig.ssl = {rejectUnauthorized: false};
         }
-        const pgHbaContent = readPgHbaConf(containerName);
-        const postgresConfContent = readPostgresConfig(containerName);
-        const hbaScram = setPgHbaToScram(pgHbaContent);
-        const confScram =
-          setPostgresConfPasswordEncryption(postgresConfContent);
-        if (hbaScram !== pgHbaContent) {
-          writePgHbaConf(containerName, hbaScram);
-          logger.log('Updated pg_hba.conf (local and host to scram-sha-256)');
-        }
-        if (confScram !== postgresConfContent) {
-          writePostgresConfig(containerName, confScram);
-          logger.log(
-            'Updated postgresql.conf (password_encryption=scram-sha-256)'
-          );
-        }
-        if (hbaScram !== pgHbaContent || confScram !== postgresConfContent) {
-          await reloadPostgresConfigViaClient(client);
-          logger.log('Reloaded PostgreSQL configuration');
-        }
-      } finally {
+        const client = new Client(clientConfig);
+        await client.connect();
         await client.end();
+        logger.log('PostgreSQL is ready');
+        return;
+      } catch {
+        // Not ready yet, continue waiting
       }
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    attempts++;
+  }
+
+  throw new Error(
+    `PostgreSQL container ${containerName} did not become ready within ${maxAttempts} seconds`
+  );
+}
+
+/**
+ * Configures PostgreSQL authorization (scram-sha-256) if enabled
+ */
+async function configurePostgresAuthorization(params: {
+  postgresRunConfig: PostgresRunConfig;
+  containerName: string;
+  client: Client;
+  logger: IForeLogger;
+}): Promise<void> {
+  const {postgresRunConfig, containerName, client, logger} = params;
+  const authEnabled = postgresRunConfig.authorization === 'enabled';
+  const firstUser = postgresRunConfig.users?.[0];
+
+  if (!authEnabled || !firstUser) {
+    return;
+  }
+
+  const postgresSuperuser = postgresRunConfig.users?.find(
+    u => u.username === 'postgres'
+  );
+
+  // Set postgres superuser password if not in users list
+  if (!postgresSuperuser?.password) {
+    const randomPw = generateRandomPassword();
+    await client.query(`ALTER USER postgres WITH PASSWORD $1`, [randomPw]);
+    logger.log('Set postgres superuser to random password (not in user list)');
+  }
+
+  // Update pg_hba.conf and postgresql.conf for scram-sha-256
+  const pgHbaContent = readPgHbaConf(containerName);
+  const postgresConfContent = readPostgresConfig(containerName);
+  const hbaScram = setPgHbaToScram(pgHbaContent);
+  const confScram = setPostgresConfPasswordEncryption(postgresConfContent);
+
+  let configChanged = false;
+
+  if (hbaScram !== pgHbaContent) {
+    writePgHbaConf(containerName, hbaScram);
+    logger.log('Updated pg_hba.conf (local and host to scram-sha-256)');
+    configChanged = true;
+  }
+
+  if (confScram !== postgresConfContent) {
+    writePostgresConfig(containerName, confScram);
+    logger.log('Updated postgresql.conf (password_encryption=scram-sha-256)');
+    configChanged = true;
+  }
+
+  if (configChanged) {
+    await reloadPostgresConfigViaClient(client);
+    logger.log('Reloaded PostgreSQL configuration');
+  }
+}
+
+/**
+ * Configures PostgreSQL SSL if enabled
+ */
+async function configurePostgresSSL(params: {
+  postgresRunConfig: PostgresRunConfig;
+  containerName: string;
+  client: Client;
+  logger: IForeLogger;
+}): Promise<void> {
+  const {postgresRunConfig, containerName, client, logger} = params;
+
+  if (postgresRunConfig.ssl !== 'enabled') {
+    return;
+  }
+
+  const pgHbaContent = readPgHbaConf(containerName);
+  const postgresConfContent = readPostgresConfig(containerName);
+
+  // Update postgresql.conf with SSL settings
+  const certPath = '/var/lib/postgresql/certs/server.crt.pem';
+  const keyPath = '/var/lib/postgresql/certs/server.key.pem';
+  const caPath = '/var/lib/postgresql/certs/ca.crt.pem';
+  const confWithSSL = setPostgresConfSSL(
+    postgresConfContent,
+    certPath,
+    keyPath,
+    caPath
+  );
+
+  // Update pg_hba.conf to require SSL for host connections
+  const hbaWithSSL = pgHbaRequiresSSL(pgHbaContent)
+    ? pgHbaContent
+    : setPgHbaRequireSSL(pgHbaContent);
+
+  let configChanged = false;
+
+  if (confWithSSL !== postgresConfContent) {
+    writePostgresConfig(containerName, confWithSSL);
+    logger.log('Updated postgresql.conf (SSL enabled)');
+    configChanged = true;
+  }
+
+  if (hbaWithSSL !== pgHbaContent) {
+    writePgHbaConf(containerName, hbaWithSSL);
+    logger.log('Updated pg_hba.conf (SSL required for host connections)');
+    configChanged = true;
+  }
+
+  if (configChanged) {
+    await reloadPostgresConfigViaClient(client);
+    logger.log('Reloaded PostgreSQL configuration (SSL)');
+  }
+}
+
+export async function startPostgresInstance(params: {
+  postgresRunConfig: PostgresRunConfig;
+  logger?: IForeLogger;
+  waitUntilListening?: boolean;
+}) {
+  const {
+    postgresRunConfig,
+    logger = new ConsoleForeLogger({silent: true}),
+    waitUntilListening = false,
+  } = params;
+
+  ensureDockerAvailable();
+
+  const containerName = postgresRunConfig.containerName;
+  const volumeName = postgresRunConfig.volumeName;
+  const port = postgresRunConfig.port;
+  const image = `postgres:${postgresRunConfig.postgresVersion}`;
+  const sslEnabled = postgresRunConfig.ssl === 'enabled';
+
+  // Generate SSL certificates if needed
+  await ensureSSLCertificates({postgresRunConfig, logger});
+
+  // Ensure volume exists
+  ensureVolume({
+    volumeName,
+    keep: postgresRunConfig.keep ?? false,
+    logger,
+  });
+
+  // Ensure container is not running
+  ensureContainerNotRunning({containerName, logger});
+
+  // Build Docker command arguments
+  const envVars = buildDockerEnvVars({postgresRunConfig});
+  const runArgs = buildDockerRunArgs({postgresRunConfig, envVars, logger});
+
+  // Start the container
+  startDockerContainer({
+    containerName,
+    port,
+    volumeName,
+    image,
+    runArgs,
+    logger,
+  });
+
+  // Wait and configure if requested
+  if (waitUntilListening) {
+    await waitForPostgresReady({
+      postgresRunConfig,
+      containerName,
+      port,
+      sslEnabled,
+      logger,
+    });
+
+    // Configure authorization and SSL
+    const client = await getPostgresClient({
+      postgresRunConfig,
+      database: 'postgres',
+    });
+
+    try {
+      await configurePostgresAuthorization({
+        postgresRunConfig,
+        containerName,
+        client,
+        logger,
+      });
+
+      await configurePostgresSSL({
+        postgresRunConfig,
+        containerName,
+        client,
+        logger,
+      });
+    } finally {
+      await client.end();
     }
   }
 }

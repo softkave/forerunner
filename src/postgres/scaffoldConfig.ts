@@ -76,6 +76,49 @@ async function promptForConfig(
     config.authorization =
       authStr.trim().toLowerCase() === 'y' ? 'enabled' : 'disabled';
 
+    const sslStr = await question(rl, 'SSL enabled? (y/n) [n]: ');
+    const sslEnabled = sslStr.trim().toLowerCase() === 'y';
+    if (sslEnabled) {
+      config.ssl = 'enabled';
+      logger.log('\nSSL Certificate Authority Configuration:');
+      const caCountry = await question(rl, 'CA Country (2-letter code) [US]: ');
+      const caState = await question(rl, 'CA State/Province [CA]: ');
+      const caLocality = await question(
+        rl,
+        'CA Locality/City [San Francisco]: '
+      );
+      const caOrg = await question(rl, 'CA Organization [MyOrg]: ');
+      const caCN = await question(rl, 'CA Common Name [PostgreSQL CA]: ');
+      const caDaysStr = await question(
+        rl,
+        'CA Certificate validity (days) [365]: '
+      );
+      const caPassphrase = await readPassword(
+        'CA Passphrase (optional, press Enter to skip): '
+      );
+
+      config.caConfig = {
+        outDir: path.resolve(config.workingDir ?? process.cwd(), 'certs'),
+        files: {
+          key: 'ca.key.pem',
+          cert: 'ca.crt.pem',
+          csr: 'ca.csr.pem',
+          chain: 'ca-chain.pem',
+        },
+        days: caDaysStr.trim() ? parseInt(caDaysStr.trim(), 10) : 365,
+        subject: {
+          C: caCountry.trim() || 'NG',
+          ST: caState.trim() || 'LA',
+          L: caLocality.trim() || 'Ikeja',
+          O: caOrg.trim() || 'MyOrg',
+          CN: caCN.trim() || 'PostgreSQL CA',
+        },
+        passphrase: caPassphrase.trim() || undefined,
+      };
+    } else {
+      config.ssl = 'disabled';
+    }
+
     // Admin user (when authorization enabled, password is required)
     logger.log('\nAdmin User (first user):');
     const adminUsername = await question(rl, 'Admin username [admin]: ');
@@ -173,7 +216,8 @@ function getDefaultConfig(): PostgresRunConfig {
     volumeName: 'postgres-db',
     postgresVersion: '16',
     keep: false,
-    authorization: 'enabled',
+    authorization: 'disabled',
+    ssl: 'disabled',
     users: [
       {
         username: 'admin',

@@ -97,6 +97,75 @@ export function setPostgresConfPasswordEncryption(content: string): string {
   return content + '\npassword_encryption = scram-sha-256\n';
 }
 
+/**
+ * Enable SSL in postgresql.conf and set certificate paths
+ */
+export function setPostgresConfSSL(
+  content: string,
+  certPath: string,
+  keyPath: string,
+  caPath: string
+): string {
+  let result = content;
+
+  // Set ssl = on
+  if (/^ssl\s*=\s*on$/m.test(result)) {
+    // Already set
+  } else if (/^ssl\s*=/m.test(result)) {
+    result = result.replace(/^ssl\s*=.*$/m, 'ssl = on');
+  } else {
+    result = result + '\nssl = on\n';
+  }
+
+  // Set ssl_cert_file
+  if (/^ssl_cert_file\s*=/m.test(result)) {
+    result = result.replace(
+      /^ssl_cert_file\s*=.*$/m,
+      `ssl_cert_file = '${certPath}'`
+    );
+  } else {
+    result = result + `\nssl_cert_file = '${certPath}'\n`;
+  }
+
+  // Set ssl_key_file
+  if (/^ssl_key_file\s*=/m.test(result)) {
+    result = result.replace(
+      /^ssl_key_file\s*=.*$/m,
+      `ssl_key_file = '${keyPath}'`
+    );
+  } else {
+    result = result + `\nssl_key_file = '${keyPath}'\n`;
+  }
+
+  // Set ssl_ca_file
+  if (/^ssl_ca_file\s*=/m.test(result)) {
+    result = result.replace(
+      /^ssl_ca_file\s*=.*$/m,
+      `ssl_ca_file = '${caPath}'`
+    );
+  } else {
+    result = result + `\nssl_ca_file = '${caPath}'\n`;
+  }
+
+  return result;
+}
+
+/**
+ * Require SSL in pg_hba.conf for host connections
+ */
+export function setPgHbaRequireSSL(content: string): string {
+  // Replace 'host' with 'hostssl' for all host entries to require SSL
+  // Preserve the rest of the line after 'host'
+  return content.replace(/^(host)(\s+)/gm, 'hostssl$2');
+}
+
+/**
+ * Check if pg_hba.conf requires SSL (has hostssl entries)
+ */
+export function pgHbaRequiresSSL(content: string): boolean {
+  return /^hostssl\s+/m.test(content);
+}
+
 export async function getPostgresClient(params: {
   postgresRunConfig: PostgresRunConfig;
   user?: {username: string; password?: string};
@@ -107,13 +176,23 @@ export async function getPostgresClient(params: {
   const effectiveUser =
     user ?? getAuthUserFromConfig(postgresRunConfig) ?? undefined;
 
-  const client = new Client({
+  const sslEnabled = postgresRunConfig.ssl === 'enabled';
+
+  const clientConfig: ConstructorParameters<typeof Client>[0] = {
     host: '127.0.0.1',
     port: postgresRunConfig.port,
     user: effectiveUser?.username ?? 'postgres',
     password: effectiveUser?.password ?? undefined,
     database: database ?? postgresRunConfig.dbs?.[0] ?? 'postgres',
-  });
+  };
+
+  if (sslEnabled) {
+    clientConfig.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
+
+  const client = new Client(clientConfig);
 
   await client.connect();
   return client;
