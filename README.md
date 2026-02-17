@@ -263,6 +263,94 @@ softkave-forerunner mongo restart -c <config-path> [options]
 - `--force` - Force stop MongoDB instances (default: false)
 - `-s, --silent` - Silent mode
 
+### PostgreSQL Management (`postgres`)
+
+PostgreSQL instance management via Docker. Supports single PostgreSQL instances with configurable authentication, users, and databases.
+
+**Docker is required** for postgres operations (start, stop, setup-users, setup-dbs); instances run as Docker containers.
+
+**Security**: PostgreSQL instances bind only to localhost (127.0.0.1) for security.
+
+**Authentication**: Supports trust authentication (for development) and scram-sha-256 password authentication. When starting with no users or users without passwords, PostgreSQL starts with trust authentication. When users with passwords are added later, the system automatically transitions from trust to scram-sha-256 authentication.
+
+#### Scaffold Configuration
+
+```bash
+softkave-forerunner postgres scaffold-config [options]
+```
+
+**Description**: Generates a PostgreSQL configuration file interactively or with default values.
+
+**Options**:
+
+- `--defaults` - Use default values instead of prompting (default: false)
+- `-o, --output <path>` - Output file path (default: "./postgres-run-config.json")
+- `-s, --silent` - Silent mode
+
+#### Start PostgreSQL Instance
+
+```bash
+softkave-forerunner postgres start [options]
+```
+
+**Description**: Starts a PostgreSQL instance in a Docker container. Can be called with a config file or with CLI arguments.
+
+**Options**:
+
+- `-c, --config <path>` - Path to postgres run config file (optional if CLI args provided)
+- `-s, --silent` - Silent mode
+
+**CLI Arguments** (when no config provided):
+
+- `--port <port>` - Port number (required)
+- `--container-name <name>` - Container name (required)
+- `--working-dir <dir>` - Working directory
+- `--version <version>` - PostgreSQL version (default: "16")
+- `--volume-name <name>` - Volume name (defaults to container name)
+- `--keep` - Keep data across restarts
+- `--user <username>` - Admin username
+- `--password <password>` - Admin password
+- `--db <dbname>` - Default database name
+
+#### Stop PostgreSQL Instance
+
+```bash
+softkave-forerunner postgres stop [options]
+```
+
+**Description**: Stops a PostgreSQL instance. Can be called with a config file or just a container name.
+
+**Options**:
+
+- `-c, --config <path>` - Path to postgres run config file (optional if container name provided)
+- `--container-name <name>` - Container name (required if no config)
+- `--remove-volume` - Remove volume on stop (default: false)
+- `-s, --silent` - Silent mode
+
+#### Setup PostgreSQL Users
+
+```bash
+softkave-forerunner postgres setup-users -c <config-path> [options]
+```
+
+**Description**: Sets up PostgreSQL users (excluding the first admin user which is created via POSTGRES_USER/POSTGRES_PASSWORD). Creates users that don't exist and updates passwords for existing users. If transitioning from trust to password authentication, automatically updates pg_hba.conf and postgresql.conf to use scram-sha-256.
+
+**Prerequisites**: Expects PostgreSQL instance to be running and connects using the admin user from config.
+
+**Options**: `-c, --config <path>` (required), `-s, --silent`
+
+#### Setup PostgreSQL Databases
+
+```bash
+softkave-forerunner postgres setup-dbs -c <config-path> [options]
+```
+
+**Description**: Creates PostgreSQL databases that don't exist. The first database in config is created via POSTGRES_DB environment variable during container startup, so this command only creates additional databases.
+
+**Prerequisites**: Expects PostgreSQL instance to be running and connects using the admin user from config.
+
+**Options**: `-c, --config <path>` (required), `-s, --silent`
+
 ### Hosts File Management (`etc-hosts`)
 
 Manage `/etc/hosts` file entries for local development.
@@ -435,6 +523,34 @@ softkave-forerunner mongo restart -c mongo-config.json
 
 # Print connection URI
 softkave-forerunner mongo print-uri -c mongo-config.json
+```
+
+### PostgreSQL Management
+
+```bash
+# Generate configuration file interactively
+softkave-forerunner postgres scaffold-config
+
+# Generate configuration file with defaults
+softkave-forerunner postgres scaffold-config --defaults
+
+# Start PostgreSQL instance with config file
+softkave-forerunner postgres start -c postgres-config.json
+
+# Start PostgreSQL instance with CLI arguments
+softkave-forerunner postgres start --port 5432 --container-name postgres-db --user admin --password admin-password --db mydb
+
+# Stop PostgreSQL instance with config file
+softkave-forerunner postgres stop -c postgres-config.json
+
+# Stop PostgreSQL instance with container name only
+softkave-forerunner postgres stop --container-name postgres-db
+
+# Setup users (excluding admin)
+softkave-forerunner postgres setup-users -c postgres-config.json
+
+# Setup databases (excluding default database)
+softkave-forerunner postgres setup-dbs -c postgres-config.json
 ```
 
 ### Hosts File Management
@@ -665,6 +781,104 @@ The MongoDB commands require a configuration file that specifies MongoDB version
   ]
 }
 ```
+
+### PostgreSQL Configuration
+
+The PostgreSQL commands require a configuration file that specifies PostgreSQL version, port, container settings, users, and databases. Below is a detailed breakdown of each configuration option:
+
+#### Configuration Options
+
+**`workingDir`** (string, optional)
+
+- **Description**: The working directory for storing configuration cache
+- **Example**: `"./postgres-data"`
+- **Default**: Current working directory (`process.cwd()`)
+
+**`port`** (number, required)
+
+- **Description**: Port number for PostgreSQL instance
+- **Example**: `5432`
+- **Note**: Must be a positive integer
+
+**`postgresVersion`** (string, optional)
+
+- **Description**: PostgreSQL version to use
+- **Example**: `"16"`
+- **Default**: `"16"`
+
+**`containerName`** (string, required)
+
+- **Description**: Docker container name
+- **Example**: `"postgres-db"`
+- **Note**: Must be unique
+
+**`volumeName`** (string, optional)
+
+- **Description**: Docker volume name for data persistence
+- **Example**: `"postgres-db"`
+- **Default**: Same as `containerName`
+
+**`keep`** (boolean, optional)
+
+- **Description**: Whether to keep data across restarts
+- **Example**: `true`
+- **Default**: `false`
+- **Note**: When `false`, existing volumes are removed on start
+
+**`users`** (array, optional)
+
+- **Description**: PostgreSQL users to create. The first user is the admin user (set via POSTGRES_USER/POSTGRES_PASSWORD environment variables).
+- **Properties**:
+  - `username` (string): User login name
+  - `password` (string): User password
+- **Note**: If no users are provided or users without passwords, PostgreSQL starts with trust authentication. When users with passwords are added later, the system automatically transitions to scram-sha-256 authentication.
+
+**`dbs`** (array of strings, optional)
+
+- **Description**: Databases to create. The first database is created via POSTGRES_DB environment variable during container startup.
+- **Example**: `["mydb", "testdb"]`
+
+**Example PostgreSQL Configuration** (`postgres-run-config.json`):
+
+```json
+{
+  "workingDir": "./postgres-data",
+  "port": 5432,
+  "postgresVersion": "16",
+  "containerName": "postgres-db",
+  "volumeName": "postgres-db",
+  "keep": true,
+  "users": [
+    {
+      "username": "admin",
+      "password": "admin-password"
+    },
+    {
+      "username": "appuser",
+      "password": "app-password"
+    }
+  ],
+  "dbs": ["mydb", "testdb"]
+}
+```
+
+#### Authentication Behavior
+
+PostgreSQL authentication works as follows:
+
+1. **Initial Start (no users or users without passwords)**:
+   - Sets `POSTGRES_HOST_AUTH_METHOD=trust` environment variable
+   - PostgreSQL starts with trust authentication (no password required)
+
+2. **Subsequent Start (users with passwords provided)**:
+   - If users with passwords are configured, the system checks if authentication needs to transition from trust to scram-sha-256
+   - If transition is needed:
+     - Updates `pg_hba.conf` to use `scram-sha-256` instead of `trust`
+     - Sets `password_encryption = scram-sha-256` in `postgresql.conf`
+     - Reloads PostgreSQL configuration
+   - Sets up users with passwords
+
+3. **Security**: PostgreSQL instances bind only to `127.0.0.1` (localhost) for security, not to `0.0.0.0` (all interfaces).
 
 ### Certificate Configuration
 

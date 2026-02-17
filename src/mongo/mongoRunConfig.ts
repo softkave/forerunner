@@ -155,7 +155,7 @@ export async function getMongoRunConfig(params: {
   mongoRunConfigFilepath: string;
   cacheConfig?: boolean;
 }) {
-  const {mongoRunConfigFilepath, cacheConfig = true} = params;
+  const {mongoRunConfigFilepath, cacheConfig = false} = params;
   const mongoRunConfig = mongoRunConfigSchema.parse(
     JSON.parse(await fs.promises.readFile(mongoRunConfigFilepath, 'utf8'))
   );

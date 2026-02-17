@@ -8,11 +8,11 @@ The project provides a CLI and JS SDK. The CLI is split into sub-programs using 
 
 ## Setup & Build Commands
 
-- `npm compile` - To compile the project.
+- `pnpm compile` - To compile the project.
 
 ## Testing Instructions
 
-- `npm test` - To test the project. It wraps `vitest run`, so it can be called with vitest arguments.
+- `pnpm test` - To test the project. It wraps `vitest run`, so it can be called with vitest arguments.
 
 ## Code Style & Conventions
 
@@ -37,6 +37,7 @@ The project provides a CLI and JS SDK. The CLI is split into sub-programs using 
 ### Conventions
 
 - Each sub-program/logical group is grouped in a folder.
+- Use `pnpm` as package manager.
 
 ## Architecture
 

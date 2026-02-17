@@ -3,6 +3,11 @@ import crypto from 'crypto';
 import {ensureDir} from 'fs-extra';
 import {chmod} from 'fs/promises';
 import path from 'path';
+import {
+  containerExists,
+  ensureDockerAvailable,
+  isContainerRunning,
+} from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {
@@ -169,42 +174,6 @@ export function getDockerContainerName(
     .digest('hex')
     .slice(0, 12);
   return `mongo-${hash}-mongod-${instanceNumber}`;
-}
-
-function ensureDockerAvailable(): void {
-  try {
-    execFileSync('docker', ['info'], {stdio: 'pipe', encoding: 'utf8'});
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Docker is not available. Please ensure Docker is installed and running: ${msg}`
-    );
-  }
-}
-
-function containerExists(containerName: string): boolean {
-  try {
-    execFileSync('docker', ['inspect', '-f', '{{.Id}}', containerName], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isContainerRunning(containerName: string): boolean {
-  try {
-    const out = execFileSync(
-      'docker',
-      ['inspect', '-f', '{{.State.Running}}', containerName],
-      {stdio: 'pipe', encoding: 'utf8'}
-    );
-    return out.trim() === 'true';
-  } catch {
-    return false;
-  }
 }
 
 export async function startMongodInstance(params: {
