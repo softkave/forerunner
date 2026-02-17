@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import {Client} from 'pg';
-import {execInContainer} from '../utils/docker.js';
+import {execInContainer, isContainerRunning} from '../utils/docker.js';
+import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getAuthUserFromConfig, PostgresRunConfig} from './postgresRunConfig.js';
 
 export {
@@ -196,4 +197,72 @@ export async function getPostgresClient(params: {
 
   await client.connect();
   return client;
+}
+
+/**
+ * Waits for PostgreSQL to become ready and accept connections
+ * @param params.postgresRunConfig - PostgreSQL run configuration
+ * @param params.containerName - Docker container name
+ * @param params.port - PostgreSQL port
+ * @param params.sslEnabled - Whether SSL is enabled
+ * @param params.logger - Logger instance
+ * @param params.maxAttempts - Maximum number of connection attempts (default: 10)
+ * @param params.retryIntervalMs - Interval between retry attempts in milliseconds (default: 1000)
+ * @throws Error if PostgreSQL does not become ready within maxAttempts * retryIntervalMs
+ */
+export async function waitForPostgresReady(params: {
+  postgresRunConfig: PostgresRunConfig;
+  containerName: string;
+  port: number;
+  sslEnabled: boolean;
+  logger?: IForeLogger;
+  maxAttempts?: number;
+  retryIntervalMs?: number;
+}): Promise<void> {
+  const {
+    postgresRunConfig,
+    containerName,
+    port,
+    sslEnabled,
+    logger,
+    maxAttempts = 10,
+    retryIntervalMs = 1000,
+  } = params;
+
+  logger?.log(`Waiting for PostgreSQL to begin listening...`);
+
+  const authUser = getAuthUserFromConfig(postgresRunConfig);
+  const firstUser = postgresRunConfig.users?.[0];
+  let attempts = 0;
+
+  while (attempts < maxAttempts) {
+    if (isContainerRunning(containerName)) {
+      try {
+        const clientConfig: ConstructorParameters<typeof Client>[0] = {
+          host: '127.0.0.1',
+          port: port,
+          user: authUser?.username ?? firstUser?.username ?? 'postgres',
+          password: authUser?.password ?? firstUser?.password ?? undefined,
+          database: postgresRunConfig.dbs?.[0] ?? 'postgres',
+          connectionTimeoutMillis: 2000,
+        };
+        if (sslEnabled) {
+          clientConfig.ssl = {rejectUnauthorized: false};
+        }
+        const client = new Client(clientConfig);
+        await client.connect();
+        await client.end();
+        logger?.log('PostgreSQL is ready');
+        return;
+      } catch {
+        // Not ready yet, continue waiting
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, retryIntervalMs));
+    attempts++;
+  }
+
+  throw new Error(
+    `PostgreSQL container ${containerName} did not become ready within ${maxAttempts} attempts (${maxAttempts * retryIntervalMs}ms)`
+  );
 }

@@ -5,7 +5,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getPostgresCertOutDir} from './generatePostgresCertConfigs.js';
 import {generatePostgresCertsMain} from './generatePostgresCerts.js';
-import {getAuthUserFromConfig, PostgresRunConfig} from './postgresRunConfig.js';
+import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
   containerExists,
   ensureDockerAvailable,
@@ -21,6 +21,7 @@ import {
   setPostgresConfPasswordEncryption,
   setPostgresConfSSL,
   volumeExists,
+  waitForPostgresReady,
   writePgHbaConf,
   writePostgresConfig,
 } from './utils.js';
@@ -214,56 +215,6 @@ function startDockerContainer(params: {
 }
 
 /**
- * Waits for PostgreSQL to become ready and accept connections
- */
-async function waitForPostgresReady(params: {
-  postgresRunConfig: PostgresRunConfig;
-  containerName: string;
-  port: number;
-  sslEnabled: boolean;
-  logger: IForeLogger;
-}): Promise<void> {
-  const {postgresRunConfig, containerName, port, sslEnabled, logger} = params;
-  logger.log(`Waiting for PostgreSQL to begin listening...`);
-
-  const authUser = getAuthUserFromConfig(postgresRunConfig);
-  const firstUser = postgresRunConfig.users?.[0];
-  let attempts = 0;
-  const maxAttempts = 10;
-
-  while (attempts < maxAttempts) {
-    if (isContainerRunning(containerName)) {
-      try {
-        const clientConfig: ConstructorParameters<typeof Client>[0] = {
-          host: '127.0.0.1',
-          port: port,
-          user: authUser?.username ?? firstUser?.username ?? 'postgres',
-          password: authUser?.password ?? firstUser?.password ?? undefined,
-          database: postgresRunConfig.dbs?.[0] ?? 'postgres',
-          connectionTimeoutMillis: 2000,
-        };
-        if (sslEnabled) {
-          clientConfig.ssl = {rejectUnauthorized: false};
-        }
-        const client = new Client(clientConfig);
-        await client.connect();
-        await client.end();
-        logger.log('PostgreSQL is ready');
-        return;
-      } catch {
-        // Not ready yet, continue waiting
-      }
-    }
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    attempts++;
-  }
-
-  throw new Error(
-    `PostgreSQL container ${containerName} did not become ready within ${maxAttempts} seconds`
-  );
-}
-
-/**
  * Configures PostgreSQL authorization (scram-sha-256) if enabled
  */
 async function configurePostgresAuthorization(params: {
@@ -425,6 +376,8 @@ export async function startPostgresInstance(params: {
       port,
       sslEnabled,
       logger,
+      maxAttempts: 10,
+      retryIntervalMs: 1000,
     });
 
     // Configure authorization and SSL
