@@ -73,6 +73,59 @@ export function generateRandomPassword(): string {
   return crypto.randomBytes(32).toString('base64').replace(/[/+=]/g, 'x');
 }
 
+/**
+ * Generate pg_hba.conf entries for a user with specific database access
+ */
+export function generatePgHbaEntriesForUser(params: {
+  username: string;
+  databases: string[] | undefined;
+  authMethod: 'trust' | 'scram-sha-256';
+  requireSSL?: boolean;
+  connectionTypes?: ('tcp' | 'local')[];
+}): string {
+  const {
+    username,
+    databases,
+    authMethod,
+    requireSSL = false,
+    connectionTypes = ['tcp', 'local'], // Default: allow both
+  } = params;
+  const entries: string[] = [];
+  const allowTCP = connectionTypes.includes('tcp');
+  const allowLocal = connectionTypes.includes('local');
+  const connectionType = requireSSL ? 'hostssl' : 'host';
+
+  if (databases && databases.length > 0) {
+    // User has specific database access
+    for (const db of databases) {
+      if (allowTCP) {
+        entries.push(
+          `${connectionType} ${db} ${username} 127.0.0.1/32 ${authMethod}`
+        );
+        entries.push(
+          `${connectionType} ${db} ${username} ::1/128 ${authMethod}`
+        );
+      }
+      if (allowLocal) {
+        entries.push(`local ${db} ${username} ${authMethod}`);
+      }
+    }
+  } else {
+    // User has access to all databases
+    if (allowTCP) {
+      entries.push(
+        `${connectionType} all ${username} 127.0.0.1/32 ${authMethod}`
+      );
+      entries.push(`${connectionType} all ${username} ::1/128 ${authMethod}`);
+    }
+    if (allowLocal) {
+      entries.push(`local all ${username} ${authMethod}`);
+    }
+  }
+
+  return entries.join('\n');
+}
+
 export function setPgHbaToScram(content: string): string {
   return content
     .replace(/^(local\s+all\s+all\s+)\S+$/gm, '$1scram-sha-256')

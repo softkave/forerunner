@@ -4,11 +4,29 @@ import path from 'path';
 import z from 'zod';
 import {CAConfigSchema} from '../certs/types.js';
 
+export const PostgresConnectionTypeSchema = z.enum(['tcp', 'local']);
+export type PostgresConnectionType = z.infer<
+  typeof PostgresConnectionTypeSchema
+>;
+
 export const PostgresUserSchema = z.object({
   username: z.string().min(1, 'username is required'),
   // Optional - if missing, user has no password (trust auth, if no other user
   // has a password)
   password: z.string().optional(),
+  // Optional - list of databases this user can connect to and manage
+  // If not specified, user can access all databases
+  databases: z
+    .array(z.string().min(1, 'database name cannot be empty'))
+    .optional(),
+  // Optional - list of connection types allowed for this user
+  // 'tcp' = TCP/IP connections (host/hostssl entries in pg_hba.conf)
+  // 'local' = local Unix socket connections (local entries in pg_hba.conf)
+  // If not specified, user can connect via both tcp and local
+  connectionTypes: z
+    .array(PostgresConnectionTypeSchema)
+    .min(1, 'At least one connection type must be specified')
+    .optional(),
 });
 
 export const PostgresUserListSchema = z.array(PostgresUserSchema);
@@ -60,22 +78,27 @@ export const postgresRunConfigSchema = z
     authorization: data.authorization ?? 'disabled',
     ssl: data.ssl ?? 'disabled',
   }))
-  .refine(
-    data => {
-      if (data.authorization !== 'enabled') return true;
-      const users = data.users;
-      if (!users || users.length === 0) {
-        return false;
-      }
-      return users.every(
-        u => typeof u.password === 'string' && u.password.length > 0
-      );
-    },
-    {
-      message:
-        'When authorization is enabled, at least one user is required and all users must have a password',
+  .superRefine((data, ctx) => {
+    if (data.authorization !== 'enabled') return;
+    const users = data.users;
+    if (!users || users.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'When authorization is enabled, at least one user is required',
+        path: ['users'],
+      });
+      return;
     }
-  )
+    users.forEach((user, index) => {
+      if (!user.password || user.password.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `User "${user.username}" must have a password when authorization is enabled`,
+          path: ['users', index, 'password'],
+        });
+      }
+    });
+  })
   .refine(
     data => {
       if (data.ssl !== 'enabled') return true;
@@ -84,7 +107,25 @@ export const postgresRunConfigSchema = z
     {
       message: 'caConfig is required when ssl is enabled',
     }
-  );
+  )
+  .superRefine((data, ctx) => {
+    // Validate that databases specified for users exist in the dbs list
+    if (!data.users || !data.dbs) return;
+    const dbSet = new Set(data.dbs);
+    data.users.forEach((user, userIndex) => {
+      if (user.databases) {
+        user.databases.forEach((db, dbIndex) => {
+          if (!dbSet.has(db)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `User "${user.username}" references database "${db}" which does not exist in the dbs array.`,
+              path: ['users', userIndex, 'databases', dbIndex],
+            });
+          }
+        });
+      }
+    });
+  });
 
 export type PostgresRunConfig = z.infer<typeof postgresRunConfigSchema>;
 

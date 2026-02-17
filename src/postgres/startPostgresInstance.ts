@@ -9,6 +9,7 @@ import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
   containerExists,
   ensureDockerAvailable,
+  generatePgHbaEntriesForUser,
   generateRandomPassword,
   getPostgresClient,
   isContainerRunning,
@@ -17,7 +18,6 @@ import {
   readPostgresConfig,
   reloadPostgresConfigViaClient,
   setPgHbaRequireSSL,
-  setPgHbaToScram,
   setPostgresConfPasswordEncryption,
   setPostgresConfSSL,
   volumeExists,
@@ -242,23 +242,44 @@ async function configurePostgresAuthorization(params: {
     logger.log('Set postgres superuser to random password (not in user list)');
   }
 
-  // Update pg_hba.conf and postgresql.conf for scram-sha-256
-  const pgHbaContent = readPgHbaConf(containerName);
+  // Update postgresql.conf for scram-sha-256
   const postgresConfContent = readPostgresConfig(containerName);
-  const hbaScram = setPgHbaToScram(pgHbaContent);
   const confScram = setPostgresConfPasswordEncryption(postgresConfContent);
 
   let configChanged = false;
 
-  if (hbaScram !== pgHbaContent) {
-    writePgHbaConf(containerName, hbaScram);
-    logger.log('Updated pg_hba.conf (local and host to scram-sha-256)');
-    configChanged = true;
-  }
-
   if (confScram !== postgresConfContent) {
     writePostgresConfig(containerName, confScram);
     logger.log('Updated postgresql.conf (password_encryption=scram-sha-256)');
+    configChanged = true;
+  }
+
+  // Generate pg_hba.conf entries with database-specific access
+  const sslEnabled = postgresRunConfig.ssl === 'enabled';
+  const authMethod = 'scram-sha-256';
+  const pgHbaEntries: string[] = [];
+
+  if (postgresRunConfig.users) {
+    for (const user of postgresRunConfig.users) {
+      const entries = generatePgHbaEntriesForUser({
+        username: user.username,
+        databases: user.databases,
+        authMethod,
+        requireSSL: sslEnabled,
+        connectionTypes: user.connectionTypes,
+      });
+      pgHbaEntries.push(entries);
+    }
+  }
+
+  const newPgHba = pgHbaEntries.join('\n') + '\n';
+  const pgHbaContent = readPgHbaConf(containerName);
+
+  if (newPgHba.trim() !== pgHbaContent.trim()) {
+    writePgHbaConf(containerName, newPgHba);
+    logger.log(
+      'Updated pg_hba.conf with user-specific database entries (scram-sha-256)'
+    );
     configChanged = true;
   }
 

@@ -119,57 +119,7 @@ async function promptForConfig(
       config.ssl = 'disabled';
     }
 
-    // Admin user (when authorization enabled, password is required)
-    logger.log('\nAdmin User (first user):');
-    const adminUsername = await question(rl, 'Admin username [admin]: ');
-    const adminPassword = await readPassword(
-      config.authorization === 'enabled'
-        ? 'Admin password (required): '
-        : 'Admin password (optional, for trust auth): '
-    );
-
-    if (adminUsername.trim() || adminPassword.trim()) {
-      config.users = [
-        {
-          username: adminUsername.trim() || 'admin',
-          password: adminPassword.trim() || undefined,
-        },
-      ];
-    }
-
-    // Additional users
-    logger.log('\nAdditional Users (optional):');
-    const addMoreUsers = await question(
-      rl,
-      'Add additional users? (y/n) [n]: '
-    );
-    if (addMoreUsers.trim().toLowerCase() === 'y') {
-      const users = config.users ?? [];
-      let addAnother = true;
-
-      while (addAnother) {
-        const username = await question(rl, 'Username (empty to finish): ');
-        if (!username.trim()) {
-          addAnother = false;
-          break;
-        }
-
-        const password = await readPassword(
-          'Password (empty for trust auth): '
-        );
-        users.push({
-          username: username.trim(),
-          password: password.trim() || undefined,
-        });
-
-        const more = await question(rl, 'Add another user? (y/n) [n]: ');
-        addAnother = more.trim().toLowerCase() === 'y';
-      }
-
-      config.users = users;
-    }
-
-    // Databases
+    // Databases (must be configured before users so we can reference them)
     logger.log('\nDatabases:');
     const defaultDb = await question(rl, 'Default database name [mydb]: ');
     const dbs: string[] = [];
@@ -201,6 +151,131 @@ async function promptForConfig(
     }
 
     config.dbs = dbs;
+
+    // Admin user (when authorization enabled, password is required)
+    logger.log('\nAdmin User (first user):');
+    const adminUsername = await question(rl, 'Admin username [admin]: ');
+    const adminPassword = await readPassword(
+      config.authorization === 'enabled'
+        ? 'Admin password (required): '
+        : 'Admin password (optional, for trust auth): '
+    );
+
+    // Ask for database permissions for admin user
+    const restrictAdminDbs = await question(
+      rl,
+      'Restrict admin to specific databases? (y/n) [n]: '
+    );
+    let adminDatabases: string[] | undefined = undefined;
+    if (restrictAdminDbs.trim().toLowerCase() === 'y' && dbs.length > 0) {
+      logger.log(`Available databases: ${dbs.join(', ')}`);
+      const dbList = await question(
+        rl,
+        'Comma-separated list of database names (empty for all): '
+      );
+      if (dbList.trim()) {
+        adminDatabases = dbList
+          .split(',')
+          .map(db => db.trim())
+          .filter(db => db.length > 0);
+      }
+    }
+
+    // Ask for connection types for admin user
+    const restrictConnections = await question(
+      rl,
+      'Restrict admin connection types? (tcp/local/both) [both]: '
+    );
+    let adminConnectionTypes: ('tcp' | 'local')[] | undefined = undefined;
+    const connTypeInput = restrictConnections.trim().toLowerCase();
+    if (connTypeInput === 'tcp') {
+      adminConnectionTypes = ['tcp'];
+    } else if (connTypeInput === 'local') {
+      adminConnectionTypes = ['local'];
+    } else if (connTypeInput === 'both' || connTypeInput === '') {
+      adminConnectionTypes = ['tcp', 'local'];
+    }
+
+    if (adminUsername.trim() || adminPassword.trim()) {
+      config.users = [
+        {
+          username: adminUsername.trim() || 'admin',
+          password: adminPassword.trim() || undefined,
+          databases: adminDatabases,
+          connectionTypes: adminConnectionTypes,
+        },
+      ];
+    }
+
+    // Additional users
+    logger.log('\nAdditional Users (optional):');
+    const addMoreUsers = await question(
+      rl,
+      'Add additional users? (y/n) [n]: '
+    );
+    if (addMoreUsers.trim().toLowerCase() === 'y') {
+      const users = config.users ?? [];
+      let addAnother = true;
+
+      while (addAnother) {
+        const username = await question(rl, 'Username (empty to finish): ');
+        if (!username.trim()) {
+          addAnother = false;
+          break;
+        }
+
+        const password = await readPassword(
+          'Password (empty for trust auth): '
+        );
+
+        // Ask for database permissions
+        const restrictDbs = await question(
+          rl,
+          'Restrict user to specific databases? (y/n) [n]: '
+        );
+        let databases: string[] | undefined = undefined;
+        if (restrictDbs.trim().toLowerCase() === 'y' && dbs.length > 0) {
+          logger.log(`Available databases: ${dbs.join(', ')}`);
+          const dbList = await question(
+            rl,
+            'Comma-separated list of database names (empty for all): '
+          );
+          if (dbList.trim()) {
+            databases = dbList
+              .split(',')
+              .map(db => db.trim())
+              .filter(db => db.length > 0);
+          }
+        }
+
+        // Ask for connection types
+        const restrictConnections = await question(
+          rl,
+          'Restrict connection types? (tcp/local/both) [both]: '
+        );
+        let connectionTypes: ('tcp' | 'local')[] | undefined = undefined;
+        const connTypeInput = restrictConnections.trim().toLowerCase();
+        if (connTypeInput === 'tcp') {
+          connectionTypes = ['tcp'];
+        } else if (connTypeInput === 'local') {
+          connectionTypes = ['local'];
+        } else if (connTypeInput === 'both' || connTypeInput === '') {
+          connectionTypes = ['tcp', 'local'];
+        }
+
+        users.push({
+          username: username.trim(),
+          password: password.trim() || undefined,
+          databases,
+          connectionTypes,
+        });
+
+        const more = await question(rl, 'Add another user? (y/n) [n]: ');
+        addAnother = more.trim().toLowerCase() === 'y';
+      }
+
+      config.users = users;
+    }
   } finally {
     rl.close();
   }

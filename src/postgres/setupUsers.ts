@@ -3,13 +3,12 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
+  generatePgHbaEntriesForUser,
   generateRandomPassword,
   getPostgresClient,
   readPgHbaConf,
   readPostgresConfig,
   reloadPostgresConfigViaClient,
-  setPgHbaToScram,
-  setPgHbaToTrust,
   setPostgresConfPasswordEncryption,
   writePgHbaConf,
   writePostgresConfig,
@@ -66,9 +65,94 @@ function pgHbaUsesTrust(content: string): boolean {
   );
 }
 
+/**
+ * Grant database permissions to a user
+ * Note: Schema-level privileges must be granted while connected to the target database
+ * because schemas are database-scoped in PostgreSQL
+ */
+async function grantDatabasePermissions(
+  postgresRunConfig: PostgresRunConfig,
+  username: string,
+  databases: string[] | undefined,
+  logger: IForeLogger
+): Promise<void> {
+  if (!databases || databases.length === 0) {
+    // No specific databases - user already has access to all (default)
+    return;
+  }
+
+  // Get a client connected to the postgres database for cluster-level grants
+  const adminClient = await getPostgresClient({
+    postgresRunConfig,
+    database: 'postgres',
+  });
+
+  try {
+    for (const db of databases) {
+      try {
+        // Grant CONNECT privilege (cluster-level, can be done from any database)
+        await adminClient.query(
+          `GRANT CONNECT ON DATABASE ${adminClient.escapeIdentifier(db)} TO ${adminClient.escapeIdentifier(username)}`
+        );
+        // Grant CREATE privilege on database to allow user to create schemas (namespaces)
+        await adminClient.query(
+          `GRANT CREATE ON DATABASE ${adminClient.escapeIdentifier(db)} TO ${adminClient.escapeIdentifier(username)}`
+        );
+
+        // For schema-level privileges, we MUST connect to the target database
+        // because schemas are database-scoped - each database has its own 'public' schema
+        const dbClient = await getPostgresClient({
+          postgresRunConfig,
+          database: db,
+        });
+
+        try {
+          // These grants are scoped to THIS database's public schema only.
+          // Grant usage and create privileges on the public schema (allows user
+          // to use and create objects in the schema)
+          await dbClient.query(
+            `GRANT USAGE, CREATE ON SCHEMA public TO ${dbClient.escapeIdentifier(username)}`
+          );
+          // Grant all privileges on all current tables in the public schema
+          await dbClient.query(
+            `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${dbClient.escapeIdentifier(username)}`
+          );
+          // Grant all privileges on all current sequences in the public schema
+          await dbClient.query(
+            `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ${dbClient.escapeIdentifier(username)}`
+          );
+          // Ensure user gets all privileges on tables created in the future in
+          // the public schema
+          await dbClient.query(
+            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${dbClient.escapeIdentifier(username)}`
+          );
+          // Ensure user gets all privileges on sequences created in the future
+          // in the public schema
+          await dbClient.query(
+            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${dbClient.escapeIdentifier(username)}`
+          );
+          logger.log(
+            `Granted permissions on database ${db} to user ${username}`
+          );
+        } finally {
+          await dbClient.end();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.log(
+          `Warning: Could not grant permissions on database ${db} to user ${username}: ${msg}`
+        );
+      }
+    }
+  } finally {
+    await adminClient.end();
+  }
+}
+
 async function syncAllUsers(
   client: Client,
-  users: Array<{username: string; password?: string}>,
+  postgresRunConfig: PostgresRunConfig,
+  users: Array<{username: string; password?: string; databases?: string[]}>,
   logger: IForeLogger
 ): Promise<void> {
   for (const user of users) {
@@ -84,6 +168,14 @@ async function syncAllUsers(
         `Created user ${user.username}${user.password ? ' with password' : ''}`
       );
     }
+
+    // Grant database permissions (requires separate database connections)
+    await grantDatabasePermissions(
+      postgresRunConfig,
+      user.username,
+      user.databases,
+      logger
+    );
   }
 }
 
@@ -121,15 +213,35 @@ export async function setupUsers(params: {
       postgresConfContent = '';
     }
 
+    // Generate pg_hba.conf entries for all users with database-specific access
+    const sslEnabled = postgresRunConfig.ssl === 'enabled';
+    const authMethod = authEnabled ? 'scram-sha-256' : 'trust';
+    const pgHbaEntries: string[] = [];
+
+    // Generate entries for each user
+    for (const user of postgresRunConfig.users) {
+      const entries = generatePgHbaEntriesForUser({
+        username: user.username,
+        databases: user.databases,
+        authMethod,
+        requireSSL: sslEnabled,
+        connectionTypes: user.connectionTypes,
+      });
+      pgHbaEntries.push(entries);
+    }
+
     // Authorization was enabled, now disabled: set pg_hba to trust and reload
     if (!authEnabled && pgHbaContent && pgHbaUsesScram(pgHbaContent)) {
       logger.log(
         'Transitioning from scram to trust (authorization disabled)...'
       );
-      const updated = setPgHbaToTrust(pgHbaContent);
-      writePgHbaConf(containerName, updated);
+      // Generate new pg_hba.conf with user-specific entries
+      const newPgHba = pgHbaEntries.join('\n') + '\n';
+      writePgHbaConf(containerName, newPgHba);
       await reloadPostgresConfigViaClient(client);
-      logger.log('Updated pg_hba.conf to trust and reloaded');
+      logger.log(
+        'Updated pg_hba.conf to trust with user-specific entries and reloaded'
+      );
     }
 
     // Authorization was disabled, now enabled: sync users first (so we don't lock out), then pg_hba to scram
@@ -138,22 +250,44 @@ export async function setupUsers(params: {
       logger.log(
         'Transitioning from trust to scram (authorization enabled)...'
       );
-      await syncAllUsers(client, postgresRunConfig.users, logger);
+      await syncAllUsers(
+        client,
+        postgresRunConfig,
+        postgresRunConfig.users,
+        logger
+      );
       didSyncForScramTransition = true;
-      const updatedHba = setPgHbaToScram(pgHbaContent);
+      // Generate new pg_hba.conf with user-specific entries
+      const newPgHba = pgHbaEntries.join('\n') + '\n';
       const updatedConf =
         setPostgresConfPasswordEncryption(postgresConfContent);
-      writePgHbaConf(containerName, updatedHba);
+      writePgHbaConf(containerName, newPgHba);
       writePostgresConfig(containerName, updatedConf);
       await reloadPostgresConfigViaClient(client);
       logger.log(
-        'Updated pg_hba and postgresql.conf to scram-sha-256 and reloaded'
+        'Updated pg_hba and postgresql.conf to scram-sha-256 with user-specific entries and reloaded'
       );
     }
 
     // Sync all users from config (skip if already done during scram transition)
     if (!didSyncForScramTransition) {
-      await syncAllUsers(client, postgresRunConfig.users, logger);
+      await syncAllUsers(
+        client,
+        postgresRunConfig,
+        postgresRunConfig.users,
+        logger
+      );
+    }
+
+    // Update pg_hba.conf with user-specific database entries if not already done
+    if (!didSyncForScramTransition && authEnabled) {
+      const newPgHba = pgHbaEntries.join('\n') + '\n';
+      // Only update if content has changed
+      if (newPgHba.trim() !== pgHbaContent.trim()) {
+        writePgHbaConf(containerName, newPgHba);
+        await reloadPostgresConfigViaClient(client);
+        logger.log('Updated pg_hba.conf with user-specific database entries');
+      }
     }
 
     // When authorization enabled and postgres not in user list: set postgres superuser to random (unusable)
