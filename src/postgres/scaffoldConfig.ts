@@ -178,6 +178,13 @@ async function promptForConfig(
           .split(',')
           .map(db => db.trim())
           .filter(db => db.length > 0);
+        // Add any databases not already in dbs list
+        for (const db of adminDatabases) {
+          if (!dbs.includes(db)) {
+            dbs.push(db);
+            logger.log(`Added database "${db}" to database list`);
+          }
+        }
       }
     }
 
@@ -245,6 +252,13 @@ async function promptForConfig(
               .split(',')
               .map(db => db.trim())
               .filter(db => db.length > 0);
+            // Add any databases not already in dbs list
+            for (const db of databases) {
+              if (!dbs.includes(db)) {
+                dbs.push(db);
+                logger.log(`Added database "${db}" to database list`);
+              }
+            }
           }
         }
 
