@@ -18,6 +18,7 @@ import {
 } from './checkMongoReadyState.js';
 import {getInstanceRunName} from './constants.js';
 import {getMongoCertOutDir} from './generateMongoCertConfigs.js';
+import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {
   generateMongoDockerConfigForMongod,
   getMongodConfigDir,
@@ -25,12 +26,13 @@ import {
   getMongodDockerConfigFilePath,
   getMongodSystemLogFilePath,
 } from './generateMongodConfigs.js';
-import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {
   extractHostnamesForDockerBinding,
   MongoRunConfig,
 } from './mongoRunConfig.js';
+import {setupReplicaSet} from './setupReplicaSet.js';
 import {findAdminUser} from './user/findUtils.js';
+import {setupUsers} from './user/setupUsers.js';
 
 const kDefaultMongoVersion = '8.2.3';
 const kConfigHashLabel = 'forerunner.configHash';
@@ -384,13 +386,17 @@ export async function startMongodInstancesMain(params: {
   waitUntilListening?: boolean;
   waitUntilReplicaSetReady?: boolean;
   shouldInitDbRootUser?: boolean;
+  shouldSetupReplicaSet?: boolean;
+  shouldSetupUsers?: boolean;
 }) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
-    waitUntilListening,
-    waitUntilReplicaSetReady,
-    shouldInitDbRootUser,
+    waitUntilListening = true,
+    waitUntilReplicaSetReady = true,
+    shouldInitDbRootUser = true,
+    shouldSetupReplicaSet = true,
+    shouldSetupUsers = false,
   } = params;
 
   ensureDockerAvailable();
@@ -412,8 +418,61 @@ export async function startMongodInstancesMain(params: {
     await assertMongoInstancesListening({mongoRunConfig, logger});
   }
 
-  if (waitUntilReplicaSetReady) {
+  // Setup replica set if requested (default: true)
+  if (shouldSetupReplicaSet) {
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
+    await setupReplicaSet({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+    });
+    // After setting up replica set, always assert it's ready
     logger.log('Waiting for replica set to be ready...');
-    await assertMongoReplicaSetReady({mongoRunConfig, logger});
+    await assertMongoReplicaSetReady({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+    });
+  } else if (waitUntilReplicaSetReady) {
+    // If not setting up but waiting was explicitly requested, assert ready
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
+    logger.log('Waiting for replica set to be ready...');
+    await assertMongoReplicaSetReady({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+    });
+  }
+
+  // Setup users if requested
+  if (shouldSetupUsers) {
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
+    await setupUsers({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+      connectionType: 'replicaSet',
+    });
   }
 }

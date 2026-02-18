@@ -370,7 +370,6 @@ export async function startPostgresInstance(params: {
   const volumeName = postgresRunConfig.volumeName;
   const port = postgresRunConfig.port;
   const image = `postgres:${postgresRunConfig.postgresVersion}`;
-  const sslEnabled = postgresRunConfig.ssl === 'enabled';
 
   // Generate SSL certificates if needed
   await ensureSSLCertificates({postgresRunConfig, logger});

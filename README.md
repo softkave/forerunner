@@ -55,7 +55,7 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 
 #### MongoDB Management
 
-- [`mongo setup-replica-set`](#setup-replica-set) - Setup replica set
+- [`mongo setup-replica-set`](#setup-replica-set-deprecated) - Setup replica set (deprecated: use "start --setup-users")
 - [`mongo generate-certs`](#generate-certificates) - Generate MongoDB certificate configs and certificates
 - [`mongo start`](#start-mongodb-instances) - Start MongoDB instances (generates certs if not present)
 - [`mongo stop`](#stop-mongodb-instances) - Stop MongoDB instances
@@ -127,22 +127,15 @@ MongoDB replica set management. **Only replica sets are supported**; standalone 
 
 **When authorization is enabled:** An admin user (with `userAdminAnyDatabase`) is required in config for user management. A cluster admin user (with `clusterAdmin`) is necessary for replica set and other operations after initial setup (e.g. restart, status, reconfig).
 
-#### Setup Replica Set
+#### Setup Replica Set (Deprecated)
 
 ```bash
 softkave-forerunner mongo setup-replica-set -c <config-path> [options]
 ```
 
-**Description**: This command initializes the replica set and adds all configured instances as members.
+**Description**: **Deprecated**: This command is kept for backwards compatibility but is equivalent to `mongo start --setup-users`. Use `mongo start --setup-users` instead.
 
-**If not already present**, this command will run the following before configuring the replica set:
-
-- Generate MongoDB certificate configs
-- Generate MongoDB certificates
-- Start MongoDB instances
-- Creates the first admin user defined in config as the auth user for setting up the replica set
-
-Then it initializes the replica set, waits until the replica set is ready, and optionally sets up users (default: yes).
+This command starts MongoDB instances, sets up the replica set, and sets up users. It does the same as `mongo start --setup-users`.
 
 **Options:** `-c, --config <path>` (required), `-s, --silent`
 
@@ -170,9 +163,14 @@ softkave-forerunner mongo generate-certs -c <config-path> [options]
 softkave-forerunner mongo start -c <config-path> [options]
 ```
 
-**Description**: Starts MongoDB instances. **If not already present**, this command will automatically generate certificate configs and certificates before starting instances.
+**Description**: Starts MongoDB instances and sets up the replica set (if not already setup). **If not already present**, this command will automatically generate certificate configs and certificates before starting instances. The replica set is initialized automatically if it hasn't been initialized yet. Use `--setup-users` to also setup users after starting.
 
-**Options:** `-c, --config <path>` (required), `-s, --silent`
+**Options:**
+
+- `-c, --config <path>` - Path to mongo run config file (required)
+- `--no-setup-replica-set` - Skip replica set setup (default: replica set is setup automatically)
+- `--setup-users` - Setup MongoDB users after starting instances (default: false)
+- `-s, --silent` - Silent mode
 
 #### Stop MongoDB Instances
 
@@ -532,13 +530,19 @@ softkave-forerunner certs cert -c cert-config.json
 ### MongoDB Management
 
 ```bash
-# Setup replica set (generates certs, starts instances, then sets up replica set and users)
+# Start MongoDB instances, setup replica set, and setup users (recommended)
+softkave-forerunner mongo start --setup-users -c mongo-config.json
+
+# Deprecated: same as above
 softkave-forerunner mongo setup-replica-set -c mongo-config.json
 
-# Start existing MongoDB instances
+# Start MongoDB instances and setup replica set (if not already setup)
 softkave-forerunner mongo start -c mongo-config.json
 
-# Setup or sync users
+# Start MongoDB instances, setup replica set, and setup users
+softkave-forerunner mongo start --setup-users -c mongo-config.json
+
+# Setup or sync users (if instances are already running)
 softkave-forerunner mongo setup-users -c mongo-config.json
 
 # Check replica set status

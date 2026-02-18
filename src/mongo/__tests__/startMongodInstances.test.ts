@@ -3,8 +3,6 @@ import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
 import {
   assertMongoInstancesListening,
-  generateMongoCertConfigsMain,
-  generateMongoCertsMain,
   generateMongoPassword,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
@@ -12,7 +10,11 @@ import {
   getDockerContainerName,
   startMongodInstancesMain,
 } from '../startMongodInstances.js';
-import {cleanupMongoTest} from '../testHelpers.js';
+import {
+  checkAdminCanConnect,
+  checkTestDbUserCanConnect,
+  cleanupMongoTest,
+} from '../testHelpers.js';
 
 const logger = new ConsoleForeLogger();
 
@@ -30,13 +32,26 @@ const mongoRunConfig: MongoRunConfig = {
   instancesHostnames: [
     'test-1.softkave-forerunner-mongo.fimidara.com',
     'test-2.softkave-forerunner-mongo.fimidara.com',
-    'test-3.softkave-forerunner-mongo.fimidara.com',
+    {
+      hostname: 'test-3.softkave-forerunner-mongo.fimidara.com',
+      resolution: 'local',
+    },
   ],
   instancePorts: [27030, 27031, 27032],
   users: [
     {
       username: 'test-user-admin',
       roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
+      password: generateMongoPassword(),
+    },
+    {
+      username: 'test-user-cluster-admin',
+      roles: [{role: 'clusterAdmin', db: 'admin'}],
+      password: generateMongoPassword(),
+    },
+    {
+      username: 'test-user-db',
+      roles: [{role: 'readWrite', db: 'test-db'}],
       password: generateMongoPassword(),
     },
   ],
@@ -50,8 +65,6 @@ const mongoRunConfig: MongoRunConfig = {
 beforeAll(
   async () => {
     await cleanupMongoTest({mongoRunConfig});
-    await generateMongoCertConfigsMain({mongoRunConfig});
-    await generateMongoCertsMain({logger, mongoRunConfig});
   },
   1 * 60 * 1000 // 1 minute
 );
@@ -123,12 +136,13 @@ describe('getDockerContainerName', () => {
 
 describe('startMongodInstances', () => {
   test(
-    'should start mongod instances',
+    'should start mongod instances and setup replica set',
     async () => {
       await startMongodInstancesMain({
         mongoRunConfig,
         logger: new ConsoleForeLogger(),
         waitUntilListening: true,
+        shouldSetupReplicaSet: true,
       });
       await assertMongoInstancesListening({
         mongoRunConfig,
@@ -146,6 +160,7 @@ describe('startMongodInstances', () => {
         mongoRunConfig,
         logger: new ConsoleForeLogger({silent: true}),
         waitUntilListening: false,
+        shouldSetupReplicaSet: false, // Skip replica set setup for this test
       });
       await assertMongoInstancesListening({
         mongoRunConfig,
@@ -171,6 +186,7 @@ describe('startMongodInstances', () => {
         mongoRunConfig,
         logger: silentLogger,
         waitUntilListening: true,
+        shouldSetupReplicaSet: false, // Skip replica set setup for this test
       });
       await assertMongoInstancesListening({
         mongoRunConfig,
@@ -193,6 +209,7 @@ describe('startMongodInstances', () => {
         mongoRunConfig: mongoRunConfigNewPorts,
         logger: new ConsoleForeLogger({silent: true}),
         waitUntilListening: true,
+        shouldSetupReplicaSet: false, // Skip replica set setup for this test
       });
       await assertMongoInstancesListening({
         mongoRunConfig: mongoRunConfigNewPorts,
@@ -201,5 +218,25 @@ describe('startMongodInstances', () => {
       });
     },
     5 * 60 * 1000
+  );
+
+  test(
+    'should setup replica set and users',
+    async () => {
+      await startMongodInstancesMain({
+        mongoRunConfig,
+        logger,
+        waitUntilListening: true,
+        shouldSetupReplicaSet: true,
+        shouldSetupUsers: true,
+      });
+      await checkAdminCanConnect({mongoRunConfig, logger});
+      await checkTestDbUserCanConnect({
+        mongoRunConfig,
+        logger,
+        username: 'test-user-db',
+      });
+    },
+    5 * 60 * 1000 // 5 minutes
   );
 });

@@ -2,14 +2,11 @@ import assert from 'assert';
 import {execFileSync} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {assertMongoReplicaSetReady} from './checkMongoReadyState.js';
-import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {
   getDockerContainerName,
   startMongodInstancesMain,
 } from './startMongodInstances.js';
-import {setupUsers} from './user/setupUsers.js';
 import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
 
 const kMongoshFirstInstance = 1;
@@ -94,7 +91,7 @@ function runMongoshInContainerOrThrow(params: {
   }
 }
 
-async function setupReplicaSet(params: {
+export async function setupReplicaSet(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   authUser?: {username: string; password: string};
@@ -146,23 +143,23 @@ async function setupReplicaSet(params: {
   }
 }
 
+/**
+ * @deprecated Use startMongodInstancesMain instead
+ */
 export async function setupReplicaSetMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   shouldSetupUsers?: boolean;
   authUser?: {username: string; password: string};
 }) {
-  const {shouldSetupUsers = true} = params;
-  await ensureMongoCertificates(params);
+  // This function is kept for backwards compatibility.
+  // It now delegates to startMongodInstancesMain which handles everything.
   await startMongodInstancesMain({
-    ...params,
+    mongoRunConfig: params.mongoRunConfig,
+    logger: params.logger,
     waitUntilListening: true,
     shouldInitDbRootUser: true,
+    shouldSetupReplicaSet: true,
+    shouldSetupUsers: params.shouldSetupUsers ?? true,
   });
-  await setupReplicaSet(params);
-  await assertMongoReplicaSetReady(params);
-
-  if (shouldSetupUsers) {
-    await setupUsers(params);
-  }
 }

@@ -172,8 +172,19 @@ mongoProgram
 // Start MongoDB instances
 mongoProgram
   .command('start')
-  .description('Start MongoDB instances')
+  .description(
+    'Start MongoDB instances and setup replica set (if not already setup)'
+  )
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option(
+    '--no-setup-replica-set',
+    'Skip replica set setup (default: setup replica set)'
+  )
+  .option(
+    '--setup-users',
+    'Setup MongoDB users after starting instances',
+    false
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -185,9 +196,8 @@ mongoProgram
         mongoRunConfig,
         logger,
         waitUntilListening: true,
-        // Because we currently only support replica sets (and not standalone
-        // instances), we wait for the replica set to be ready.
-        waitUntilReplicaSetReady: true,
+        shouldSetupReplicaSet: options.setupReplicaSet ?? true,
+        shouldSetupUsers: options.setupUsers ?? false,
       });
       logger.log('✅ MongoDB instances started successfully');
     } catch (error) {
@@ -218,10 +228,12 @@ mongoProgram
     }
   });
 
-// Setup replica set
+// Setup replica set (deprecated: use 'start --setup-users' instead)
 mongoProgram
   .command('setup-replica-set')
-  .description('Setup MongoDB replica set')
+  .description(
+    'Setup MongoDB replica set and users (deprecated: use "start --setup-users" instead)'
+  )
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
@@ -844,7 +856,7 @@ COMMANDS:
     generate-cert-configs  Generate MongoDB certificate configurations
     start                  Start MongoDB instances
     stop                   Stop MongoDB instances
-    setup-replica-set      Setup MongoDB replica set
+    setup-replica-set      Setup MongoDB replica set (deprecated: use "start --setup-users")
     setup-users            Setup MongoDB users
     print-uri              Print MongoDB connection URI using configuration
     replica-set-status     Print MongoDB replica set status
