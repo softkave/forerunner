@@ -7,7 +7,7 @@ import {IForeLogger} from '../utils/exports.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {closeMongoClient, getMongoClient} from './connection.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {stopMongodInstancesMain} from './stopMongodInstances.js';
+import {stopMongoMain} from './stopMongo.js';
 import {findAdminUser} from './user/findUtils.js';
 
 export async function checkAdminCanConnect(params: {
@@ -139,7 +139,7 @@ export async function endMongoInstancesForTest(params: {
 }) {
   const {mongoRunConfig} = params;
   const logger = new ConsoleForeLogger({silent: true});
-  await stopMongodInstancesMain({mongoRunConfig, logger});
+  await stopMongoMain({mongoRunConfig, logger});
 }
 
 export async function cleanupMongoTest(params: {

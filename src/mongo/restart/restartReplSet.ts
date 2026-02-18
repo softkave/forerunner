@@ -17,8 +17,8 @@ import {
   getReplMemberByInstanceNumber,
   getReplPrimaryMember,
 } from '../replSetUtils.js';
-import {startMongodInstance} from '../startMongodInstances.js';
-import {stopMongodInstance} from '../stopMongodInstances.js';
+import {startMongodInstance} from '../startMongo.js';
+import {stopMongodInstance} from '../stopMongo.js';
 import {findClusterAdminUser} from '../user/findUtils.js';
 import {compileHostnames} from '../utils.js';
 

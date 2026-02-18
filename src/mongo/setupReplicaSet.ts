@@ -3,10 +3,7 @@ import {execFileSync} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {
-  getDockerContainerName,
-  startMongodInstancesMain,
-} from './startMongodInstances.js';
+import {getDockerContainerName, startMongoMain} from './startMongo.js';
 import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
 
 const kMongoshFirstInstance = 1;
@@ -154,7 +151,7 @@ export async function setupReplicaSetMain(params: {
 }) {
   // This function is kept for backwards compatibility.
   // It now delegates to startMongodInstancesMain which handles everything.
-  await startMongodInstancesMain({
+  await startMongoMain({
     mongoRunConfig: params.mongoRunConfig,
     logger: params.logger,
     waitUntilListening: true,

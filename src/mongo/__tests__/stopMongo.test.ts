@@ -6,8 +6,8 @@ import {
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
   generateMongoPassword,
-  startMongodInstancesMain,
-  stopMongodInstancesMain,
+  startMongoMain,
+  stopMongoMain,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {cleanupMongoTest} from '../testHelpers.js';
@@ -46,7 +46,7 @@ beforeAll(
     await cleanupMongoTest({mongoRunConfig});
     await generateMongoCertConfigsMain({mongoRunConfig});
     await generateMongoCertsMain({logger, mongoRunConfig});
-    await startMongodInstancesMain({
+    await startMongoMain({
       mongoRunConfig,
       logger,
       waitUntilListening: true,
@@ -63,11 +63,11 @@ afterAll(async () => {
   });
 });
 
-describe('stopMongodInstances', () => {
+describe('stopMongo', () => {
   test(
-    'should stop mongod instances',
+    'should stop MongoDB instance',
     async () => {
-      await stopMongodInstancesMain({mongoRunConfig, logger});
+      await stopMongoMain({mongoRunConfig, logger});
 
       // Confirm that the instances are not listening
       for (const instanceNumber of range(

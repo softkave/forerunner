@@ -6,10 +6,7 @@ import {
   generateMongoPassword,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
-import {
-  getDockerContainerName,
-  startMongodInstancesMain,
-} from '../startMongodInstances.js';
+import {getDockerContainerName, startMongoMain} from '../startMongo.js';
 import {
   checkAdminCanConnect,
   checkTestDbUserCanConnect,
@@ -134,11 +131,11 @@ describe('getDockerContainerName', () => {
   });
 });
 
-describe('startMongodInstances', () => {
+describe('startMongo', () => {
   test(
     'should start mongod instances and setup replica set',
     async () => {
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger: new ConsoleForeLogger(),
         waitUntilListening: true,
@@ -156,7 +153,7 @@ describe('startMongodInstances', () => {
   test(
     'second start when already running completes without error (reuses running containers)',
     async () => {
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger: new ConsoleForeLogger({silent: true}),
         waitUntilListening: false,
@@ -182,7 +179,7 @@ describe('startMongodInstances', () => {
           encoding: 'utf8',
         });
       }
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger: silentLogger,
         waitUntilListening: true,
@@ -205,7 +202,7 @@ describe('startMongodInstances', () => {
         ...mongoRunConfig,
         instancePorts: [...newPorts],
       };
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig: mongoRunConfigNewPorts,
         logger: new ConsoleForeLogger({silent: true}),
         waitUntilListening: true,
@@ -224,7 +221,7 @@ describe('startMongodInstances', () => {
   test(
     'should setup replica set and users',
     async () => {
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger,
         waitUntilListening: true,

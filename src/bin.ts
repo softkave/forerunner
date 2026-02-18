@@ -18,8 +18,8 @@ import {
   printMongoUriMain,
   restartMongo,
   setupReplicaSetMain,
-  startMongodInstancesMain,
-  stopMongodInstancesMain,
+  startMongoMain,
+  stopMongoMain,
 } from './mongo/index.js';
 import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
 
@@ -41,12 +41,12 @@ import {
   generatePostgresCertConfigsMain,
   generatePostgresCertsMain,
   getPostgresRunConfig,
+  postgresRunConfigSchema,
   scaffoldPostgresConfig,
   setupDatabases,
   setupUsers as setupPostgresUsers,
   startPostgresInstance,
   stopPostgresInstance,
-  postgresRunConfigSchema,
 } from './postgres/index.js';
 
 // Import run-env functionality
@@ -192,7 +192,7 @@ mongoProgram
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
       });
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger,
         waitUntilListening: true,
@@ -219,7 +219,7 @@ mongoProgram
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
       });
-      await stopMongodInstancesMain({mongoRunConfig, logger});
+      await stopMongoMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB instances stopped successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);

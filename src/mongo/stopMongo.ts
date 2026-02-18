@@ -4,7 +4,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getInstanceRunName} from './constants.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {getDockerContainerName} from './startMongodInstances.js';
+import {getDockerContainerName} from './startMongo.js';
 
 export async function stopMongodInstance(params: {
   instanceNumber: number;
@@ -53,7 +53,7 @@ export async function stopMongodInstance(params: {
   }
 }
 
-export async function stopMongodInstancesMain(params: {
+export async function stopMongoMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;

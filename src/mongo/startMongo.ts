@@ -380,7 +380,7 @@ export async function startMongodInstance(params: {
   });
 }
 
-export async function startMongodInstancesMain(params: {
+export async function startMongoMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   waitUntilListening?: boolean;
