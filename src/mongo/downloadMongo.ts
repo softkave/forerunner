@@ -9,50 +9,60 @@ import {ensureDir, exists} from 'fs-extra';
 import path from 'path';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {MongoRunConfig} from './mongoRunConfig.js';
 
 export const kDefaultMongoVersion = '8.2.3';
 export const kDefaultMongodBinName = 'mongod';
 const kMongoBinDir = 'mongodb-bin';
 
-export function getMongoDownloadDir(mongoRunConfig: MongoRunConfig) {
-  const dir = path.join(
-    mongoRunConfig.workingDir,
-    kMongoBinDir,
-    mongoRunConfig.mongoVersion || kDefaultMongoVersion
-  );
-
+export function getMongoDownloadDir(params: {
+  workingDir: string;
+  mongoVersion?: string;
+}) {
+  const {workingDir, mongoVersion = kDefaultMongoVersion} = params;
+  const dir = path.join(workingDir, kMongoBinDir, mongoVersion);
   return dir;
 }
 
-export function getMongodBinFilePath(mongoRunConfig: MongoRunConfig) {
+export function getMongodBinFilePath(params: {
+  workingDir: string;
+  mongoVersion?: string;
+}) {
   const dir = path.resolve(
-    path.join(getMongoDownloadDir(mongoRunConfig), 'bin', kDefaultMongodBinName)
+    path.join(getMongoDownloadDir(params), 'bin', kDefaultMongodBinName)
   );
-
   return dir;
 }
 
-export async function isMongoDownloaded(mongoRunConfig: MongoRunConfig) {
-  const filepath = getMongodBinFilePath(mongoRunConfig);
+export async function isMongoDownloaded(params: {
+  workingDir: string;
+  mongoVersion?: string;
+}) {
+  const filepath = getMongodBinFilePath(params);
   return await exists(filepath);
 }
 
 export async function downloadMongo(params: {
-  mongoRunConfig: MongoRunConfig;
-  logger: IForeLogger;
+  workingDir: string;
+  mongoVersion?: string;
+  systemLinux?: string;
+  os?: string;
+  logger?: IForeLogger;
 }) {
-  const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
-    params;
+  const {
+    workingDir,
+    mongoVersion = kDefaultMongoVersion,
+    systemLinux,
+    os = process.platform,
+    logger = new ConsoleForeLogger({silent: true}),
+  } = params;
 
-  if (await isMongoDownloaded(mongoRunConfig)) {
+  if (await isMongoDownloaded({workingDir, mongoVersion})) {
     logger.log('Mongo already downloaded');
     return;
   }
 
   /** NOTE: it downloads both mongod and mongos */
-  const version = mongoRunConfig.mongoVersion || kDefaultMongoVersion;
-  const {systemLinux} = mongoRunConfig;
+  const version = mongoVersion;
 
   const versionMatch = version.match(/^(\d)\.(\d)\.(\d+)$/);
   if (!versionMatch) {
@@ -64,15 +74,15 @@ export async function downloadMongo(params: {
 
   let dirname: string;
   let filename: string;
-  let os = mongoRunConfig.os || process.platform;
+  let detectedOs = os;
   let base = 'https://downloads.mongodb.org';
 
-  const mainScriptDir = getMongoDownloadDir(mongoRunConfig);
+  const mainScriptDir = getMongoDownloadDir({workingDir, mongoVersion});
   const isBefore42 = major < 4 || (major === 4 && minor < 2);
 
   await ensureDir(mainScriptDir);
 
-  switch (os) {
+  switch (detectedOs) {
     case 'linux':
       if (isBefore42) {
         filename = `mongodb-linux-x86_64-${version}.tgz`;
@@ -87,7 +97,7 @@ export async function downloadMongo(params: {
       }
       break;
     case 'darwin':
-      os = 'osx';
+      detectedOs = 'osx';
       if (isBefore42) {
         filename = `mongodb-osx-ssl-x86_64-${version}.tgz`;
         dirname = `mongodb-osx-x86_64-${version}`;
@@ -108,18 +118,18 @@ export async function downloadMongo(params: {
         filename = `mongodb-win32-x86_64-2012plus-${version}.zip`;
         dirname = `mongodb-win32-x86_64-2012plus-${version}`;
       } else {
-        os = 'windows';
+        detectedOs = 'windows';
         filename = `mongodb-windows-x86_64-${version}.zip`;
         dirname = `mongodb-win32-x86_64-windows-${version}`;
       }
       break;
     default:
-      throw new Error(`Unrecognized os ${os}`);
+      throw new Error(`Unrecognized os ${detectedOs}`);
   }
 
-  const url = `${base}/${os}/${filename}`;
+  const url = `${base}/${detectedOs}/${filename}`;
 
-  if (os.startsWith('win')) {
+  if (detectedOs.startsWith('win')) {
     // Create a temporary extraction directory
     const tempExtractDir = `temp-mongo-extract-${Date.now()}`;
 
@@ -130,7 +140,7 @@ export async function downloadMongo(params: {
         `New-Item -ItemType Directory -Path '${tempExtractDir}' -Force;` +
         `[System.IO.Compression.ZipFile]::ExtractToDirectory('${filename}','${tempExtractDir}');` +
         `$extractedDir = Get-ChildItem '${tempExtractDir}' | Select-Object -First 1 | Select-Object -ExpandProperty Name;` +
-        `Move-Item '${tempExtractDir}/$extractedDir/bin' '${getMongoDownloadDir(mongoRunConfig)}';` +
+        `Move-Item '${tempExtractDir}/$extractedDir/bin' '${getMongoDownloadDir({workingDir, mongoVersion})}';` +
         `Remove-Item -Recurse -Force '${tempExtractDir}';` +
         `Remove-Item '${filename}';` +
         '}"'
@@ -153,7 +163,7 @@ export async function downloadMongo(params: {
 
     // Move the bin directory to the final location
     execSync(
-      `mv ${extractedDirPath}/bin ${getMongoDownloadDir(mongoRunConfig)}`
+      `mv ${extractedDirPath}/bin ${getMongoDownloadDir({workingDir, mongoVersion})}`
     );
 
     // Clean up
@@ -161,5 +171,8 @@ export async function downloadMongo(params: {
     execSync(`rm ./${filename}`);
   }
 
-  return {path: getMongoDownloadDir(mongoRunConfig), url: url};
+  return {
+    path: getMongoDownloadDir({workingDir, mongoVersion}),
+    url: url,
+  };
 }
