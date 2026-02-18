@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import {generate} from 'generate-password';
 import {Client} from 'pg';
 import {execInContainer, isContainerRunning} from '../utils/docker.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
@@ -71,6 +72,20 @@ export async function reloadPostgresConfigViaClient(
 
 export function generateRandomPassword(): string {
   return crypto.randomBytes(32).toString('base64').replace(/[/+=]/g, 'x');
+}
+
+export function generatePostgresPassword(): string {
+  return generate({
+    length: 32,
+    numbers: true,
+    symbols: true,
+    uppercase: true,
+    strict: true,
+    // Exclude characters that can cause issues in PostgreSQL connection strings
+    // and SQL contexts: ' (single quote), \ (backslash), $ (dollar), ; (semicolon),
+    // " (double quote), ` (backtick)
+    exclude: '\'\\$;"`',
+  });
 }
 
 /**
