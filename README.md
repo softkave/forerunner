@@ -67,6 +67,7 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 #### PostgreSQL Management
 
 - [`postgres scaffold-config`](#scaffold-configuration) - Generate PostgreSQL configuration file
+- [`postgres generate-certs`](#generate-certificates) - Generate PostgreSQL certificates
 - [`postgres start`](#start-postgresql-instance) - Start PostgreSQL instance
 - [`postgres stop`](#stop-postgresql-instance) - Stop PostgreSQL instance
 - [`postgres setup-users`](#setup-postgresql-users) - Setup PostgreSQL users
@@ -160,6 +161,8 @@ softkave-forerunner mongo generate-certs -c <config-path> [options]
 - `--overwriteCA` - Overwrite existing CA (default: false)
 - `--overwriteCerts` - Overwrite existing certs (default: false)
 - `-s, --silent` - Silent mode
+
+**Note**: If `overwriteCA` is true, certificates are also overwritten (because certificates signed by the old CA are no longer valid).
 
 #### Start MongoDB Instances
 
@@ -287,6 +290,26 @@ softkave-forerunner postgres scaffold-config [options]
 - `--defaults` - Use default values instead of prompting (default: false)
 - `-o, --output <path>` - Output file path (default: "./postgres-run-config.json")
 - `-s, --silent` - Silent mode
+
+#### Generate Certificates
+
+```bash
+softkave-forerunner postgres generate-certs -c <config-path> [options]
+```
+
+**Description**: Generates SSL/TLS certificates for PostgreSQL. Creates certificate configuration files, CA, and server certificate. Certificates are generated in `workingDir/postgres-certs-out` directory.
+
+**Prerequisites**: Config file must have `ssl: "enabled"` and `caConfig` specified.
+
+**Options**:
+
+- `-c, --config <path>` - Path to postgres run config file (required)
+- `--overwriteConfig` - Overwrite existing certificate config files (default: false)
+- `--overwriteCA` - Overwrite existing CA certificate and key (default: false)
+- `--overwriteCerts` - Overwrite existing server certificate and key (default: false)
+- `-s, --silent` - Silent mode
+
+**Note**: If `overwriteCA` is true, certificates are also overwritten (because certificates signed by the old CA are no longer valid).
 
 #### Start PostgreSQL Instance
 
@@ -536,6 +559,9 @@ softkave-forerunner postgres scaffold-config
 
 # Generate configuration file with defaults
 softkave-forerunner postgres scaffold-config --defaults
+
+# Generate SSL certificates
+softkave-forerunner postgres generate-certs -c postgres-config.json
 
 # Start PostgreSQL instance with config file
 softkave-forerunner postgres start -c postgres-config.json

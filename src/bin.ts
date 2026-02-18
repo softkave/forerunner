@@ -38,6 +38,8 @@ import {findChildrenPIDs} from './pid/findChildrenPIDs.js';
 
 // Import postgres functionality
 import {
+  generatePostgresCertConfigsMain,
+  generatePostgresCertsMain,
   getPostgresRunConfig,
   scaffoldPostgresConfig,
   setupDatabases,
@@ -401,6 +403,42 @@ postgresProgram
         useDefaults: options.defaults,
       });
       logger.log('✅ PostgreSQL configuration generated successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Generate PostgreSQL certificates
+postgresProgram
+  .command('generate-certs')
+  .description('Generate PostgreSQL SSL/TLS certificates')
+  .requiredOption('-c, --config <path>', 'Path to postgres run config file')
+  .option('--overwriteConfig', 'Overwrite existing config', false)
+  .option('--overwriteCA', 'Overwrite existing CA', false)
+  .option('--overwriteCerts', 'Overwrite existing certs', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const postgresRunConfig = await getPostgresRunConfig({
+        postgresRunConfigFilepath: options.config,
+      });
+      await generatePostgresCertConfigsMain({
+        postgresRunConfig,
+        overwrite: options.overwriteConfig,
+      });
+      await generatePostgresCertsMain({
+        postgresRunConfig,
+        overwriteConfig: options.overwriteConfig,
+        overwriteCA: options.overwriteCA,
+        overwriteCerts: options.overwriteCerts,
+        logger,
+      });
+      logger.log(
+        '✅ PostgreSQL certificates generation completed successfully'
+      );
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
