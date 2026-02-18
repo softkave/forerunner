@@ -1,21 +1,10 @@
 import {execFileSync} from 'child_process';
+import {containerExists} from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getInstanceRunName} from './constants.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {getDockerContainerName} from './startMongodInstances.js';
-
-function containerExists(containerName: string): boolean {
-  try {
-    execFileSync('docker', ['inspect', '-f', '{{.Id}}', containerName], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export async function stopMongodInstance(params: {
   instanceNumber: number;

@@ -1,4 +1,5 @@
-import {afterAll, beforeAll, describe, test} from 'vitest';
+import {execFileSync} from 'child_process';
+import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
 import {
   assertMongoInstancesListening,
@@ -7,7 +8,10 @@ import {
   generateMongoPassword,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
-import {startMongodInstancesMain} from '../startMongodInstances.js';
+import {
+  getDockerContainerName,
+  startMongodInstancesMain,
+} from '../startMongodInstances.js';
 import {cleanupMongoTest} from '../testHelpers.js';
 
 const logger = new ConsoleForeLogger();
@@ -60,6 +64,63 @@ afterAll(async () => {
   });
 });
 
+describe('getDockerContainerName', () => {
+  const baseConfig: MongoRunConfig = {
+    workingDir: '/some/working/dir',
+    caConfig: {
+      days: 3650,
+      subject: {
+        C: 'US',
+        ST: 'Delaware',
+        L: 'Dover',
+        O: 'Test',
+        CN: 'Test CA',
+      },
+    },
+    instancesHostnames: ['h1', 'h2', 'h3'],
+    instancePorts: [27017, 27018, 27019],
+    replicaSetName: 'rs0',
+    users: [],
+  };
+
+  test('returns containerName-based name when containerName is set', () => {
+    const config: MongoRunConfig = {...baseConfig, containerName: 'my-mongo'};
+    expect(getDockerContainerName(config, 1)).toBe('my-mongo-mongod-1');
+    expect(getDockerContainerName(config, 2)).toBe('my-mongo-mongod-2');
+    expect(getDockerContainerName(config, 3)).toBe('my-mongo-mongod-3');
+  });
+
+  test('returns hash-based name when containerName is not set', () => {
+    const config: MongoRunConfig = {...baseConfig};
+    delete (config as Partial<MongoRunConfig>).containerName;
+    const name1 = getDockerContainerName(config, 1);
+    const name2 = getDockerContainerName(config, 2);
+    expect(name1).toMatch(/^mongo-[a-f0-9]{12}-mongod-1$/);
+    expect(name2).toMatch(/^mongo-[a-f0-9]{12}-mongod-2$/);
+    expect(name1).not.toBe(name2);
+  });
+
+  test('same workingDir produces same hash prefix for hash-based names', () => {
+    const config: MongoRunConfig = {...baseConfig};
+    delete (config as Partial<MongoRunConfig>).containerName;
+    const run1 = getDockerContainerName(config, 1);
+    const run2 = getDockerContainerName(config, 1);
+    expect(run1).toBe(run2);
+  });
+
+  test('different workingDir produces different hash prefix', () => {
+    const configA: MongoRunConfig = {...baseConfig, workingDir: '/path/a'};
+    const configB: MongoRunConfig = {...baseConfig, workingDir: '/path/b'};
+    delete (configA as Partial<MongoRunConfig>).containerName;
+    delete (configB as Partial<MongoRunConfig>).containerName;
+    const nameA = getDockerContainerName(configA, 1);
+    const nameB = getDockerContainerName(configB, 1);
+    expect(nameA).not.toBe(nameB);
+    expect(nameA).toMatch(/^mongo-[a-f0-9]{12}-mongod-1$/);
+    expect(nameB).toMatch(/^mongo-[a-f0-9]{12}-mongod-1$/);
+  });
+});
+
 describe('startMongodInstances', () => {
   test(
     'should start mongod instances',
@@ -76,5 +137,69 @@ describe('startMongodInstances', () => {
       });
     },
     5 * 60 * 1000 // 5 minutes
+  );
+
+  test(
+    'second start when already running completes without error (reuses running containers)',
+    async () => {
+      await startMongodInstancesMain({
+        mongoRunConfig,
+        logger: new ConsoleForeLogger({silent: true}),
+        waitUntilListening: false,
+      });
+      await assertMongoInstancesListening({
+        mongoRunConfig,
+        logger,
+        preferLocalhost: false,
+      });
+    },
+    2 * 60 * 1000
+  );
+
+  test(
+    'start after docker stop (without rm) reuses stopped containers',
+    async () => {
+      const silentLogger = new ConsoleForeLogger({silent: true});
+      for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+        const name = getDockerContainerName(mongoRunConfig, i);
+        execFileSync('docker', ['stop', name], {
+          stdio: 'pipe',
+          encoding: 'utf8',
+        });
+      }
+      await startMongodInstancesMain({
+        mongoRunConfig,
+        logger: silentLogger,
+        waitUntilListening: true,
+      });
+      await assertMongoInstancesListening({
+        mongoRunConfig,
+        logger,
+        preferLocalhost: false,
+      });
+    },
+    2 * 60 * 1000
+  );
+
+  test(
+    'when config changes (e.g. ports), existing containers are removed and recreated',
+    async () => {
+      const newPorts = [27033, 27034, 27035] as const;
+      const mongoRunConfigNewPorts: MongoRunConfig = {
+        ...mongoRunConfig,
+        instancePorts: [...newPorts],
+      };
+      await startMongodInstancesMain({
+        mongoRunConfig: mongoRunConfigNewPorts,
+        logger: new ConsoleForeLogger({silent: true}),
+        waitUntilListening: true,
+      });
+      await assertMongoInstancesListening({
+        mongoRunConfig: mongoRunConfigNewPorts,
+        logger,
+        preferLocalhost: false,
+      });
+    },
+    5 * 60 * 1000
   );
 });

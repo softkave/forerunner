@@ -72,10 +72,11 @@ export const mongoRunConfigSchema = z
     // Working dir
     workingDir: z.string(),
 
-    // Download Mongo
+    // Mongo version
     mongoVersion: z.string().optional(),
-    systemLinux: z.string().optional(),
-    os: z.string().optional(),
+
+    // Container name (optional, for backwards compatibility)
+    containerName: z.string().optional(),
 
     // Mongo certs
     caConfig: z.object({
@@ -154,7 +155,7 @@ export async function getMongoRunConfig(params: {
   mongoRunConfigFilepath: string;
   cacheConfig?: boolean;
 }) {
-  const {mongoRunConfigFilepath, cacheConfig = true} = params;
+  const {mongoRunConfigFilepath, cacheConfig = false} = params;
   const mongoRunConfig = mongoRunConfigSchema.parse(
     JSON.parse(await fs.promises.readFile(mongoRunConfigFilepath, 'utf8'))
   );

@@ -36,6 +36,17 @@ import {
 import {setupUsers} from './mongo/user/setupUsers.js';
 import {findChildrenPIDs} from './pid/findChildrenPIDs.js';
 
+// Import postgres functionality
+import {
+  getPostgresRunConfig,
+  scaffoldPostgresConfig,
+  setupDatabases,
+  setupUsers as setupPostgresUsers,
+  startPostgresInstance,
+  stopPostgresInstance,
+  postgresRunConfigSchema,
+} from './postgres/index.js';
+
 // Import run-env functionality
 import {runWithEnvMain} from './runEnv/index.js';
 
@@ -387,6 +398,203 @@ mongoProgram
   });
 
 // ============================================================================
+// POSTGRES SUB-PROGRAM
+// ============================================================================
+const postgresProgram = program
+  .command('postgres')
+  .description('PostgreSQL management utilities');
+
+// Scaffold PostgreSQL configuration
+postgresProgram
+  .command('scaffold-config')
+  .description('Generate PostgreSQL configuration file')
+  .option('--defaults', 'Use default values instead of prompting', false)
+  .option(
+    '-o, --output <path>',
+    'Output file path',
+    './postgres-run-config.json'
+  )
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await scaffoldPostgresConfig({
+        outputPath: options.output,
+        logger,
+        useDefaults: options.defaults,
+      });
+      logger.log('✅ PostgreSQL configuration generated successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Start PostgreSQL instance
+postgresProgram
+  .command('start')
+  .description('Start PostgreSQL instance')
+  .option('-c, --config <path>', 'Path to postgres run config file')
+  .option('--port <port>', 'Port number (required if no config)')
+  .option('--container-name <name>', 'Container name (required if no config)')
+  .option('--version <version>', 'PostgreSQL version')
+  .option('--volume-name <name>', 'Volume name')
+  .option('--keep', 'Keep data across restarts', false)
+  .option(
+    '--user <username>',
+    'Admin username (with --password enables auth for quick setup)'
+  )
+  .option(
+    '--password <password>',
+    'Admin password (with --user enables auth for quick setup)'
+  )
+  .option('--db <dbname>', 'Default database name')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      let postgresRunConfig;
+
+      if (options.config) {
+        postgresRunConfig = await getPostgresRunConfig({
+          postgresRunConfigFilepath: options.config,
+        });
+      } else {
+        // Quick/dirty setup for dev or test: no config file, no SSL, no certs
+        if (!options.port || !options.containerName) {
+          throw new Error(
+            '--port and --container-name are required when --config is not provided'
+          );
+        }
+
+        const authEnabled = Boolean(options.user) && Boolean(options.password);
+
+        const config: any = {
+          port: parseInt(options.port, 10),
+          containerName: options.containerName,
+          authorization: authEnabled ? 'enabled' : 'disabled',
+          ssl: 'disabled',
+        };
+
+        if (options.version) config.postgresVersion = options.version;
+        if (options.volumeName) config.volumeName = options.volumeName;
+        if (options.keep) config.keep = true;
+
+        if (authEnabled) {
+          config.users = [
+            {
+              username: options.user,
+              password: options.password,
+            },
+          ];
+        }
+
+        if (options.db) {
+          config.dbs = [options.db];
+        }
+
+        postgresRunConfig = postgresRunConfigSchema.parse(config);
+      }
+
+      await startPostgresInstance({
+        postgresRunConfig,
+        logger,
+        waitUntilListening: true,
+      });
+      logger.log('✅ PostgreSQL instance started successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Stop PostgreSQL instance
+postgresProgram
+  .command('stop')
+  .description('Stop PostgreSQL instance')
+  .option('-c, --config <path>', 'Path to postgres run config file')
+  .option('--container-name <name>', 'Container name (required if no config)')
+  .option('--remove-volume', 'Remove volume on stop', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      let containerName: string;
+      let postgresRunConfig: any;
+
+      if (options.config) {
+        postgresRunConfig = await getPostgresRunConfig({
+          postgresRunConfigFilepath: options.config,
+        });
+        containerName = postgresRunConfig.containerName;
+      } else {
+        if (!options.containerName) {
+          throw new Error(
+            '--container-name is required when --config is not provided'
+          );
+        }
+        containerName = options.containerName;
+      }
+
+      await stopPostgresInstance({
+        containerName,
+        postgresRunConfig,
+        logger,
+        removeVolume: options.removeVolume,
+      });
+      logger.log('✅ PostgreSQL instance stopped successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Setup PostgreSQL users
+postgresProgram
+  .command('setup-users')
+  .description('Setup PostgreSQL users (excluding admin)')
+  .requiredOption('-c, --config <path>', 'Path to postgres run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const postgresRunConfig = await getPostgresRunConfig({
+        postgresRunConfigFilepath: options.config,
+      });
+      await setupPostgresUsers({postgresRunConfig, logger});
+      logger.log('✅ PostgreSQL users setup completed successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Setup PostgreSQL databases
+postgresProgram
+  .command('setup-dbs')
+  .description('Setup PostgreSQL databases')
+  .requiredOption('-c, --config <path>', 'Path to postgres run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const postgresRunConfig = await getPostgresRunConfig({
+        postgresRunConfigFilepath: options.config,
+      });
+      await setupDatabases({postgresRunConfig, logger});
+      logger.log('✅ PostgreSQL databases setup completed successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
 // ETC HOSTS SUB-PROGRAM
 // ============================================================================
 const etcHostsProgram = program
@@ -627,6 +835,13 @@ COMMANDS:
     replica-set-status     Print MongoDB replica set status
     restart                Rolling restart of replica set members
 
+  postgres                 PostgreSQL management utilities
+    scaffold-config        Generate PostgreSQL configuration file
+    start                  Start PostgreSQL instance
+    stop                   Stop PostgreSQL instance
+    setup-users            Setup PostgreSQL users (excluding admin)
+    setup-dbs              Setup PostgreSQL databases
+
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP
     remove                 Remove hostname from hosts file
@@ -651,6 +866,12 @@ EXAMPLES:
 
   # Setup MongoDB replica set (requires config file)
   forerunner mongo setup-replica-set -c mongo-config.json
+
+  # Start PostgreSQL instance
+  forerunner postgres start --port 5432 --container-name postgres-db
+
+  # Stop PostgreSQL instance
+  forerunner postgres stop --container-name postgres-db
 
   # Set a host entry
   forerunner etc-hosts set example.com 127.0.0.1

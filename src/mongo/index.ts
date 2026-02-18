@@ -1,7 +1,6 @@
 export * from './checkMongoReadyState.js';
 export * from './connection.js';
 export * from './constants.js';
-export * from './downloadMongo.js';
 export * from './generateMongoCertConfigs.js';
 export * from './generateMongoCerts.js';
 export * from './generateMongodConfigs.js';

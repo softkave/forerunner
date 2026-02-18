@@ -1,4 +1,4 @@
-import {execSync} from 'child_process';
+import {execFileSync} from 'child_process';
 import console from 'console';
 import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
 import {join} from 'path';
@@ -46,24 +46,56 @@ export class CAGenerator {
     writeFileSync(configPath, opensslConfig);
 
     try {
-      // Generate private key
+      // Generate private key (use execFileSync so passphrase is not interpreted by shell)
       this.logger.log('  Generating private key...');
-      const keyCmd = this.config.passphrase
-        ? `openssl genrsa -aes256 -passout pass:'${this.config.passphrase}' -out "${keyPath}" 4096`
-        : `openssl genrsa -out "${keyPath}" 4096`;
-
-      execSync(keyCmd, {stdio: 'inherit'});
+      const genrsaArgs = this.config.passphrase
+        ? [
+            'genrsa',
+            '-aes256',
+            '-passout',
+            `pass:${this.config.passphrase}`,
+            '-out',
+            keyPath,
+            '4096',
+          ]
+        : ['genrsa', '-out', keyPath, '4096'];
+      execFileSync('openssl', genrsaArgs, {stdio: 'inherit'});
 
       // Set proper permissions
-      execSync(`chmod 400 "${keyPath}"`, {stdio: 'inherit'});
+      execFileSync('chmod', ['400', keyPath], {stdio: 'inherit'});
 
       // Generate certificate
       this.logger.log('  Generating certificate...');
-      const certCmd = this.config.passphrase
-        ? `openssl req -new -x509 -key "${keyPath}" -passin pass:'${this.config.passphrase}' -out "${certPath}" -days ${this.config.days} -config "${configPath}"`
-        : `openssl req -new -x509 -key "${keyPath}" -out "${certPath}" -days ${this.config.days} -config "${configPath}"`;
-
-      execSync(certCmd, {stdio: 'inherit'});
+      const reqArgs = this.config.passphrase
+        ? [
+            'req',
+            '-new',
+            '-x509',
+            '-key',
+            keyPath,
+            '-passin',
+            `pass:${this.config.passphrase}`,
+            '-out',
+            certPath,
+            '-days',
+            String(this.config.days),
+            '-config',
+            configPath,
+          ]
+        : [
+            'req',
+            '-new',
+            '-x509',
+            '-key',
+            keyPath,
+            '-out',
+            certPath,
+            '-days',
+            String(this.config.days),
+            '-config',
+            configPath,
+          ];
+      execFileSync('openssl', reqArgs, {stdio: 'inherit'});
 
       this.logger.log(`✅ CA generated successfully at ${caDir}`);
     } catch (error) {
