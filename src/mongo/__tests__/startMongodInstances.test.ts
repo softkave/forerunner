@@ -150,7 +150,7 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    5 * 60 * 1000 // 5 minutes
+    2 * 60 * 1000 // 2 minutes
   );
 
   test(
@@ -168,7 +168,7 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000
+    2 * 60 * 1000 // 2 minutes
   );
 
   test(
@@ -194,7 +194,7 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000
+    2 * 60 * 1000 // 2 minutes
   );
 
   test(
@@ -209,6 +209,7 @@ describe('startMongodInstances', () => {
         mongoRunConfig: mongoRunConfigNewPorts,
         logger: new ConsoleForeLogger({silent: true}),
         waitUntilListening: true,
+        waitUntilReplicaSetReady: false,
         shouldSetupReplicaSet: false, // Skip replica set setup for this test
       });
       await assertMongoInstancesListening({
@@ -217,7 +218,7 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    5 * 60 * 1000
+    2 * 60 * 1000 // 2 minutes
   );
 
   test(
@@ -237,6 +238,6 @@ describe('startMongodInstances', () => {
         username: 'test-user-db',
       });
     },
-    5 * 60 * 1000 // 5 minutes
+    2 * 60 * 1000 // 2 minutes
   );
 });
