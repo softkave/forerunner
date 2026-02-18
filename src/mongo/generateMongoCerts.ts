@@ -9,6 +9,29 @@ import {
 } from './generateMongoCertConfigs.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
+/**
+ * Ensures MongoDB certificates are generated if not already present.
+ */
+export async function ensureMongoCertificates(params: {
+  mongoRunConfig: MongoRunConfig;
+  logger?: IForeLogger;
+}): Promise<void> {
+  const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
+    params;
+  logger.log('Ensuring MongoDB certificates are present...');
+  await generateMongoCertConfigsMain({
+    mongoRunConfig,
+    overwrite: false,
+  });
+  await generateMongoCertsMain({
+    mongoRunConfig,
+    overwriteConfig: false,
+    overwriteCA: false,
+    overwriteCerts: false,
+    logger,
+  });
+}
+
 export async function generateMongoCertsMain(params: {
   overwriteConfig?: boolean;
   overwriteCA?: boolean;

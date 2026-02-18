@@ -3,8 +3,7 @@ import {execFileSync} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {assertMongoReplicaSetReady} from './checkMongoReadyState.js';
-import {generateMongoCertConfigsMain} from './generateMongoCertConfigs.js';
-import {generateMongoCertsMain} from './generateMongoCerts.js';
+import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {
   getDockerContainerName,
@@ -34,23 +33,6 @@ function getMongoshConnectionUri(params: {
   authUser?: {username: string; password: string};
 }): string {
   const {mongoRunConfig, authUser} = params;
-  // const base = 'mongodb://localhost:27017';
-  // if (
-  //   mongoRunConfig.authorization !== 'disabled' &&
-  //   mongoRunConfig.users?.length
-  // ) {
-  //   const adminUser = findAdminUser({
-  //     users: mongoRunConfig.users,
-  //     isRequired: false,
-  //   });
-  //   if (adminUser?.username && adminUser?.password) {
-  //     const user = encodeURIComponent(adminUser.username);
-  //     const pass = encodeURIComponent(adminUser.password);
-  //     return `mongodb://${user}:${pass}@localhost:27017`;
-  //   }
-  // }
-  // return base;
-
   const hostnames = compileHostnames({
     hostnames: mongoRunConfig.instancesHostnames[0],
     bindLocalhost: false,
@@ -145,7 +127,8 @@ async function setupReplicaSet(params: {
     alreadyInitialized = true;
     logger.log('Replica set already initialized');
   } catch {
-    // rs.status() failed => not initialized or other error; we will try to initiate
+    // rs.status() failed => not initialized or other error; we will try to
+    // initiate
   }
 
   if (!alreadyInitialized) {
@@ -170,8 +153,7 @@ export async function setupReplicaSetMain(params: {
   authUser?: {username: string; password: string};
 }) {
   const {shouldSetupUsers = true} = params;
-  await generateMongoCertConfigsMain(params);
-  await generateMongoCertsMain(params);
+  await ensureMongoCertificates(params);
   await startMongodInstancesMain({
     ...params,
     waitUntilListening: true,

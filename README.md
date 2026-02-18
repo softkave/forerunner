@@ -56,9 +56,8 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 #### MongoDB Management
 
 - [`mongo setup-replica-set`](#setup-replica-set) - Setup replica set
-- [`mongo generate-certs`](#generate-certificates) - Generate MongoDB certificates
-- [`mongo generate-cert-configs`](#generate-certificate-configurations) - Generate certificate configs
-- [`mongo start`](#start-mongodb-instances) - Start MongoDB instances
+- [`mongo generate-certs`](#generate-certificates) - Generate MongoDB certificate configs and certificates
+- [`mongo start`](#start-mongodb-instances) - Start MongoDB instances (generates certs if not present)
 - [`mongo stop`](#stop-mongodb-instances) - Stop MongoDB instances
 - [`mongo setup-users`](#setup-mongodb-users) - Setup MongoDB users
 - [`mongo print-uri`](#print-mongodb-uri) - Print MongoDB connection URI
@@ -152,6 +151,8 @@ Then it initializes the replica set, waits until the replica set is ready, and o
 softkave-forerunner mongo generate-certs -c <config-path> [options]
 ```
 
+**Description**: Generates MongoDB certificate configurations and certificates (CA and instance certs). This command combines both certificate config generation and certificate generation into a single command.
+
 **Options:**
 
 - `-c, --config <path>` - Path to mongo run config file (required)
@@ -160,19 +161,13 @@ softkave-forerunner mongo generate-certs -c <config-path> [options]
 - `--overwriteCerts` - Overwrite existing certs (default: false)
 - `-s, --silent` - Silent mode
 
-#### Generate Certificate Configurations
-
-```bash
-softkave-forerunner mongo generate-cert-configs -c <config-path> [options]
-```
-
-**Options:** `-c, --config <path>` (required), `-o, --overwrite`, `-s, --silent`
-
 #### Start MongoDB Instances
 
 ```bash
 softkave-forerunner mongo start -c <config-path> [options]
 ```
+
+**Description**: Starts MongoDB instances. **If not already present**, this command will automatically generate certificate configs and certificates before starting instances.
 
 **Options:** `-c, --config <path>` (required), `-s, --silent`
 

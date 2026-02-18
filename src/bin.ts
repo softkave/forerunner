@@ -133,10 +133,10 @@ const mongoProgram = program
   .command('mongo')
   .description('MongoDB management utilities');
 
-// Generate MongoDB certificates
+// Generate MongoDB certificates (configs and certs)
 mongoProgram
   .command('generate-certs')
-  .description('Generate MongoDB certificates')
+  .description('Generate MongoDB certificate configs and certificates')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option('--overwriteConfig', 'Overwrite existing config', false)
   .option('--overwriteCA', 'Overwrite existing CA', false)
@@ -148,6 +148,10 @@ mongoProgram
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
       });
+      await generateMongoCertConfigsMain({
+        mongoRunConfig,
+        overwrite: options.overwriteConfig,
+      });
       await generateMongoCertsMain({
         mongoRunConfig,
         overwriteConfig: options.overwriteConfig,
@@ -156,33 +160,6 @@ mongoProgram
         logger,
       });
       logger.log('✅ MongoDB certificates generation completed successfully');
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
-// Generate MongoDB certificate configs
-mongoProgram
-  .command('generate-cert-configs')
-  .description('Generate MongoDB certificate configurations')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-o, --overwrite', 'Overwrite existing cert configs', false)
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await generateMongoCertConfigsMain({
-        mongoRunConfig,
-        overwrite: options.overwrite,
-      });
-      logger.log(
-        '✅ MongoDB certificate configs generation completed successfully'
-      );
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);

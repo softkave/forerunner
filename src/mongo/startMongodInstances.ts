@@ -25,6 +25,7 @@ import {
   getMongodDockerConfigFilePath,
   getMongodSystemLogFilePath,
 } from './generateMongodConfigs.js';
+import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {
   extractHostnamesForDockerBinding,
   MongoRunConfig,
@@ -393,6 +394,9 @@ export async function startMongodInstancesMain(params: {
   } = params;
 
   ensureDockerAvailable();
+
+  // Generate certificates if not already present
+  await ensureMongoCertificates({mongoRunConfig, logger});
 
   for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
     await startMongodInstance({
