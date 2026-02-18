@@ -163,8 +163,12 @@ export function generateMongoPassword() {
   return generate({
     length: 32,
     numbers: true,
-    symbols: false,
+    symbols: true,
     uppercase: true,
     strict: true,
+    // Exclude URL-reserved characters that can cause issues in MongoDB
+    // connection strings: @ (at sign), # (hash), ! (exclamation), &
+    // (ampersand), | (pipe), % (percent)
+    exclude: '@#!&|%',
   });
 }
