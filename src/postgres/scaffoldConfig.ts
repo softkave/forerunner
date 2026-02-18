@@ -8,6 +8,7 @@ import {
   PostgresRunConfig,
   postgresRunConfigSchema,
 } from './postgresRunConfig.js';
+import {generatePostgresPassword} from './utils.js';
 
 function question(
   rl: ReturnType<typeof createInterface>,
@@ -157,8 +158,8 @@ async function promptForConfig(
     const adminUsername = await question(rl, 'Admin username [admin]: ');
     const adminPassword = await readPassword(
       config.authorization === 'enabled'
-        ? 'Admin password (required): '
-        : 'Admin password (optional, for trust auth): '
+        ? 'Admin password (press Enter to auto-generate): '
+        : 'Admin password (optional, press Enter to auto-generate or skip): '
     );
 
     // Ask for database permissions for admin user
@@ -204,10 +205,17 @@ async function promptForConfig(
     }
 
     if (adminUsername.trim() || adminPassword.trim()) {
+      let finalPassword: string | undefined;
+      if (!adminPassword.trim()) {
+        finalPassword = generatePostgresPassword();
+        logger.log(`✅ Auto-generated password: ${finalPassword}`);
+      } else {
+        finalPassword = adminPassword.trim();
+      }
       config.users = [
         {
           username: adminUsername.trim() || 'admin',
-          password: adminPassword.trim() || undefined,
+          password: finalPassword,
           databases: adminDatabases,
           connectionTypes: adminConnectionTypes,
         },
@@ -232,7 +240,7 @@ async function promptForConfig(
         }
 
         const password = await readPassword(
-          'Password (empty for trust auth): '
+          'Password (press Enter to auto-generate): '
         );
 
         // Ask for database permissions
@@ -277,9 +285,16 @@ async function promptForConfig(
           connectionTypes = ['tcp', 'local'];
         }
 
+        let finalPassword: string | undefined;
+        if (password.trim()) {
+          finalPassword = password.trim();
+        } else {
+          finalPassword = generatePostgresPassword();
+          logger.log(`✅ Auto-generated password: ${finalPassword}`);
+        }
         users.push({
           username: username.trim(),
-          password: password.trim() || undefined,
+          password: finalPassword,
           databases,
           connectionTypes,
         });
