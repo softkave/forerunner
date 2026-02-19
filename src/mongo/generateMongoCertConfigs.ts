@@ -41,6 +41,9 @@ export async function generateCAConfigForMongo(params: {
   overwrite?: boolean;
   mongoRunConfig: MongoRunConfig;
 }): Promise<CAConfig> {
+  if (!params.mongoRunConfig.caConfig) {
+    throw new Error('caConfig is required for certificate generation');
+  }
   const configFilePath = getMongoCertCAConfigFilePath(params.mongoRunConfig);
   if ((await exists(configFilePath)) && !params.overwrite) {
     const config = JSON.parse(

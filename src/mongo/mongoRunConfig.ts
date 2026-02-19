@@ -78,18 +78,23 @@ export const mongoRunConfigSchema = z
     // Container name (optional, for backwards compatibility)
     containerName: z.string().optional(),
 
-    // Mongo certs
-    caConfig: z.object({
-      days: z.number().int().positive('Days must be a positive integer'),
-      subject: z.object({
-        C: z.string().length(2, 'Country code must be 2 characters'),
-        ST: z.string().min(1, 'State is required'),
-        L: z.string().min(1, 'Locality is required'),
-        O: z.string().min(1, 'Organization is required'),
-        CN: z.string().min(1, 'Common Name is required'),
-      }),
-      passphrase: z.string().optional(),
-    }),
+    // SSL/TLS configuration
+    ssl: z.enum(['enabled', 'disabled']).default('enabled').optional(),
+
+    // Mongo certs (required when ssl is enabled, optional when disabled)
+    caConfig: z
+      .object({
+        days: z.number().int().positive('Days must be a positive integer'),
+        subject: z.object({
+          C: z.string().length(2, 'Country code must be 2 characters'),
+          ST: z.string().min(1, 'State is required'),
+          L: z.string().min(1, 'Locality is required'),
+          O: z.string().min(1, 'Organization is required'),
+          CN: z.string().min(1, 'Common Name is required'),
+        }),
+        passphrase: z.string().optional(),
+      })
+      .optional(),
 
     // Mongo configs: instance count is derived from instancesHostnames.length /
     // instancePorts.length (must match, min 3)
@@ -113,6 +118,17 @@ export const mongoRunConfigSchema = z
     {
       message:
         'instancePorts and instancesHostnames must have the same length (minimum 3)',
+    }
+  )
+  .refine(
+    data => {
+      // Default is 'enabled', so check if SSL is enabled (not explicitly disabled)
+      const sslEnabled = data.ssl !== 'disabled';
+      return !sslEnabled || Boolean(data.caConfig);
+    },
+    {
+      message: 'caConfig is required when ssl is enabled',
+      path: ['caConfig'],
     }
   );
 

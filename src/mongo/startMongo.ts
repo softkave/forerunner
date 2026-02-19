@@ -72,7 +72,7 @@ function getRunConfigFingerprint(params: {
     image,
     dataDir: path.resolve(dataDir),
     systemLogDir: path.resolve(systemLogDir),
-    certsDir: path.resolve(certsDir),
+    certsDir: certsDir ? path.resolve(certsDir) : '',
     configDir: path.resolve(configDir),
     addHost: [...nonLocalhostHostnames].sort(),
     initUser: initEnv ? {u: initEnv.username, p: initEnv.password} : null,
@@ -205,7 +205,8 @@ export async function startMongodInstance(params: {
     instanceNumber
   );
   const systemLogDir = path.dirname(systemLogPath);
-  const certsDir = getMongoCertOutDir(mongoRunConfig);
+  const hasTLS = mongoRunConfig.ssl !== 'disabled';
+  const certsDir = hasTLS ? getMongoCertOutDir(mongoRunConfig) : '';
   const configDir = getMongodConfigDir(mongoRunConfig);
   const imageTag = mongoRunConfig.mongoVersion ?? kDefaultMongoVersion;
   // Use official mongo image from Docker Hub
@@ -228,11 +229,15 @@ export async function startMongodInstance(params: {
     'System log dir:',
     path.resolve(mongoRunConfig.workingDir, systemLogDir)
   );
-  logger.log('Certs dir:', path.resolve(mongoRunConfig.workingDir, certsDir));
+  if (hasTLS) {
+    logger.log('Certs dir:', path.resolve(mongoRunConfig.workingDir, certsDir));
+  }
   logger.log('Config dir:', path.resolve(mongoRunConfig.workingDir, configDir));
 
-  const nonLocalhostHostnames =
-    getNonLocalhostInstanceHostnames(mongoRunConfig);
+  // When SSL is disabled (no caConfig), only bind to localhost
+  const nonLocalhostHostnames = hasTLS
+    ? getNonLocalhostInstanceHostnames(mongoRunConfig)
+    : [];
 
   const initEnv = shouldInitDbRootUser
     ? (() => {
@@ -249,7 +254,7 @@ export async function startMongodInstance(params: {
     image,
     dataDir,
     systemLogDir: systemLogDir,
-    certsDir,
+    certsDir: hasTLS ? certsDir : '',
     configDir,
     nonLocalhostHostnames,
     initEnv,
@@ -267,14 +272,14 @@ export async function startMongodInstance(params: {
       `${hostname}:${kDockerBridgeIp}`,
     ]),
     '-p',
-    // `${port}:27017`,
-    `${port}:${port}`,
+    // When TLS is disabled, bind only to localhost for security (like PostgreSQL)
+    // When TLS is enabled, bind to all interfaces
+    hasTLS ? `${port}:${port}` : `127.0.0.1:${port}:${port}`,
     '-v',
     `${path.resolve(dataDir)}:/data/db`,
     '-v',
     `${path.resolve(systemLogDir)}:/var/log/mongodb`,
-    '-v',
-    `${path.resolve(certsDir)}:/certs:ro`,
+    ...(hasTLS ? ['-v', `${path.resolve(certsDir)}:/certs:ro`] : []),
     '-v',
     `${path.resolve(configDir)}:/etc/mongodb:ro`,
   ];

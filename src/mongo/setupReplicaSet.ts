@@ -48,16 +48,21 @@ function runMongoshInContainer(params: {
   uri: string;
   script: string;
   logger: IForeLogger;
+  hasTLS?: boolean;
 }): {stdout: string; stderr: string} {
-  const {containerName, uri, script, logger} = params;
+  const {containerName, uri, script, logger, hasTLS = true} = params;
   const args = [
     'exec',
     containerName,
     'mongosh',
-    '--tls',
-    '--tlsCAFile',
-    '/certs/ca.crt.pem',
-    '--tlsAllowInvalidCertificates',
+    ...(hasTLS
+      ? [
+          '--tls',
+          '--tlsCAFile',
+          '/certs/ca.crt.pem',
+          '--tlsAllowInvalidCertificates',
+        ]
+      : []),
     uri,
     '--eval',
     script,
@@ -76,6 +81,7 @@ function runMongoshInContainerOrThrow(params: {
   uri: string;
   script: string;
   logger: IForeLogger;
+  hasTLS?: boolean;
 }): string {
   try {
     const {stdout} = runMongoshInContainer(params);
@@ -102,6 +108,7 @@ export async function setupReplicaSet(params: {
   logger.log('Setting up replica set...');
 
   const replicaSetName = mongoRunConfig.replicaSetName;
+  const hasTLS = mongoRunConfig.ssl !== 'disabled';
 
   const containerName = getDockerContainerName(
     mongoRunConfig,
@@ -117,6 +124,7 @@ export async function setupReplicaSet(params: {
       uri,
       script: 'rs.status()',
       logger,
+      hasTLS,
     });
     alreadyInitialized = true;
     logger.log('Replica set already initialized');
@@ -135,6 +143,7 @@ export async function setupReplicaSet(params: {
       uri,
       script,
       logger,
+      hasTLS,
     });
     logger.log('Replica set initialization completed');
   }

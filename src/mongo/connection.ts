@@ -71,11 +71,16 @@ export async function getMongoClientForInstance(
     preferLocalhost: params.preferLocalhost,
   });
 
+  const hasTLS = mongoRunConfig.ssl !== 'disabled';
   const client = new MongoClient(uri, {
     connectTimeoutMS: connectTimeoutMs,
     directConnection: true,
-    tls: true,
-    tlsAllowInvalidCertificates: true,
+    ...(hasTLS
+      ? {
+          tls: true,
+          tlsAllowInvalidCertificates: true,
+        }
+      : {}),
   });
   await client.connect();
   logger.log('Connected to MongoDB');
@@ -104,9 +109,14 @@ export async function getMongoClientForReplicaSet(
     preferLocalhost: preferLocalhost,
   });
 
+  const hasTLS = mongoRunConfig.ssl !== 'disabled';
   const client = new MongoClient(uri, {
-    tls: true,
-    tlsAllowInvalidCertificates: true,
+    ...(hasTLS
+      ? {
+          tls: true,
+          tlsAllowInvalidCertificates: true,
+        }
+      : {}),
     connectTimeoutMS: connectTimeoutMs,
   });
   await client.connect();

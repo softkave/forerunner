@@ -18,23 +18,25 @@ export const MongoConfigSchema = z.object({
   net: z.object({
     bindIp: z.string(),
     port: z.number(),
-    tls: z.object({
-      mode: z.enum(['requireTLS', 'preferTLS']),
-      certificateKeyFile: z.string(),
-      // clusterFile: z.string(),
-      CAFile: z.string(),
-      // clusterCAFile: z.string(),
-      clusterAuthX509: z.object({
-        attributes: z.string(),
-      }),
-      allowConnectionsWithoutCertificates: z.boolean(),
-    }),
+    tls: z
+      .object({
+        mode: z.enum(['requireTLS', 'preferTLS']),
+        certificateKeyFile: z.string(),
+        // clusterFile: z.string(),
+        CAFile: z.string(),
+        // clusterCAFile: z.string(),
+        clusterAuthX509: z.object({
+          attributes: z.string(),
+        }),
+        allowConnectionsWithoutCertificates: z.boolean(),
+      })
+      .optional(),
   }),
   security: z.object({
     authorization: z.enum(['enabled', 'disabled']),
     transitionToAuth: z.boolean().optional(),
     keyFile: z.string().optional(),
-    clusterAuthMode: z.literal('x509'),
+    clusterAuthMode: z.enum(['x509', 'keyFile', 'sendX509']).optional(),
   }),
   replication: z
     .object({
@@ -113,6 +115,7 @@ export async function generateMongoDockerConfigForMongod(params: {
     return config as MongoConfig;
   }
 
+  const hasTLS = mongoRunConfig.ssl !== 'disabled';
   const config: MongoConfig = {
     systemLog: {
       destination: 'file',
@@ -123,21 +126,25 @@ export async function generateMongoDockerConfigForMongod(params: {
     net: {
       port: mongoRunConfig.instancePorts[instanceNumber - 1],
       bindIp: ['0.0.0.0'].join(','),
-      tls: {
-        certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,
-        CAFile: '/certs/ca.crt.pem',
-        mode: 'requireTLS',
-        clusterAuthX509: {
-          attributes: `O=${mongoRunConfig.caConfig.subject.O}`,
-        },
-        allowConnectionsWithoutCertificates: true,
-      },
+      ...(hasTLS
+        ? {
+            tls: {
+              certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,
+              CAFile: '/certs/ca.crt.pem',
+              mode: 'requireTLS' as const,
+              clusterAuthX509: {
+                attributes: `O=${mongoRunConfig.caConfig!.subject.O}`,
+              },
+              allowConnectionsWithoutCertificates: true,
+            },
+          }
+        : {}),
     },
     storage: {
       dbPath: '/data/db',
     },
     security: {
-      clusterAuthMode: 'x509',
+      ...(hasTLS ? {clusterAuthMode: 'x509' as const} : {}),
       authorization:
         mongoRunConfig.authorization !== 'disabled' ? 'enabled' : 'disabled',
       transitionToAuth: false,
