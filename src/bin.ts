@@ -17,11 +17,17 @@ import {
   getReplicaSetStatus,
   printMongoUriMain,
   restartMongo,
+  scaffoldMongoConfig,
   setupReplicaSetMain,
   startMongoMain,
   stopMongoMain,
+  validateMongoConfig,
 } from './mongo/index.js';
-import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
+import {
+  getMongoRunConfig,
+  MongoRunConfig,
+  mongoRunConfigSchema,
+} from './mongo/mongoRunConfig.js';
 
 // Import etcHosts functionality
 import {
@@ -47,10 +53,14 @@ import {
   setupUsers as setupPostgresUsers,
   startPostgresInstance,
   stopPostgresInstance,
+  validatePostgresConfig,
 } from './postgres/index.js';
 
 // Import run-env functionality
 import {runWithEnvMain} from './runEnv/index.js';
+
+// Import security functionality
+import {generateJwtSecret, generatePassword} from './security/index.js';
 
 const program = new Command();
 
@@ -135,6 +145,48 @@ const mongoProgram = program
   .command('mongo')
   .description('MongoDB management utilities');
 
+// Scaffold MongoDB configuration
+mongoProgram
+  .command('scaffold-config')
+  .description('Generate MongoDB configuration file')
+  .option('--defaults', 'Use default values instead of prompting', false)
+  .option('-o, --output <path>', 'Output file path', './mongo-run-config.json')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await scaffoldMongoConfig({
+        outputPath: options.output,
+        logger,
+        useDefaults: options.defaults,
+      });
+      logger.log('✅ MongoDB configuration generated successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Validate MongoDB configuration
+mongoProgram
+  .command('validate-config')
+  .description('Validate MongoDB configuration file and print errors')
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await validateMongoConfig({
+        configPath: options.config,
+        logger,
+      });
+    } catch (error) {
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
 // Generate MongoDB certificates (configs and certs)
 mongoProgram
   .command('generate-certs')
@@ -175,7 +227,20 @@ mongoProgram
   .description(
     'Start MongoDB instances and setup replica set (if not already setup)'
   )
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-c, --config <path>', 'Path to mongo run config file')
+  .option('--working-dir <path>', 'Working directory (required if no config)')
+  .option('--port <ports...>', 'Port numbers (required if no config, min 3)')
+  .option(
+    '--container-name <name>',
+    'Container name prefix (optional, for backwards compatibility)'
+  )
+  .option('--version <version>', 'MongoDB version')
+  .option(
+    '--replica-set-name <name>',
+    'Replica set name (required if no config)'
+  )
+  .option('--user <username>', 'Admin username (with --password enables auth)')
+  .option('--password <password>', 'Admin password (with --user enables auth)')
   .option(
     '--no-setup-replica-set',
     'Skip replica set setup (default: setup replica set)'
@@ -189,9 +254,55 @@ mongoProgram
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
+      let mongoRunConfig;
+
+      if (options.config) {
+        mongoRunConfig = await getMongoRunConfig({
+          mongoRunConfigFilepath: options.config,
+        });
+      } else {
+        // Quick/dirty setup for dev or test: no config file, no SSL, no certs
+        if (!options.workingDir || !options.port || !options.replicaSetName) {
+          throw new Error(
+            '--working-dir, --port (at least 3 ports), and --replica-set-name are required when --config is not provided'
+          );
+        }
+
+        const ports = options.port.map((p: string) => parseInt(p, 10));
+        if (ports.length < 3) {
+          throw new Error('At least 3 ports are required');
+        }
+
+        const authEnabled = Boolean(options.user) && Boolean(options.password);
+
+        // When SSL is disabled (no caConfig), only use localhost hostnames
+        const instancesHostnames = ports.map(() => 'localhost');
+
+        const config: any = {
+          workingDir: options.workingDir,
+          instancePorts: ports,
+          instancesHostnames,
+          replicaSetName: options.replicaSetName,
+          bindLocalhost: true,
+          ssl: 'disabled', // No SSL when running without config file
+          authorization: authEnabled ? 'enabled' : 'disabled',
+          users: authEnabled
+            ? [
+                {
+                  username: options.user,
+                  password: options.password,
+                  roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
+                },
+              ]
+            : [],
+        };
+
+        if (options.version) config.mongoVersion = options.version;
+        if (options.containerName) config.containerName = options.containerName;
+
+        mongoRunConfig = mongoRunConfigSchema.parse(config);
+      }
+
       await startMongoMain({
         mongoRunConfig,
         logger,
@@ -211,14 +322,55 @@ mongoProgram
 mongoProgram
   .command('stop')
   .description('Stop MongoDB instances')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-c, --config <path>', 'Path to mongo run config file')
+  .option('--working-dir <path>', 'Working directory (required if no config)')
+  .option('--port <ports...>', 'Port numbers (required if no config, min 3)')
+  .option(
+    '--container-name <name>',
+    'Container name prefix (optional, for backwards compatibility)'
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
+      let mongoRunConfig: MongoRunConfig;
+
+      if (options.config) {
+        mongoRunConfig = await getMongoRunConfig({
+          mongoRunConfigFilepath: options.config,
+        });
+      } else {
+        // Quick stop without config: need working dir and ports
+        if (!options.workingDir || !options.port) {
+          throw new Error(
+            '--working-dir and --port (at least 3 ports) are required when --config is not provided'
+          );
+        }
+
+        const ports = options.port.map((p: string) => parseInt(p, 10));
+        if (ports.length < 3) {
+          throw new Error('At least 3 ports are required');
+        }
+
+        // Minimal config for stop - only need workingDir, ports, and hostnames
+        const instancesHostnames = ports.map(() => 'localhost');
+
+        const config: any = {
+          workingDir: options.workingDir,
+          instancePorts: ports,
+          instancesHostnames,
+          replicaSetName: 'temp-rs', // Dummy value, not used for stop
+          bindLocalhost: true,
+          ssl: 'disabled', // No SSL when running without config file
+          authorization: 'disabled',
+          users: [],
+        };
+
+        if (options.containerName) config.containerName = options.containerName;
+
+        mongoRunConfig = mongoRunConfigSchema.parse(config);
+      }
+
       await stopMongoMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB instances stopped successfully');
     } catch (error) {
@@ -417,6 +569,25 @@ postgresProgram
       logger.log('✅ PostgreSQL configuration generated successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Validate PostgreSQL configuration
+postgresProgram
+  .command('validate-config')
+  .description('Validate PostgreSQL configuration file and print errors')
+  .requiredOption('-c, --config <path>', 'Path to postgres run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await validatePostgresConfig({
+        configPath: options.config,
+        logger,
+      });
+    } catch (error) {
       logger.onSilentFail(error);
       process.exit(1);
     }
@@ -832,6 +1003,116 @@ program
   });
 
 // ============================================================================
+// SECURITY SUB-PROGRAM
+// ============================================================================
+const securityProgram = program
+  .command('security')
+  .description('Security utilities for generating passwords and JWT secrets');
+
+// Generate password command
+securityProgram
+  .command('password')
+  .description('Generate production-grade password(s)')
+  .option('-c, --count <number>', 'Number of passwords to generate', '1')
+  .option('-l, --length <number>', 'Password length', '32')
+  .option('--numbers', 'Include numbers', true)
+  .option('--no-numbers', 'Exclude numbers')
+  .option('--symbols', 'Include symbols', true)
+  .option('--no-symbols', 'Exclude symbols')
+  .option('--uppercase', 'Include uppercase characters', true)
+  .option('--no-uppercase', 'Exclude uppercase characters')
+  .option('--lowercase', 'Include lowercase characters', true)
+  .option('--no-lowercase', 'Exclude lowercase characters')
+  .option('--exclude-similar', 'Exclude visually similar characters', true)
+  .option('--no-exclude-similar', 'Allow visually similar characters')
+  .option('--strict', 'Require at least one character from each pool', true)
+  .option('--no-strict', 'Do not require characters from each pool')
+  .option('--exclude <chars>', 'Characters to exclude from password', '')
+  .option(
+    '--symbols-set <chars>',
+    'Custom symbols to use (overrides default symbols)',
+    ''
+  )
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const count = parseInt(options.count, 10);
+      if (isNaN(count) || count < 1) {
+        throw new Error('Count must be a positive integer');
+      }
+
+      const length = parseInt(options.length, 10);
+      if (isNaN(length) || length < 1) {
+        throw new Error('Length must be a positive integer');
+      }
+
+      // Handle boolean flags - commander.js sets them to false when --no-* is
+      // used, otherwise they're undefined, so we default to true for enabled
+      // flags. Note: We check !== false because false means explicitly
+      // disabled, undefined means use default (true)
+      const passwordOptions: Parameters<typeof generatePassword>[0] = {
+        count,
+        length,
+        numbers: options.numbers !== false,
+        symbols:
+          options.symbolsSet !== ''
+            ? options.symbolsSet
+            : options.symbols !== false,
+        uppercase: options.uppercase !== false,
+        lowercase: options.lowercase !== false,
+        excludeSimilarCharacters: options.excludeSimilar !== false,
+        strict: options.strict !== false,
+        exclude: options.exclude || undefined,
+      };
+
+      const passwords = generatePassword(passwordOptions);
+      const passwordArray = Array.isArray(passwords) ? passwords : [passwords];
+
+      passwordArray.forEach(password => {
+        logger.log(password);
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Generate JWT secret command
+securityProgram
+  .command('jwt-secret')
+  .description('Generate production-grade JWT secret(s)')
+  .option('-c, --count <number>', 'Number of secrets to generate', '1')
+  .option('-l, --length <number>', 'Length in bytes of each secret', '64')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const count = parseInt(options.count, 10);
+      if (isNaN(count) || count < 1) {
+        throw new Error('Count must be a positive integer');
+      }
+
+      const length = parseInt(options.length, 10);
+      if (isNaN(length) || length < 1) {
+        throw new Error('Length must be a positive integer');
+      }
+
+      const secrets = generateJwtSecret(count, length);
+      const secretArray = Array.isArray(secrets) ? secrets : [secrets];
+
+      secretArray.forEach(secret => {
+        logger.log(secret);
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
 // HELP AND DEFAULT ACTIONS
 // ============================================================================
 
@@ -882,6 +1163,10 @@ COMMANDS:
   run-env                  Run a command with a selected .env* file
                            Usage: run-env [options] -- <command> [args...]
 
+  security                 Security utilities
+    password               Generate production-grade password(s)
+    jwt-secret             Generate production-grade JWT secret(s)
+
   help                     Show this help message
 
 EXAMPLES:
@@ -914,6 +1199,18 @@ EXAMPLES:
 
   # Run a command with a selected .env file
   forerunner run-env -- npm run dev
+
+  # Generate a password
+  forerunner security password
+
+  # Generate multiple passwords
+  forerunner security password --count 5
+
+  # Generate a JWT secret
+  forerunner security jwt-secret
+
+  # Generate multiple JWT secrets
+  forerunner security jwt-secret --count 3
 
 For more information about a specific command, use:
   forerunner <command> --help

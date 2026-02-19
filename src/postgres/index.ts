@@ -7,3 +7,4 @@ export * from './setupUsers.js';
 export * from './startPostgresInstance.js';
 export * from './stopPostgresInstance.js';
 export * from './utils.js';
+export * from './validateConfig.js';
