@@ -111,8 +111,8 @@ async function promptForConfig(
       throw new Error('At least 3 instances are required for a replica set');
     }
 
-    const instancePorts: number[] = [];
-    const instancesHostnames: InstanceHostnameEntry[] = [];
+    const ports: number[] = [];
+    const hostnames: InstanceHostnameEntry[] = [];
 
     for (let i = 0; i < instanceCount; i++) {
       const portStr = await question(
@@ -120,18 +120,18 @@ async function promptForConfig(
         `Port for instance ${i + 1} [${27017 + i}]: `
       );
       const port = portStr.trim() ? parseInt(portStr.trim(), 10) : 27017 + i;
-      instancePorts.push(port);
+      ports.push(port);
 
       const hostnameStr = await question(
         rl,
         `Hostname for instance ${i + 1} [localhost]: `
       );
       const hostname = hostnameStr.trim() || 'localhost';
-      instancesHostnames.push(hostname);
+      hostnames.push(hostname);
     }
 
-    config.instancePorts = instancePorts;
-    config.instancesHostnames = instancesHostnames;
+    config.ports = ports;
+    config.hostnames = hostnames;
 
     logger.log('\nAuthentication and Authorization:');
     const authStr = await question(rl, 'Authorization enabled? (y/n) [y]: ');
@@ -295,8 +295,8 @@ function getDefaultConfig(): MongoRunConfig {
     },
     replicaSetName: 'my-mongo-rs',
     bindLocalhost: true,
-    instancePorts: [27017, 27018, 27019],
-    instancesHostnames: ['localhost', 'localhost', 'localhost'],
+    ports: [27017, 27018, 27019],
+    hostnames: ['localhost', 'localhost', 'localhost'],
     authorization: 'enabled',
     users: [
       {

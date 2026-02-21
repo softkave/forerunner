@@ -26,12 +26,12 @@ const baseConfig: MongoRunConfig = {
       CN: 'softkave-forerunner-mongo CA',
     },
   },
-  instancesHostnames: [
+  hostnames: [
     'test-1.softkave-forerunner-mongo.fimidara.com',
     'test-2.softkave-forerunner-mongo.fimidara.com',
     'test-3.softkave-forerunner-mongo.fimidara.com',
   ],
-  instancePorts: [27040, 27041, 27042],
+  ports: [27040, 27041, 27042],
   users: [
     {
       username: 'test-setup-admin',

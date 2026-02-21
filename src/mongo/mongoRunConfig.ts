@@ -91,12 +91,12 @@ export const mongoRunConfigSchema = z
       passphrase: z.string().optional(),
     }),
 
-    // Mongo configs: instance count is derived from instancesHostnames.length /
-    // instancePorts.length (must match, min 3)
-    // Each entry can be: string, string[], {hostname, resolution}, or array of {hostname, resolution}
-    instancesHostnames: z.array(InstanceHostnameEntrySchema),
+    // Mongo configs: instance count is derived from hostnames.length /
+    // ports.length (must match, min 3). Each entry can be: string, string[],
+    // {hostname, resolution}, or array of {hostname, resolution}
+    hostnames: z.array(InstanceHostnameEntrySchema),
     bindLocalhost: z.boolean().default(true).optional(),
-    instancePorts: z.array(z.number()),
+    ports: z.array(z.number()),
     replicaSetName: z.string().min(1, 'replicaSetName is required'),
 
     // Authentication and authorization
@@ -108,11 +108,9 @@ export const mongoRunConfigSchema = z
   })
   .refine(
     data =>
-      data.instancePorts.length === data.instancesHostnames.length &&
-      data.instancePorts.length >= 3,
+      data.ports.length === data.hostnames.length && data.ports.length >= 3,
     {
-      message:
-        'instancePorts and instancesHostnames must have the same length (minimum 3)',
+      message: 'ports and hostnames must have the same length (minimum 3)',
     }
   );
 

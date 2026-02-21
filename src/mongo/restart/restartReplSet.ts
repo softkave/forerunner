@@ -151,9 +151,9 @@ async function getInstanceNumberFromMember(
   member: ReplicaSetStatusMember,
   mongoRunConfig: MongoRunConfig
 ): Promise<number | undefined> {
-  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+  for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     const hostnames = compileHostnames({
-      hostnames: mongoRunConfig.instancesHostnames[i - 1],
+      hostnames: mongoRunConfig.hostnames[i - 1],
       bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
     });
     if (hostnames.some(hostname => member.name.includes(hostname))) {

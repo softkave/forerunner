@@ -14,7 +14,7 @@ export async function findReplMemberByInstanceNumber(params: {
   const {instanceNumber, mongoRunConfig, status} = params;
 
   const hostnames = compileHostnames({
-    hostnames: mongoRunConfig.instancesHostnames[instanceNumber - 1],
+    hostnames: mongoRunConfig.hostnames[instanceNumber - 1],
     bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
   });
   return status.members.find(member =>

@@ -11,9 +11,9 @@ const kMongoshFirstInstance = 1;
 function buildMembers(
   mongoRunConfig: MongoRunConfig
 ): {_id: number; host: string}[] {
-  return mongoRunConfig.instancePorts.map((port, index) => {
+  return mongoRunConfig.ports.map((port, index) => {
     const hostnames = compileHostnames({
-      hostnames: mongoRunConfig.instancesHostnames[index],
+      hostnames: mongoRunConfig.hostnames[index],
       bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
     });
     const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
@@ -28,12 +28,12 @@ function getMongoshConnectionUri(params: {
 }): string {
   const {mongoRunConfig, authUser} = params;
   const hostnames = compileHostnames({
-    hostnames: mongoRunConfig.instancesHostnames[0],
+    hostnames: mongoRunConfig.hostnames[0],
     bindLocalhost: false,
   });
   const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
   assert.ok(hostname, `hostname must be set for instance 1`);
-  const port = mongoRunConfig.instancePorts[0];
+  const port = mongoRunConfig.ports[0];
   const auth =
     authUser?.username && authUser?.password
       ? `${encodeURIComponent(authUser.username)}:${encodeURIComponent(

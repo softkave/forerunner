@@ -152,8 +152,8 @@ function getNonLocalhostInstanceHostnames(
   mongoRunConfig: MongoRunConfig
 ): string[] {
   const seen = new Set<string>();
-  for (let i = 0; i < mongoRunConfig.instancesHostnames.length; i++) {
-    const entry = mongoRunConfig.instancesHostnames[i];
+  for (let i = 0; i < mongoRunConfig.hostnames.length; i++) {
+    const entry = mongoRunConfig.hostnames[i];
     if (!entry) continue;
     // Only bind hostnames to Docker bridge if resolution is missing or 'local' (not 'dns')
     const hostnamesForBinding = extractHostnamesForDockerBinding(entry);
@@ -198,7 +198,7 @@ export async function startMongodInstance(params: {
 
   const instanceRunName = getInstanceRunName(instanceNumber);
   const containerName = getDockerContainerName(mongoRunConfig, instanceNumber);
-  const port = mongoRunConfig.instancePorts[instanceNumber - 1];
+  const port = mongoRunConfig.ports[instanceNumber - 1];
   const dataDir = getMongodDataDir(mongoRunConfig, instanceNumber);
   const systemLogPath = getMongodSystemLogFilePath(
     mongoRunConfig,
@@ -403,7 +403,7 @@ export async function startMongoMain(params: {
   // Generate certificates if not already present
   await ensureMongoCertificates({mongoRunConfig, logger});
 
-  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+  for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     await startMongodInstance({
       instanceNumber: i,
       mongoRunConfig,

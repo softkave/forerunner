@@ -123,7 +123,7 @@ export async function generateMongoDockerConfigForMongod(params: {
       path: `/var/log/mongodb/mongod-${instanceNumber}.log`,
     },
     net: {
-      port: mongoRunConfig.instancePorts[instanceNumber - 1],
+      port: mongoRunConfig.ports[instanceNumber - 1],
       bindIp: ['0.0.0.0'].join(','),
       tls: {
         certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,

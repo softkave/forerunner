@@ -72,13 +72,13 @@ export async function getMongoUriForInstance(params: {
   const {instanceNumber, mongoRunConfig, logger} = params;
 
   const hostnames = compileHostnames({
-    hostnames: mongoRunConfig.instancesHostnames[instanceNumber - 1],
+    hostnames: mongoRunConfig.hostnames[instanceNumber - 1],
     bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
   });
   const bindIp0 = params.preferLocalhost
     ? getFirstLocalhostBindIp({hostnames}) || hostnames[0]
     : hostnames[0];
-  let host = `${bindIp0}:${mongoRunConfig.instancePorts[instanceNumber - 1]}`;
+  let host = `${bindIp0}:${mongoRunConfig.ports[instanceNumber - 1]}`;
   let uri = `mongodb://${host}`;
   logger.log('Mongo URI:', uri);
   if (params.username && params.password) {
@@ -112,32 +112,28 @@ export async function getMongoUriForReplicaSet(params: {
   preferLocalhost?: boolean;
 }) {
   const {mongoRunConfig, serverSelectionTimeoutMs = 5000, logger} = params;
-  const hostnamesPerInstance = mongoRunConfig.instancePorts.map(
-    (_port, index) => {
-      const hostnames = compileHostnames({
-        hostnames: mongoRunConfig.instancesHostnames[index] ?? [],
-        bindLocalhost: mongoRunConfig.bindLocalhost || false,
-      });
-      let hostname: string | undefined;
-      if (params.preferLocalhost) {
-        hostname = getFirstLocalhostBindIp({hostnames});
-      } else {
-        hostname = getFirstNonLocalhostBindIp({hostnames});
-      }
-
-      const preferredHostname = hostname || hostnames[0];
-      assert.ok(
-        preferredHostname,
-        `instanceHostnames or bindLocalhost must be set for instance ${
-          index + 1
-        }`
-      );
-
-      return preferredHostname;
+  const hostnamesPerInstance = mongoRunConfig.ports.map((_port, index) => {
+    const hostnames = compileHostnames({
+      hostnames: mongoRunConfig.hostnames[index] ?? [],
+      bindLocalhost: mongoRunConfig.bindLocalhost || false,
+    });
+    let hostname: string | undefined;
+    if (params.preferLocalhost) {
+      hostname = getFirstLocalhostBindIp({hostnames});
+    } else {
+      hostname = getFirstNonLocalhostBindIp({hostnames});
     }
-  );
 
-  const portsPerInstance = mongoRunConfig.instancePorts;
+    const preferredHostname = hostname || hostnames[0];
+    assert.ok(
+      preferredHostname,
+      `instanceHostnames or bindLocalhost must be set for instance ${index + 1}`
+    );
+
+    return preferredHostname;
+  });
+
+  const portsPerInstance = mongoRunConfig.ports;
   const host = hostnamesPerInstance
     .map((hostname, index) => {
       const port = portsPerInstance[index];

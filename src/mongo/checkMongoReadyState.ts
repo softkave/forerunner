@@ -68,7 +68,7 @@ export async function checkMongoInstancesListening(
 ) {
   const {mongoRunConfig} = params;
 
-  const instanceNumbers = range(mongoRunConfig.instancePorts.length);
+  const instanceNumbers = range(mongoRunConfig.ports.length);
   const results = await Promise.all(
     instanceNumbers.map(instanceNumber =>
       checkMongoInstanceListening({

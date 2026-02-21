@@ -90,8 +90,7 @@ export async function generateCertConfigForMongod(params: {
     return config;
   }
 
-  const entry =
-    params.mongoRunConfig.instancesHostnames[params.instanceNumber - 1];
+  const entry = params.mongoRunConfig.hostnames[params.instanceNumber - 1];
   let hostnames = extractHostnames(entry ?? []);
   if (params.mongoRunConfig.bindLocalhost) {
     hostnames = [...hostnames, 'localhost', '127.0.0.1'];
@@ -107,7 +106,7 @@ export async function generateCertConfigForMongod(params: {
   const firstNonLocalHostname = getFirstNonLocalhostBindIp({bindIp: hostname0});
   const cn = firstNonLocalHostname || hostname0;
   // Collect all hostnames from all instances for SAN
-  const allHostnames = params.mongoRunConfig.instancesHostnames.flatMap(e =>
+  const allHostnames = params.mongoRunConfig.hostnames.flatMap(e =>
     extractHostnames(e ?? [])
   );
   const san = uniq(allHostnames.concat(hostnames));
@@ -146,7 +145,7 @@ export async function generateMongoCertConfigsMain(params: {
 }) {
   const {mongoRunConfig, overwrite} = params;
   const caConfig = await generateCAConfigForMongo({overwrite, mongoRunConfig});
-  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+  for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     await generateCertConfigForMongod({
       instanceNumber: i,
       caConfig,

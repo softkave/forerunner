@@ -65,7 +65,7 @@ export async function stopMongoMain(params: {
   } = params;
 
   const results = await Promise.allSettled(
-    Array.from({length: mongoRunConfig.instancePorts.length}, async (_, i) => {
+    Array.from({length: mongoRunConfig.ports.length}, async (_, i) => {
       await stopMongodInstance({
         instanceNumber: i + 1,
         mongoRunConfig,

@@ -62,7 +62,7 @@ export async function generateMongoCertsMain(params: {
   });
 
   const overwriteCerts = params.overwriteCerts || overwriteCA;
-  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+  for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     const certConfig = getMongoCertConfigFilePath(mongoRunConfig, i);
     await generateCert({
       opts: {

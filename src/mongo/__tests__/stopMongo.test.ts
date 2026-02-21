@@ -25,8 +25,8 @@ const mongoRunConfig: MongoRunConfig = {
       CN: 'softkave-forerunner-mongo CA',
     },
   },
-  instancesHostnames: ['test-1.softkave-forerunner-mongo.fimidara.com'],
-  instancePorts: [27030],
+  hostnames: ['test-1.softkave-forerunner-mongo.fimidara.com'],
+  ports: [27030],
   users: [
     {
       username: 'test-user-admin',
@@ -70,10 +70,7 @@ describe('stopMongo', () => {
       await stopMongoMain({mongoRunConfig, logger});
 
       // Confirm that the instances are not listening
-      for (const instanceNumber of range(
-        0,
-        mongoRunConfig.instancePorts.length
-      )) {
+      for (const instanceNumber of range(0, mongoRunConfig.ports.length)) {
         const result = await checkMongoInstanceListening({
           mongoRunConfig,
           instanceNumber: instanceNumber + 1,

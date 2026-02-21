@@ -26,7 +26,7 @@ const mongoRunConfig: MongoRunConfig = {
       CN: 'softkave-forerunner-mongo CA',
     },
   },
-  instancesHostnames: [
+  hostnames: [
     'test-1.softkave-forerunner-mongo.fimidara.com',
     'test-2.softkave-forerunner-mongo.fimidara.com',
     {
@@ -34,7 +34,7 @@ const mongoRunConfig: MongoRunConfig = {
       resolution: 'local',
     },
   ],
-  instancePorts: [27030, 27031, 27032],
+  ports: [27030, 27031, 27032],
   users: [
     {
       username: 'test-user-admin',
@@ -87,8 +87,8 @@ describe('getDockerContainerName', () => {
         CN: 'Test CA',
       },
     },
-    instancesHostnames: ['h1', 'h2', 'h3'],
-    instancePorts: [27017, 27018, 27019],
+    hostnames: ['h1', 'h2', 'h3'],
+    ports: [27017, 27018, 27019],
     replicaSetName: 'rs0',
     users: [],
   };
@@ -172,7 +172,7 @@ describe('startMongo', () => {
     'start after docker stop (without rm) reuses stopped containers',
     async () => {
       const silentLogger = new ConsoleForeLogger({silent: true});
-      for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+      for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
         const name = getDockerContainerName(mongoRunConfig, i);
         execFileSync('docker', ['stop', name], {
           stdio: 'pipe',
@@ -200,7 +200,7 @@ describe('startMongo', () => {
       const newPorts = [27033, 27034, 27035] as const;
       const mongoRunConfigNewPorts: MongoRunConfig = {
         ...mongoRunConfig,
-        instancePorts: [...newPorts],
+        ports: [...newPorts],
       };
       await startMongoMain({
         mongoRunConfig: mongoRunConfigNewPorts,

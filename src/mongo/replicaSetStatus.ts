@@ -169,7 +169,7 @@ async function getStatusFromAllMembers(
 
   // Get status from all members
   const statuses = await Promise.all(
-    mongoRunConfig.instancePorts.map(async (_port, i) => {
+    mongoRunConfig.ports.map(async (_port, i) => {
       const instanceNumber = i + 1;
       const status = await getReplStatusFromInstance({
         ...params,
