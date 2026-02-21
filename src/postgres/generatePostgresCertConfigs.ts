@@ -1,3 +1,4 @@
+import assert from 'assert';
 import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
 import path from 'path';
@@ -43,24 +44,14 @@ export async function generateCAConfigForPostgres(params: {
     return config;
   }
 
+  assert.ok(params.postgresRunConfig.caConfig, 'CA config is required');
   const password = generateRandomPassword();
   const postgresCAConfig: CAConfig = {
-    passphrase: params.postgresRunConfig.caConfig?.passphrase ?? password,
+    passphrase: params.postgresRunConfig.caConfig.passphrase ?? password,
     outDir: getPostgresCertOutDir(params.postgresRunConfig),
-    days: params.postgresRunConfig.caConfig?.days ?? 3650,
-    subject: params.postgresRunConfig.caConfig?.subject ?? {
-      C: 'NG',
-      ST: 'LA',
-      L: 'Ikeja',
-      O: 'MyOrg',
-      CN: 'MyOrg PostgreSQL CA',
-    },
-    files: params.postgresRunConfig.caConfig?.files ?? {
-      key: 'ca.key.pem',
-      cert: 'ca.crt.pem',
-      csr: 'ca.csr.pem',
-      chain: 'ca-chain.pem',
-    },
+    days: params.postgresRunConfig.caConfig.days,
+    subject: params.postgresRunConfig.caConfig.subject,
+    files: params.postgresRunConfig.caConfig.files,
   };
 
   await ensureFile(configFilePath);

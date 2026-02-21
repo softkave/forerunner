@@ -20,12 +20,12 @@ const mongoRunConfig: MongoRunConfig = {
       CN: 'softkave-forerunner-mongo CA',
     },
   },
-  instancesHostnames: [
+  hostnames: [
     'test-1.softkave-forerunner-mongo.fimidara.com',
     'test-2.softkave-forerunner-mongo.fimidara.com',
     'test-3.softkave-forerunner-mongo.fimidara.com',
   ],
-  instancePorts: [27060, 27061, 27062],
+  ports: [27060, 27061, 27062],
   users: [
     {
       username: 'test-status-admin',
@@ -136,9 +136,9 @@ describe('getReplicaSetStatus', () => {
       });
 
       expect(status.set).toBe(mongoRunConfig.replicaSetName);
-      expect(status.members.length).toBe(mongoRunConfig.instancePorts.length);
+      expect(status.members.length).toBe(mongoRunConfig.ports.length);
       expect(status.rawAll).toBeDefined();
-      expect(status.rawAll.length).toBe(mongoRunConfig.instancePorts.length);
+      expect(status.rawAll.length).toBe(mongoRunConfig.ports.length);
     },
     30 * 1000
   );

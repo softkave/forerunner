@@ -68,7 +68,7 @@ export async function checkMongoInstancesListening(
 ) {
   const {mongoRunConfig} = params;
 
-  const instanceNumbers = range(mongoRunConfig.instancePorts.length);
+  const instanceNumbers = range(mongoRunConfig.ports.length);
   const results = await Promise.all(
     instanceNumbers.map(instanceNumber =>
       checkMongoInstanceListening({
@@ -112,7 +112,7 @@ export async function checkMongoReplicaSetReady(
       {
         onFailedAttempt: error => {
           const errorMessage =
-            error instanceof Error ? error.message : String(error);
+            error instanceof Error ? error.message : JSON.stringify(error);
           logger.log(
             `Failed to connect to MongoDB replica set ${mongoRunConfig.replicaSetName}, attempt ${error.attemptNumber}/${error.retriesLeft + error.attemptNumber}: ${errorMessage}`
           );
@@ -123,7 +123,7 @@ export async function checkMongoReplicaSetReady(
     return true;
   } catch (error) {
     logger.log(
-      `Failed to connect to MongoDB replica set ${mongoRunConfig.replicaSetName} after retries: ${error}`
+      `Failed to connect to MongoDB replica set ${mongoRunConfig.replicaSetName} after retries: ${JSON.stringify(error)}`
     );
     return false;
   }

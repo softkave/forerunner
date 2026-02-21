@@ -4,7 +4,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getInstanceRunName} from './constants.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {getDockerContainerName} from './startMongodInstances.js';
+import {getDockerContainerName} from './startMongo.js';
 
 export async function stopMongodInstance(params: {
   instanceNumber: number;
@@ -53,7 +53,7 @@ export async function stopMongodInstance(params: {
   }
 }
 
-export async function stopMongodInstancesMain(params: {
+export async function stopMongoMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   force?: boolean;
@@ -65,7 +65,7 @@ export async function stopMongodInstancesMain(params: {
   } = params;
 
   const results = await Promise.allSettled(
-    Array.from({length: mongoRunConfig.instancePorts.length}, async (_, i) => {
+    Array.from({length: mongoRunConfig.ports.length}, async (_, i) => {
       await stopMongodInstance({
         instanceNumber: i + 1,
         mongoRunConfig,

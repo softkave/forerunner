@@ -6,8 +6,8 @@ import {
   generateMongoCertConfigsMain,
   generateMongoCertsMain,
   generateMongoPassword,
-  startMongodInstancesMain,
-  stopMongodInstancesMain,
+  startMongoMain,
+  stopMongoMain,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {cleanupMongoTest} from '../testHelpers.js';
@@ -25,8 +25,8 @@ const mongoRunConfig: MongoRunConfig = {
       CN: 'softkave-forerunner-mongo CA',
     },
   },
-  instancesHostnames: ['test-1.softkave-forerunner-mongo.fimidara.com'],
-  instancePorts: [27030],
+  hostnames: ['test-1.softkave-forerunner-mongo.fimidara.com'],
+  ports: [27030],
   users: [
     {
       username: 'test-user-admin',
@@ -46,7 +46,7 @@ beforeAll(
     await cleanupMongoTest({mongoRunConfig});
     await generateMongoCertConfigsMain({mongoRunConfig});
     await generateMongoCertsMain({logger, mongoRunConfig});
-    await startMongodInstancesMain({
+    await startMongoMain({
       mongoRunConfig,
       logger,
       waitUntilListening: true,
@@ -63,17 +63,14 @@ afterAll(async () => {
   });
 });
 
-describe('stopMongodInstances', () => {
+describe('stopMongo', () => {
   test(
-    'should stop mongod instances',
+    'should stop MongoDB instance',
     async () => {
-      await stopMongodInstancesMain({mongoRunConfig, logger});
+      await stopMongoMain({mongoRunConfig, logger});
 
       // Confirm that the instances are not listening
-      for (const instanceNumber of range(
-        0,
-        mongoRunConfig.instancePorts.length
-      )) {
+      for (const instanceNumber of range(0, mongoRunConfig.ports.length)) {
         const result = await checkMongoInstanceListening({
           mongoRunConfig,
           instanceNumber: instanceNumber + 1,

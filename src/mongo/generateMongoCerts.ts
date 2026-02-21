@@ -9,6 +9,30 @@ import {
 } from './generateMongoCertConfigs.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
+/**
+ * Ensures MongoDB certificates are generated if not already present.
+ * SSL/TLS is always enabled; certificates are always required.
+ */
+export async function ensureMongoCertificates(params: {
+  mongoRunConfig: MongoRunConfig;
+  logger?: IForeLogger;
+}): Promise<void> {
+  const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
+    params;
+  logger.log('Ensuring MongoDB certificates are present...');
+  await generateMongoCertConfigsMain({
+    mongoRunConfig,
+    overwrite: false,
+  });
+  await generateMongoCertsMain({
+    mongoRunConfig,
+    overwriteConfig: false,
+    overwriteCA: false,
+    overwriteCerts: false,
+    logger,
+  });
+}
+
 export async function generateMongoCertsMain(params: {
   overwriteConfig?: boolean;
   overwriteCA?: boolean;
@@ -38,7 +62,7 @@ export async function generateMongoCertsMain(params: {
   });
 
   const overwriteCerts = params.overwriteCerts || overwriteCA;
-  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+  for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     const certConfig = getMongoCertConfigFilePath(mongoRunConfig, i);
     await generateCert({
       opts: {

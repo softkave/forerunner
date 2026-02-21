@@ -2,15 +2,8 @@ import assert from 'assert';
 import {execFileSync} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {assertMongoReplicaSetReady} from './checkMongoReadyState.js';
-import {generateMongoCertConfigsMain} from './generateMongoCertConfigs.js';
-import {generateMongoCertsMain} from './generateMongoCerts.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
-import {
-  getDockerContainerName,
-  startMongodInstancesMain,
-} from './startMongodInstances.js';
-import {setupUsers} from './user/setupUsers.js';
+import {getDockerContainerName, startMongoMain} from './startMongo.js';
 import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
 
 const kMongoshFirstInstance = 1;
@@ -18,9 +11,9 @@ const kMongoshFirstInstance = 1;
 function buildMembers(
   mongoRunConfig: MongoRunConfig
 ): {_id: number; host: string}[] {
-  return mongoRunConfig.instancePorts.map((port, index) => {
+  return mongoRunConfig.ports.map((port, index) => {
     const hostnames = compileHostnames({
-      hostnames: mongoRunConfig.instancesHostnames[index],
+      hostnames: mongoRunConfig.hostnames[index],
       bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
     });
     const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
@@ -34,30 +27,13 @@ function getMongoshConnectionUri(params: {
   authUser?: {username: string; password: string};
 }): string {
   const {mongoRunConfig, authUser} = params;
-  // const base = 'mongodb://localhost:27017';
-  // if (
-  //   mongoRunConfig.authorization !== 'disabled' &&
-  //   mongoRunConfig.users?.length
-  // ) {
-  //   const adminUser = findAdminUser({
-  //     users: mongoRunConfig.users,
-  //     isRequired: false,
-  //   });
-  //   if (adminUser?.username && adminUser?.password) {
-  //     const user = encodeURIComponent(adminUser.username);
-  //     const pass = encodeURIComponent(adminUser.password);
-  //     return `mongodb://${user}:${pass}@localhost:27017`;
-  //   }
-  // }
-  // return base;
-
   const hostnames = compileHostnames({
-    hostnames: mongoRunConfig.instancesHostnames[0],
+    hostnames: mongoRunConfig.hostnames[0],
     bindLocalhost: false,
   });
   const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
   assert.ok(hostname, `hostname must be set for instance 1`);
-  const port = mongoRunConfig.instancePorts[0];
+  const port = mongoRunConfig.ports[0];
   const auth =
     authUser?.username && authUser?.password
       ? `${encodeURIComponent(authUser.username)}:${encodeURIComponent(
@@ -112,7 +88,7 @@ function runMongoshInContainerOrThrow(params: {
   }
 }
 
-async function setupReplicaSet(params: {
+export async function setupReplicaSet(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   authUser?: {username: string; password: string};
@@ -145,7 +121,8 @@ async function setupReplicaSet(params: {
     alreadyInitialized = true;
     logger.log('Replica set already initialized');
   } catch {
-    // rs.status() failed => not initialized or other error; we will try to initiate
+    // rs.status() failed => not initialized or other error; we will try to
+    // initiate
   }
 
   if (!alreadyInitialized) {
@@ -163,24 +140,23 @@ async function setupReplicaSet(params: {
   }
 }
 
+/**
+ * @deprecated Use startMongodInstancesMain instead
+ */
 export async function setupReplicaSetMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   shouldSetupUsers?: boolean;
   authUser?: {username: string; password: string};
 }) {
-  const {shouldSetupUsers = true} = params;
-  await generateMongoCertConfigsMain(params);
-  await generateMongoCertsMain(params);
-  await startMongodInstancesMain({
-    ...params,
+  // This function is kept for backwards compatibility.
+  // It now delegates to startMongodInstancesMain which handles everything.
+  await startMongoMain({
+    mongoRunConfig: params.mongoRunConfig,
+    logger: params.logger,
     waitUntilListening: true,
     shouldInitDbRootUser: true,
+    shouldSetupReplicaSet: true,
+    shouldSetupUsers: params.shouldSetupUsers ?? true,
   });
-  await setupReplicaSet(params);
-  await assertMongoReplicaSetReady(params);
-
-  if (shouldSetupUsers) {
-    await setupUsers(params);
-  }
 }

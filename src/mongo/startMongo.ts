@@ -18,6 +18,7 @@ import {
 } from './checkMongoReadyState.js';
 import {getInstanceRunName} from './constants.js';
 import {getMongoCertOutDir} from './generateMongoCertConfigs.js';
+import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {
   generateMongoDockerConfigForMongod,
   getMongodConfigDir,
@@ -29,7 +30,9 @@ import {
   extractHostnamesForDockerBinding,
   MongoRunConfig,
 } from './mongoRunConfig.js';
+import {setupReplicaSet} from './setupReplicaSet.js';
 import {findAdminUser} from './user/findUtils.js';
+import {setupUsers} from './user/setupUsers.js';
 
 const kDefaultMongoVersion = '8.2.3';
 const kConfigHashLabel = 'forerunner.configHash';
@@ -69,7 +72,7 @@ function getRunConfigFingerprint(params: {
     image,
     dataDir: path.resolve(dataDir),
     systemLogDir: path.resolve(systemLogDir),
-    certsDir: path.resolve(certsDir),
+    certsDir: certsDir ? path.resolve(certsDir) : '',
     configDir: path.resolve(configDir),
     addHost: [...nonLocalhostHostnames].sort(),
     initUser: initEnv ? {u: initEnv.username, p: initEnv.password} : null,
@@ -149,8 +152,8 @@ function getNonLocalhostInstanceHostnames(
   mongoRunConfig: MongoRunConfig
 ): string[] {
   const seen = new Set<string>();
-  for (let i = 0; i < mongoRunConfig.instancesHostnames.length; i++) {
-    const entry = mongoRunConfig.instancesHostnames[i];
+  for (let i = 0; i < mongoRunConfig.hostnames.length; i++) {
+    const entry = mongoRunConfig.hostnames[i];
     if (!entry) continue;
     // Only bind hostnames to Docker bridge if resolution is missing or 'local' (not 'dns')
     const hostnamesForBinding = extractHostnamesForDockerBinding(entry);
@@ -195,7 +198,7 @@ export async function startMongodInstance(params: {
 
   const instanceRunName = getInstanceRunName(instanceNumber);
   const containerName = getDockerContainerName(mongoRunConfig, instanceNumber);
-  const port = mongoRunConfig.instancePorts[instanceNumber - 1];
+  const port = mongoRunConfig.ports[instanceNumber - 1];
   const dataDir = getMongodDataDir(mongoRunConfig, instanceNumber);
   const systemLogPath = getMongodSystemLogFilePath(
     mongoRunConfig,
@@ -264,7 +267,6 @@ export async function startMongodInstance(params: {
       `${hostname}:${kDockerBridgeIp}`,
     ]),
     '-p',
-    // `${port}:27017`,
     `${port}:${port}`,
     '-v',
     `${path.resolve(dataDir)}:/data/db`,
@@ -377,24 +379,31 @@ export async function startMongodInstance(params: {
   });
 }
 
-export async function startMongodInstancesMain(params: {
+export async function startMongoMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   waitUntilListening?: boolean;
   waitUntilReplicaSetReady?: boolean;
   shouldInitDbRootUser?: boolean;
+  shouldSetupReplicaSet?: boolean;
+  shouldSetupUsers?: boolean;
 }) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
-    waitUntilListening,
-    waitUntilReplicaSetReady,
-    shouldInitDbRootUser,
+    waitUntilListening = true,
+    waitUntilReplicaSetReady = true,
+    shouldInitDbRootUser = true,
+    shouldSetupReplicaSet = true,
+    shouldSetupUsers = false,
   } = params;
 
   ensureDockerAvailable();
 
-  for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+  // Generate certificates if not already present
+  await ensureMongoCertificates({mongoRunConfig, logger});
+
+  for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     await startMongodInstance({
       instanceNumber: i,
       mongoRunConfig,
@@ -408,8 +417,61 @@ export async function startMongodInstancesMain(params: {
     await assertMongoInstancesListening({mongoRunConfig, logger});
   }
 
-  if (waitUntilReplicaSetReady) {
+  // Setup replica set if requested (default: true)
+  if (shouldSetupReplicaSet) {
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
+    await setupReplicaSet({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+    });
+    // After setting up replica set, always assert it's ready
     logger.log('Waiting for replica set to be ready...');
-    await assertMongoReplicaSetReady({mongoRunConfig, logger});
+    await assertMongoReplicaSetReady({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+    });
+  } else if (waitUntilReplicaSetReady) {
+    // If not setting up but waiting was explicitly requested, assert ready
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
+    logger.log('Waiting for replica set to be ready...');
+    await assertMongoReplicaSetReady({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+    });
+  }
+
+  // Setup users if requested
+  if (shouldSetupUsers) {
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
+    await setupUsers({
+      mongoRunConfig,
+      logger,
+      authUser: {
+        username: adminUser.username,
+        password: adminUser.password,
+      },
+      connectionType: 'replicaSet',
+    });
   }
 }

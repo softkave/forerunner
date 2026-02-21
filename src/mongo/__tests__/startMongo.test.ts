@@ -3,16 +3,15 @@ import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
 import {
   assertMongoInstancesListening,
-  generateMongoCertConfigsMain,
-  generateMongoCertsMain,
   generateMongoPassword,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
+import {getDockerContainerName, startMongoMain} from '../startMongo.js';
 import {
-  getDockerContainerName,
-  startMongodInstancesMain,
-} from '../startMongodInstances.js';
-import {cleanupMongoTest} from '../testHelpers.js';
+  checkAdminCanConnect,
+  checkTestDbUserCanConnect,
+  cleanupMongoTest,
+} from '../testHelpers.js';
 
 const logger = new ConsoleForeLogger();
 
@@ -27,16 +26,29 @@ const mongoRunConfig: MongoRunConfig = {
       CN: 'softkave-forerunner-mongo CA',
     },
   },
-  instancesHostnames: [
+  hostnames: [
     'test-1.softkave-forerunner-mongo.fimidara.com',
     'test-2.softkave-forerunner-mongo.fimidara.com',
-    'test-3.softkave-forerunner-mongo.fimidara.com',
+    {
+      hostname: 'test-3.softkave-forerunner-mongo.fimidara.com',
+      resolution: 'local',
+    },
   ],
-  instancePorts: [27030, 27031, 27032],
+  ports: [27030, 27031, 27032],
   users: [
     {
       username: 'test-user-admin',
       roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
+      password: generateMongoPassword(),
+    },
+    {
+      username: 'test-user-cluster-admin',
+      roles: [{role: 'clusterAdmin', db: 'admin'}],
+      password: generateMongoPassword(),
+    },
+    {
+      username: 'test-user-db',
+      roles: [{role: 'readWrite', db: 'test-db'}],
       password: generateMongoPassword(),
     },
   ],
@@ -50,8 +62,6 @@ const mongoRunConfig: MongoRunConfig = {
 beforeAll(
   async () => {
     await cleanupMongoTest({mongoRunConfig});
-    await generateMongoCertConfigsMain({mongoRunConfig});
-    await generateMongoCertsMain({logger, mongoRunConfig});
   },
   1 * 60 * 1000 // 1 minute
 );
@@ -77,8 +87,8 @@ describe('getDockerContainerName', () => {
         CN: 'Test CA',
       },
     },
-    instancesHostnames: ['h1', 'h2', 'h3'],
-    instancePorts: [27017, 27018, 27019],
+    hostnames: ['h1', 'h2', 'h3'],
+    ports: [27017, 27018, 27019],
     replicaSetName: 'rs0',
     users: [],
   };
@@ -121,14 +131,15 @@ describe('getDockerContainerName', () => {
   });
 });
 
-describe('startMongodInstances', () => {
+describe('startMongo', () => {
   test(
-    'should start mongod instances',
+    'should start mongod instances and setup replica set',
     async () => {
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger: new ConsoleForeLogger(),
         waitUntilListening: true,
+        shouldSetupReplicaSet: true,
       });
       await assertMongoInstancesListening({
         mongoRunConfig,
@@ -136,16 +147,17 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    5 * 60 * 1000 // 5 minutes
+    2 * 60 * 1000 // 2 minutes
   );
 
   test(
     'second start when already running completes without error (reuses running containers)',
     async () => {
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger: new ConsoleForeLogger({silent: true}),
         waitUntilListening: false,
+        shouldSetupReplicaSet: false, // Skip replica set setup for this test
       });
       await assertMongoInstancesListening({
         mongoRunConfig,
@@ -153,24 +165,25 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000
+    2 * 60 * 1000 // 2 minutes
   );
 
   test(
     'start after docker stop (without rm) reuses stopped containers',
     async () => {
       const silentLogger = new ConsoleForeLogger({silent: true});
-      for (let i = 1; i <= mongoRunConfig.instancePorts.length; i++) {
+      for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
         const name = getDockerContainerName(mongoRunConfig, i);
         execFileSync('docker', ['stop', name], {
           stdio: 'pipe',
           encoding: 'utf8',
         });
       }
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig,
         logger: silentLogger,
         waitUntilListening: true,
+        shouldSetupReplicaSet: false, // Skip replica set setup for this test
       });
       await assertMongoInstancesListening({
         mongoRunConfig,
@@ -178,7 +191,7 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000
+    2 * 60 * 1000 // 2 minutes
   );
 
   test(
@@ -187,12 +200,14 @@ describe('startMongodInstances', () => {
       const newPorts = [27033, 27034, 27035] as const;
       const mongoRunConfigNewPorts: MongoRunConfig = {
         ...mongoRunConfig,
-        instancePorts: [...newPorts],
+        ports: [...newPorts],
       };
-      await startMongodInstancesMain({
+      await startMongoMain({
         mongoRunConfig: mongoRunConfigNewPorts,
         logger: new ConsoleForeLogger({silent: true}),
         waitUntilListening: true,
+        waitUntilReplicaSetReady: false,
+        shouldSetupReplicaSet: false, // Skip replica set setup for this test
       });
       await assertMongoInstancesListening({
         mongoRunConfig: mongoRunConfigNewPorts,
@@ -200,6 +215,26 @@ describe('startMongodInstances', () => {
         preferLocalhost: false,
       });
     },
-    5 * 60 * 1000
+    2 * 60 * 1000 // 2 minutes
+  );
+
+  test(
+    'should setup replica set and users',
+    async () => {
+      await startMongoMain({
+        mongoRunConfig,
+        logger,
+        waitUntilListening: true,
+        shouldSetupReplicaSet: true,
+        shouldSetupUsers: true,
+      });
+      await checkAdminCanConnect({mongoRunConfig, logger});
+      await checkTestDbUserCanConnect({
+        mongoRunConfig,
+        logger,
+        username: 'test-user-db',
+      });
+    },
+    2 * 60 * 1000 // 2 minutes
   );
 });

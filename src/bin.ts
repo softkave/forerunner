@@ -17,9 +17,11 @@ import {
   getReplicaSetStatus,
   printMongoUriMain,
   restartMongo,
+  scaffoldMongoConfig,
   setupReplicaSetMain,
-  startMongodInstancesMain,
-  stopMongodInstancesMain,
+  startMongoMain,
+  stopMongoMain,
+  validateMongoConfig,
 } from './mongo/index.js';
 import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
 
@@ -38,22 +40,28 @@ import {findChildrenPIDs} from './pid/findChildrenPIDs.js';
 
 // Import postgres functionality
 import {
+  generatePostgresCertConfigsMain,
+  generatePostgresCertsMain,
   getPostgresRunConfig,
+  postgresRunConfigSchema,
   scaffoldPostgresConfig,
   setupDatabases,
   setupUsers as setupPostgresUsers,
   startPostgresInstance,
   stopPostgresInstance,
-  postgresRunConfigSchema,
+  validatePostgresConfig,
 } from './postgres/index.js';
 
 // Import run-env functionality
 import {runWithEnvMain} from './runEnv/index.js';
 
+// Import security functionality
+import {generateJwtSecret, generatePassword} from './security/index.js';
+
 const program = new Command();
 
 program
-  .name('forerunner')
+  .name('softkave-forerunner')
   .description('Softkave internal application runner & helpers')
   .version(await getVersion('unknown'));
 
@@ -133,10 +141,52 @@ const mongoProgram = program
   .command('mongo')
   .description('MongoDB management utilities');
 
-// Generate MongoDB certificates
+// Scaffold MongoDB configuration
+mongoProgram
+  .command('scaffold-config')
+  .description('Generate MongoDB configuration file')
+  .option('--defaults', 'Use default values instead of prompting', false)
+  .option('-o, --output <path>', 'Output file path', './mongo-run-config.json')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await scaffoldMongoConfig({
+        outputPath: options.output,
+        logger,
+        useDefaults: options.defaults,
+      });
+      logger.log('✅ MongoDB configuration generated successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Validate MongoDB configuration
+mongoProgram
+  .command('validate-config')
+  .description('Validate MongoDB configuration file and print errors')
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await validateMongoConfig({
+        configPath: options.config,
+        logger,
+      });
+    } catch (error) {
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Generate MongoDB certificates (configs and certs)
 mongoProgram
   .command('generate-certs')
-  .description('Generate MongoDB certificates')
+  .description('Generate MongoDB certificate configs and certificates')
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option('--overwriteConfig', 'Overwrite existing config', false)
   .option('--overwriteCA', 'Overwrite existing CA', false)
@@ -147,6 +197,10 @@ mongoProgram
     try {
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
+      });
+      await generateMongoCertConfigsMain({
+        mongoRunConfig,
+        overwrite: options.overwriteConfig,
       });
       await generateMongoCertsMain({
         mongoRunConfig,
@@ -163,38 +217,22 @@ mongoProgram
     }
   });
 
-// Generate MongoDB certificate configs
-mongoProgram
-  .command('generate-cert-configs')
-  .description('Generate MongoDB certificate configurations')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
-  .option('-o, --overwrite', 'Overwrite existing cert configs', false)
-  .option('-s, --silent', 'Silent mode')
-  .action(async options => {
-    const logger = new ConsoleForeLogger({silent: options.silent});
-    try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
-      await generateMongoCertConfigsMain({
-        mongoRunConfig,
-        overwrite: options.overwrite,
-      });
-      logger.log(
-        '✅ MongoDB certificate configs generation completed successfully'
-      );
-    } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
-      logger.onSilentFail(error);
-      process.exit(1);
-    }
-  });
-
 // Start MongoDB instances
 mongoProgram
   .command('start')
-  .description('Start MongoDB instances')
+  .description(
+    'Start MongoDB instances and setup replica set (if not already setup)'
+  )
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option(
+    '--no-setup-replica-set',
+    'Skip replica set setup (default: setup replica set)'
+  )
+  .option(
+    '--setup-users',
+    'Setup MongoDB users after starting instances',
+    false
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
@@ -202,13 +240,13 @@ mongoProgram
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
       });
-      await startMongodInstancesMain({
+
+      await startMongoMain({
         mongoRunConfig,
         logger,
         waitUntilListening: true,
-        // Because we currently only support replica sets (and not standalone
-        // instances), we wait for the replica set to be ready.
-        waitUntilReplicaSetReady: true,
+        shouldSetupReplicaSet: options.setupReplicaSet ?? true,
+        shouldSetupUsers: options.setupUsers ?? false,
       });
       logger.log('✅ MongoDB instances started successfully');
     } catch (error) {
@@ -230,7 +268,8 @@ mongoProgram
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
       });
-      await stopMongodInstancesMain({mongoRunConfig, logger});
+
+      await stopMongoMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB instances stopped successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -239,10 +278,12 @@ mongoProgram
     }
   });
 
-// Setup replica set
+// Setup replica set (deprecated: use 'start --setup-users' instead)
 mongoProgram
   .command('setup-replica-set')
-  .description('Setup MongoDB replica set')
+  .description(
+    'Setup MongoDB replica set and users (deprecated: use "start --setup-users" instead)'
+  )
   .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
@@ -424,6 +465,61 @@ postgresProgram
         useDefaults: options.defaults,
       });
       logger.log('✅ PostgreSQL configuration generated successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Validate PostgreSQL configuration
+postgresProgram
+  .command('validate-config')
+  .description('Validate PostgreSQL configuration file and print errors')
+  .requiredOption('-c, --config <path>', 'Path to postgres run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await validatePostgresConfig({
+        configPath: options.config,
+        logger,
+      });
+    } catch (error) {
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Generate PostgreSQL certificates
+postgresProgram
+  .command('generate-certs')
+  .description('Generate PostgreSQL SSL/TLS certificates')
+  .requiredOption('-c, --config <path>', 'Path to postgres run config file')
+  .option('--overwriteConfig', 'Overwrite existing config', false)
+  .option('--overwriteCA', 'Overwrite existing CA', false)
+  .option('--overwriteCerts', 'Overwrite existing certs', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const postgresRunConfig = await getPostgresRunConfig({
+        postgresRunConfigFilepath: options.config,
+      });
+      await generatePostgresCertConfigsMain({
+        postgresRunConfig,
+        overwrite: options.overwriteConfig,
+      });
+      await generatePostgresCertsMain({
+        postgresRunConfig,
+        overwriteConfig: options.overwriteConfig,
+        overwriteCA: options.overwriteCA,
+        overwriteCerts: options.overwriteCerts,
+        logger,
+      });
+      logger.log(
+        '✅ PostgreSQL certificates generation completed successfully'
+      );
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -784,7 +880,7 @@ program
       dashIndex >= 0 ? process.argv.slice(dashIndex + 1).join(' ') : '';
     if (!command.trim()) {
       logger.error(
-        'Usage: forerunner run-env [options] -- <command> [args...]\nExample: forerunner run-env -- npm run dev'
+        'Usage: softkave-forerunner run-env [options] -- <command> [args...]\nExample: softkave-forerunner run-env -- npm run dev'
       );
       logger.onSilentFail(new Error('Missing command after --'));
       process.exit(1);
@@ -796,6 +892,116 @@ program
         command: command.trim(),
         silent: options.silent,
         logger,
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
+// SECURITY SUB-PROGRAM
+// ============================================================================
+const securityProgram = program
+  .command('security')
+  .description('Security utilities for generating passwords and JWT secrets');
+
+// Generate password command
+securityProgram
+  .command('password')
+  .description('Generate production-grade password(s)')
+  .option('-c, --count <number>', 'Number of passwords to generate', '1')
+  .option('-l, --length <number>', 'Password length', '32')
+  .option('--numbers', 'Include numbers', true)
+  .option('--no-numbers', 'Exclude numbers')
+  .option('--symbols', 'Include symbols', true)
+  .option('--no-symbols', 'Exclude symbols')
+  .option('--uppercase', 'Include uppercase characters', true)
+  .option('--no-uppercase', 'Exclude uppercase characters')
+  .option('--lowercase', 'Include lowercase characters', true)
+  .option('--no-lowercase', 'Exclude lowercase characters')
+  .option('--exclude-similar', 'Exclude visually similar characters', true)
+  .option('--no-exclude-similar', 'Allow visually similar characters')
+  .option('--strict', 'Require at least one character from each pool', true)
+  .option('--no-strict', 'Do not require characters from each pool')
+  .option('--exclude <chars>', 'Characters to exclude from password', '')
+  .option(
+    '--symbols-set <chars>',
+    'Custom symbols to use (overrides default symbols)',
+    ''
+  )
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const count = parseInt(options.count, 10);
+      if (isNaN(count) || count < 1) {
+        throw new Error('Count must be a positive integer');
+      }
+
+      const length = parseInt(options.length, 10);
+      if (isNaN(length) || length < 1) {
+        throw new Error('Length must be a positive integer');
+      }
+
+      // Handle boolean flags - commander.js sets them to false when --no-* is
+      // used, otherwise they're undefined, so we default to true for enabled
+      // flags. Note: We check !== false because false means explicitly
+      // disabled, undefined means use default (true)
+      const passwordOptions: Parameters<typeof generatePassword>[0] = {
+        count,
+        length,
+        numbers: options.numbers !== false,
+        symbols:
+          options.symbolsSet !== ''
+            ? options.symbolsSet
+            : options.symbols !== false,
+        uppercase: options.uppercase !== false,
+        lowercase: options.lowercase !== false,
+        excludeSimilarCharacters: options.excludeSimilar !== false,
+        strict: options.strict !== false,
+        exclude: options.exclude || undefined,
+      };
+
+      const passwords = generatePassword(passwordOptions);
+      const passwordArray = Array.isArray(passwords) ? passwords : [passwords];
+
+      passwordArray.forEach(password => {
+        logger.log(password);
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Generate JWT secret command
+securityProgram
+  .command('jwt-secret')
+  .description('Generate production-grade JWT secret(s)')
+  .option('-c, --count <number>', 'Number of secrets to generate', '1')
+  .option('-l, --length <number>', 'Length in bytes of each secret', '64')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const count = parseInt(options.count, 10);
+      if (isNaN(count) || count < 1) {
+        throw new Error('Count must be a positive integer');
+      }
+
+      const length = parseInt(options.length, 10);
+      if (isNaN(length) || length < 1) {
+        throw new Error('Length must be a positive integer');
+      }
+
+      const secrets = generateJwtSecret(count, length);
+      const secretArray = Array.isArray(secrets) ? secrets : [secrets];
+
+      secretArray.forEach(secret => {
+        logger.log(secret);
       });
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -817,7 +1023,7 @@ program
 Softkave Forerunner - Internal Application Runner & Helpers
 
 USAGE:
-  forerunner <command> [subcommand] [options]
+  softkave-forerunner <command> [subcommand] [options]
 
 COMMANDS:
   certs                    CA and certificates generator
@@ -829,7 +1035,7 @@ COMMANDS:
     generate-cert-configs  Generate MongoDB certificate configurations
     start                  Start MongoDB instances
     stop                   Stop MongoDB instances
-    setup-replica-set      Setup MongoDB replica set
+    setup-replica-set      Setup MongoDB replica set (deprecated: use "start --setup-users")
     setup-users            Setup MongoDB users
     print-uri              Print MongoDB connection URI using configuration
     replica-set-status     Print MongoDB replica set status
@@ -855,42 +1061,58 @@ COMMANDS:
   run-env                  Run a command with a selected .env* file
                            Usage: run-env [options] -- <command> [args...]
 
+  security                 Security utilities
+    password               Generate production-grade password(s)
+    jwt-secret             Generate production-grade JWT secret(s)
+
   help                     Show this help message
 
 EXAMPLES:
   # Generate a CA
-  forerunner certs ca -c ca-config.json
+  softkave-forerunner certs ca -c ca-config.json
 
   # Generate a certificate
-  forerunner certs cert -c cert-config.json
+  softkave-forerunner certs cert -c cert-config.json
 
   # Setup MongoDB replica set (requires config file)
-  forerunner mongo setup-replica-set -c mongo-config.json
+  softkave-forerunner mongo setup-replica-set -c mongo-config.json
 
   # Start PostgreSQL instance
-  forerunner postgres start --port 5432 --container-name postgres-db
+  softkave-forerunner postgres start --port 5432 --container-name postgres-db
 
   # Stop PostgreSQL instance
-  forerunner postgres stop --container-name postgres-db
+  softkave-forerunner postgres stop --container-name postgres-db
 
   # Set a host entry
-  forerunner etc-hosts set example.com 127.0.0.1
+  softkave-forerunner etc-hosts set example.com 127.0.0.1
 
   # List all host entries
-  forerunner etc-hosts list
+  softkave-forerunner etc-hosts list
 
   # Backup hosts file
-  forerunner etc-hosts backup
+  softkave-forerunner etc-hosts backup
 
   # Find child processes of a PID
-  forerunner pm children-pids 1234
+  softkave-forerunner pm children-pids 1234
 
   # Run a command with a selected .env file
-  forerunner run-env -- npm run dev
+  softkave-forerunner run-env -- npm run dev
+
+  # Generate a password
+  softkave-forerunner security password
+
+  # Generate multiple passwords
+  softkave-forerunner security password --count 5
+
+  # Generate a JWT secret
+  softkave-forerunner security jwt-secret
+
+  # Generate multiple JWT secrets
+  softkave-forerunner security jwt-secret --count 3
 
 For more information about a specific command, use:
-  forerunner <command> --help
-  forerunner <command> <subcommand> --help
+  softkave-forerunner <command> --help
+  softkave-forerunner <command> <subcommand> --help
 `);
   });
 
