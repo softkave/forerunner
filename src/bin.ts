@@ -23,11 +23,7 @@ import {
   stopMongoMain,
   validateMongoConfig,
 } from './mongo/index.js';
-import {
-  getMongoRunConfig,
-  MongoRunConfig,
-  mongoRunConfigSchema,
-} from './mongo/mongoRunConfig.js';
+import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
 
 // Import etcHosts functionality
 import {
@@ -65,7 +61,7 @@ import {generateJwtSecret, generatePassword} from './security/index.js';
 const program = new Command();
 
 program
-  .name('forerunner')
+  .name('softkave-forerunner')
   .description('Softkave internal application runner & helpers')
   .version(await getVersion('unknown'));
 
@@ -227,20 +223,7 @@ mongoProgram
   .description(
     'Start MongoDB instances and setup replica set (if not already setup)'
   )
-  .option('-c, --config <path>', 'Path to mongo run config file')
-  .option('--working-dir <path>', 'Working directory (required if no config)')
-  .option('--port <ports...>', 'Port numbers (required if no config, min 3)')
-  .option(
-    '--container-name <name>',
-    'Container name prefix (optional, for backwards compatibility)'
-  )
-  .option('--version <version>', 'MongoDB version')
-  .option(
-    '--replica-set-name <name>',
-    'Replica set name (required if no config)'
-  )
-  .option('--user <username>', 'Admin username (with --password enables auth)')
-  .option('--password <password>', 'Admin password (with --user enables auth)')
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option(
     '--no-setup-replica-set',
     'Skip replica set setup (default: setup replica set)'
@@ -254,54 +237,9 @@ mongoProgram
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      let mongoRunConfig;
-
-      if (options.config) {
-        mongoRunConfig = await getMongoRunConfig({
-          mongoRunConfigFilepath: options.config,
-        });
-      } else {
-        // Quick/dirty setup for dev or test: no config file, no SSL, no certs
-        if (!options.workingDir || !options.port || !options.replicaSetName) {
-          throw new Error(
-            '--working-dir, --port (at least 3 ports), and --replica-set-name are required when --config is not provided'
-          );
-        }
-
-        const ports = options.port.map((p: string) => parseInt(p, 10));
-        if (ports.length < 3) {
-          throw new Error('At least 3 ports are required');
-        }
-
-        const authEnabled = Boolean(options.user) && Boolean(options.password);
-
-        // When SSL is disabled (no caConfig), only use localhost hostnames
-        const instancesHostnames = ports.map(() => 'localhost');
-
-        const config: any = {
-          workingDir: options.workingDir,
-          instancePorts: ports,
-          instancesHostnames,
-          replicaSetName: options.replicaSetName,
-          bindLocalhost: true,
-          ssl: 'disabled', // No SSL when running without config file
-          authorization: authEnabled ? 'enabled' : 'disabled',
-          users: authEnabled
-            ? [
-                {
-                  username: options.user,
-                  password: options.password,
-                  roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
-                },
-              ]
-            : [],
-        };
-
-        if (options.version) config.mongoVersion = options.version;
-        if (options.containerName) config.containerName = options.containerName;
-
-        mongoRunConfig = mongoRunConfigSchema.parse(config);
-      }
+      const mongoRunConfig = await getMongoRunConfig({
+        mongoRunConfigFilepath: options.config,
+      });
 
       await startMongoMain({
         mongoRunConfig,
@@ -322,54 +260,14 @@ mongoProgram
 mongoProgram
   .command('stop')
   .description('Stop MongoDB instances')
-  .option('-c, --config <path>', 'Path to mongo run config file')
-  .option('--working-dir <path>', 'Working directory (required if no config)')
-  .option('--port <ports...>', 'Port numbers (required if no config, min 3)')
-  .option(
-    '--container-name <name>',
-    'Container name prefix (optional, for backwards compatibility)'
-  )
+  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      let mongoRunConfig: MongoRunConfig;
-
-      if (options.config) {
-        mongoRunConfig = await getMongoRunConfig({
-          mongoRunConfigFilepath: options.config,
-        });
-      } else {
-        // Quick stop without config: need working dir and ports
-        if (!options.workingDir || !options.port) {
-          throw new Error(
-            '--working-dir and --port (at least 3 ports) are required when --config is not provided'
-          );
-        }
-
-        const ports = options.port.map((p: string) => parseInt(p, 10));
-        if (ports.length < 3) {
-          throw new Error('At least 3 ports are required');
-        }
-
-        // Minimal config for stop - only need workingDir, ports, and hostnames
-        const instancesHostnames = ports.map(() => 'localhost');
-
-        const config: any = {
-          workingDir: options.workingDir,
-          instancePorts: ports,
-          instancesHostnames,
-          replicaSetName: 'temp-rs', // Dummy value, not used for stop
-          bindLocalhost: true,
-          ssl: 'disabled', // No SSL when running without config file
-          authorization: 'disabled',
-          users: [],
-        };
-
-        if (options.containerName) config.containerName = options.containerName;
-
-        mongoRunConfig = mongoRunConfigSchema.parse(config);
-      }
+      const mongoRunConfig = await getMongoRunConfig({
+        mongoRunConfigFilepath: options.config,
+      });
 
       await stopMongoMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB instances stopped successfully');
@@ -982,7 +880,7 @@ program
       dashIndex >= 0 ? process.argv.slice(dashIndex + 1).join(' ') : '';
     if (!command.trim()) {
       logger.error(
-        'Usage: forerunner run-env [options] -- <command> [args...]\nExample: forerunner run-env -- npm run dev'
+        'Usage: softkave-forerunner run-env [options] -- <command> [args...]\nExample: softkave-forerunner run-env -- npm run dev'
       );
       logger.onSilentFail(new Error('Missing command after --'));
       process.exit(1);
@@ -1125,7 +1023,7 @@ program
 Softkave Forerunner - Internal Application Runner & Helpers
 
 USAGE:
-  forerunner <command> [subcommand] [options]
+  softkave-forerunner <command> [subcommand] [options]
 
 COMMANDS:
   certs                    CA and certificates generator
@@ -1171,50 +1069,50 @@ COMMANDS:
 
 EXAMPLES:
   # Generate a CA
-  forerunner certs ca -c ca-config.json
+  softkave-forerunner certs ca -c ca-config.json
 
   # Generate a certificate
-  forerunner certs cert -c cert-config.json
+  softkave-forerunner certs cert -c cert-config.json
 
   # Setup MongoDB replica set (requires config file)
-  forerunner mongo setup-replica-set -c mongo-config.json
+  softkave-forerunner mongo setup-replica-set -c mongo-config.json
 
   # Start PostgreSQL instance
-  forerunner postgres start --port 5432 --container-name postgres-db
+  softkave-forerunner postgres start --port 5432 --container-name postgres-db
 
   # Stop PostgreSQL instance
-  forerunner postgres stop --container-name postgres-db
+  softkave-forerunner postgres stop --container-name postgres-db
 
   # Set a host entry
-  forerunner etc-hosts set example.com 127.0.0.1
+  softkave-forerunner etc-hosts set example.com 127.0.0.1
 
   # List all host entries
-  forerunner etc-hosts list
+  softkave-forerunner etc-hosts list
 
   # Backup hosts file
-  forerunner etc-hosts backup
+  softkave-forerunner etc-hosts backup
 
   # Find child processes of a PID
-  forerunner pm children-pids 1234
+  softkave-forerunner pm children-pids 1234
 
   # Run a command with a selected .env file
-  forerunner run-env -- npm run dev
+  softkave-forerunner run-env -- npm run dev
 
   # Generate a password
-  forerunner security password
+  softkave-forerunner security password
 
   # Generate multiple passwords
-  forerunner security password --count 5
+  softkave-forerunner security password --count 5
 
   # Generate a JWT secret
-  forerunner security jwt-secret
+  softkave-forerunner security jwt-secret
 
   # Generate multiple JWT secrets
-  forerunner security jwt-secret --count 3
+  softkave-forerunner security jwt-secret --count 3
 
 For more information about a specific command, use:
-  forerunner <command> --help
-  forerunner <command> <subcommand> --help
+  softkave-forerunner <command> --help
+  softkave-forerunner <command> <subcommand> --help
 `);
   });
 
