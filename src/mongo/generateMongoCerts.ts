@@ -11,7 +11,7 @@ import {MongoRunConfig} from './mongoRunConfig.js';
 
 /**
  * Ensures MongoDB certificates are generated if not already present.
- * Only generates certificates if SSL/TLS is enabled.
+ * SSL/TLS is always enabled; certificates are always required.
  */
 export async function ensureMongoCertificates(params: {
   mongoRunConfig: MongoRunConfig;
@@ -19,10 +19,6 @@ export async function ensureMongoCertificates(params: {
 }): Promise<void> {
   const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
     params;
-  if (mongoRunConfig.ssl === 'disabled') {
-    logger.log('Skipping certificate generation (SSL/TLS disabled)');
-    return;
-  }
   logger.log('Ensuring MongoDB certificates are present...');
   await generateMongoCertConfigsMain({
     mongoRunConfig,

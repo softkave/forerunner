@@ -115,7 +115,6 @@ export async function generateMongoDockerConfigForMongod(params: {
     return config as MongoConfig;
   }
 
-  const hasTLS = mongoRunConfig.ssl !== 'disabled';
   const config: MongoConfig = {
     systemLog: {
       destination: 'file',
@@ -126,25 +125,21 @@ export async function generateMongoDockerConfigForMongod(params: {
     net: {
       port: mongoRunConfig.instancePorts[instanceNumber - 1],
       bindIp: ['0.0.0.0'].join(','),
-      ...(hasTLS
-        ? {
-            tls: {
-              certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,
-              CAFile: '/certs/ca.crt.pem',
-              mode: 'requireTLS' as const,
-              clusterAuthX509: {
-                attributes: `O=${mongoRunConfig.caConfig!.subject.O}`,
-              },
-              allowConnectionsWithoutCertificates: true,
-            },
-          }
-        : {}),
+      tls: {
+        certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,
+        CAFile: '/certs/ca.crt.pem',
+        mode: 'requireTLS' as const,
+        clusterAuthX509: {
+          attributes: `O=${mongoRunConfig.caConfig.subject.O}`,
+        },
+        allowConnectionsWithoutCertificates: true,
+      },
     },
     storage: {
       dbPath: '/data/db',
     },
     security: {
-      ...(hasTLS ? {clusterAuthMode: 'x509' as const} : {}),
+      clusterAuthMode: 'x509' as const,
       authorization:
         mongoRunConfig.authorization !== 'disabled' ? 'enabled' : 'disabled',
       transitionToAuth: false,

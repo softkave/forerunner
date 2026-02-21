@@ -58,43 +58,34 @@ async function promptForConfig(
       config.containerName = containerName.trim();
     }
 
-    const sslStr = await question(rl, 'SSL enabled? (y/n) [y]: ');
-    const sslEnabled =
-      sslStr.trim().toLowerCase() !== 'n' &&
-      sslStr.trim().toLowerCase() !== 'no';
-    if (sslEnabled) {
-      config.ssl = 'enabled';
-      logger.log('\nSSL Certificate Authority Configuration:');
-      const caCountry = await question(rl, 'CA Country (2-letter code) [US]: ');
-      const caState = await question(rl, 'CA State/Province [Delaware]: ');
-      const caLocality = await question(rl, 'CA Locality/City [Dover]: ');
-      const caOrg = await question(
-        rl,
-        'CA Organization [softkave-forerunner-mongo]: '
-      );
-      const caCN = await question(rl, 'CA Common Name [MongoDB CA]: ');
-      const caDaysStr = await question(
-        rl,
-        'CA Certificate validity (days) [3650]: '
-      );
-      const caPassphrase = await readPassword(
-        'CA Passphrase (optional, press Enter to skip): '
-      );
+    logger.log('\nSSL Certificate Authority Configuration (required):');
+    const caCountry = await question(rl, 'CA Country (2-letter code) [US]: ');
+    const caState = await question(rl, 'CA State/Province [Delaware]: ');
+    const caLocality = await question(rl, 'CA Locality/City [Dover]: ');
+    const caOrg = await question(
+      rl,
+      'CA Organization [softkave-forerunner-mongo]: '
+    );
+    const caCN = await question(rl, 'CA Common Name [MongoDB CA]: ');
+    const caDaysStr = await question(
+      rl,
+      'CA Certificate validity (days) [3650]: '
+    );
+    const caPassphrase = await readPassword(
+      'CA Passphrase (optional, press Enter to skip): '
+    );
 
-      config.caConfig = {
-        days: caDaysStr.trim() ? parseInt(caDaysStr.trim(), 10) : 3650,
-        subject: {
-          C: caCountry.trim() || 'US',
-          ST: caState.trim() || 'Delaware',
-          L: caLocality.trim() || 'Dover',
-          O: caOrg.trim() || 'softkave-forerunner-mongo',
-          CN: caCN.trim() || 'MongoDB CA',
-        },
-        passphrase: caPassphrase.trim() || undefined,
-      };
-    } else {
-      config.ssl = 'disabled';
-    }
+    config.caConfig = {
+      days: caDaysStr.trim() ? parseInt(caDaysStr.trim(), 10) : 3650,
+      subject: {
+        C: caCountry.trim() || 'US',
+        ST: caState.trim() || 'Delaware',
+        L: caLocality.trim() || 'Dover',
+        O: caOrg.trim() || 'softkave-forerunner-mongo',
+        CN: caCN.trim() || 'MongoDB CA',
+      },
+      passphrase: caPassphrase.trim() || undefined,
+    };
 
     logger.log('\nReplica Set Configuration:');
     const replicaSetName = await question(
@@ -292,7 +283,6 @@ function getDefaultConfig(): MongoRunConfig {
   return {
     workingDir: process.cwd(),
     mongoVersion: '8.2.3',
-    ssl: 'enabled',
     caConfig: {
       days: 3650,
       subject: {

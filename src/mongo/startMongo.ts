@@ -205,8 +205,7 @@ export async function startMongodInstance(params: {
     instanceNumber
   );
   const systemLogDir = path.dirname(systemLogPath);
-  const hasTLS = mongoRunConfig.ssl !== 'disabled';
-  const certsDir = hasTLS ? getMongoCertOutDir(mongoRunConfig) : '';
+  const certsDir = getMongoCertOutDir(mongoRunConfig);
   const configDir = getMongodConfigDir(mongoRunConfig);
   const imageTag = mongoRunConfig.mongoVersion ?? kDefaultMongoVersion;
   // Use official mongo image from Docker Hub
@@ -229,15 +228,11 @@ export async function startMongodInstance(params: {
     'System log dir:',
     path.resolve(mongoRunConfig.workingDir, systemLogDir)
   );
-  if (hasTLS) {
-    logger.log('Certs dir:', path.resolve(mongoRunConfig.workingDir, certsDir));
-  }
+  logger.log('Certs dir:', path.resolve(mongoRunConfig.workingDir, certsDir));
   logger.log('Config dir:', path.resolve(mongoRunConfig.workingDir, configDir));
 
-  // When SSL is disabled (no caConfig), only bind to localhost
-  const nonLocalhostHostnames = hasTLS
-    ? getNonLocalhostInstanceHostnames(mongoRunConfig)
-    : [];
+  const nonLocalhostHostnames =
+    getNonLocalhostInstanceHostnames(mongoRunConfig);
 
   const initEnv = shouldInitDbRootUser
     ? (() => {
@@ -254,7 +249,7 @@ export async function startMongodInstance(params: {
     image,
     dataDir,
     systemLogDir: systemLogDir,
-    certsDir: hasTLS ? certsDir : '',
+    certsDir,
     configDir,
     nonLocalhostHostnames,
     initEnv,
@@ -272,14 +267,13 @@ export async function startMongodInstance(params: {
       `${hostname}:${kDockerBridgeIp}`,
     ]),
     '-p',
-    // When TLS is disabled, bind only to localhost for security (like PostgreSQL)
-    // When TLS is enabled, bind to all interfaces
-    hasTLS ? `${port}:${port}` : `127.0.0.1:${port}:${port}`,
+    `${port}:${port}`,
     '-v',
     `${path.resolve(dataDir)}:/data/db`,
     '-v',
     `${path.resolve(systemLogDir)}:/var/log/mongodb`,
-    ...(hasTLS ? ['-v', `${path.resolve(certsDir)}:/certs:ro`] : []),
+    '-v',
+    `${path.resolve(certsDir)}:/certs:ro`,
     '-v',
     `${path.resolve(configDir)}:/etc/mongodb:ro`,
   ];
