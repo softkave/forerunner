@@ -55,6 +55,8 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 
 #### MongoDB Management
 
+- [`mongo scaffold-config`](#scaffold-mongodb-configuration) - Generate MongoDB configuration file
+- [`mongo validate-config`](#validate-mongodb-configuration) - Validate MongoDB configuration file
 - [`mongo setup-replica-set`](#setup-replica-set-deprecated) - Setup replica set (deprecated: use "start --setup-users")
 - [`mongo generate-certs`](#generate-certificates) - Generate MongoDB certificate configs and certificates
 - [`mongo start`](#start-mongodb-instances) - Start MongoDB instances (generates certs if not present)
@@ -67,6 +69,7 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 #### PostgreSQL Management
 
 - [`postgres scaffold-config`](#scaffold-configuration) - Generate PostgreSQL configuration file
+- [`postgres validate-config`](#validate-postgresql-configuration) - Validate PostgreSQL configuration file
 - [`postgres generate-certs`](#generate-certificates) - Generate PostgreSQL certificates
 - [`postgres start`](#start-postgresql-instance) - Start PostgreSQL instance
 - [`postgres stop`](#stop-postgresql-instance) - Stop PostgreSQL instance
@@ -88,6 +91,11 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 #### Run env
 
 - [`run-env`](#run-with-selected-env-file) - Run a command with a selected `.env*` file
+
+#### Security
+
+- [`security password`](#generate-password) - Generate production-grade password(s)
+- [`security jwt-secret`](#generate-jwt-secret) - Generate production-grade JWT secret(s)
 
 ### Certificate Management (`certs`)
 
@@ -127,6 +135,43 @@ MongoDB replica set management. **Only replica sets are supported**; standalone 
 
 **When authorization is enabled:** An admin user (with `userAdminAnyDatabase`) is required in config for user management. A cluster admin user (with `clusterAdmin`) is necessary for replica set and other operations after initial setup (e.g. restart, status, reconfig).
 
+#### Scaffold MongoDB Configuration
+
+```bash
+softkave-forerunner mongo scaffold-config [options]
+```
+
+**Description**: Generates a MongoDB configuration file interactively or using default values. This command prompts for all necessary configuration options including working directory, MongoDB version, SSL/TLS certificate authority configuration (SSL is always enabled), replica set configuration, instance ports and hostnames, and user authentication settings.
+
+**Options:**
+
+- `--defaults` - Use default values instead of prompting (default: false)
+- `-o, --output <path>` - Output file path (default: `./mongo-run-config.json`)
+- `-s, --silent` - Silent mode
+
+**Example:**
+
+```bash
+# Interactive mode (prompts for all values)
+softkave-forerunner mongo scaffold-config
+
+# Use defaults and save to custom location
+softkave-forerunner mongo scaffold-config --defaults -o ./configs/mongo-config.json
+```
+
+#### Validate MongoDB Configuration
+
+```bash
+softkave-forerunner mongo validate-config -c <config-path> [options]
+```
+
+**Description**: Validates the MongoDB configuration file. Checks that the file is valid JSON and that the content conforms to the run config schema. Prints clear validation errors to the console (e.g. missing required fields, invalid values, user/database constraints).
+
+**Options:**
+
+- `-c, --config <path>` - Path to mongo run config file (required)
+- `-s, --silent` - Silent mode
+
 #### Setup Replica Set (Deprecated)
 
 ```bash
@@ -163,7 +208,7 @@ softkave-forerunner mongo generate-certs -c <config-path> [options]
 softkave-forerunner mongo start -c <config-path> [options]
 ```
 
-**Description**: Starts MongoDB instances and sets up the replica set (if not already setup). **If not already present**, this command will automatically generate certificate configs and certificates before starting instances. The replica set is initialized automatically if it hasn't been initialized yet. Use `--setup-users` to also setup users after starting.
+**Description**: Starts MongoDB instances and sets up the replica set (if not already setup). **If not already present**, this command will automatically generate certificate configs and certificates before starting instances. SSL/TLS is always enabled. The replica set is initialized automatically if it hasn't been initialized yet. Use `--setup-users` to also setup users after starting.
 
 **Options:**
 
@@ -178,7 +223,10 @@ softkave-forerunner mongo start -c <config-path> [options]
 softkave-forerunner mongo stop -c <config-path> [options]
 ```
 
-**Options:** `-c, --config <path>` (required), `-s, --silent`
+**Options:**
+
+- `-c, --config <path>` - Path to mongo run config file (required)
+- `-s, --silent` - Silent mode
 
 #### Setup MongoDB Users
 
@@ -287,6 +335,19 @@ softkave-forerunner postgres scaffold-config [options]
 
 - `--defaults` - Use default values instead of prompting (default: false)
 - `-o, --output <path>` - Output file path (default: "./postgres-run-config.json")
+- `-s, --silent` - Silent mode
+
+#### Validate PostgreSQL Configuration
+
+```bash
+softkave-forerunner postgres validate-config -c <config-path> [options]
+```
+
+**Description**: Validates the PostgreSQL configuration file. Checks that the file is valid JSON and that the content conforms to the run config schema. Prints clear validation errors to the console (e.g. missing required fields, authorization/SSL constraints, user database references).
+
+**Options:**
+
+- `-c, --config <path>` - Path to postgres run config file (required)
 - `-s, --silent` - Silent mode
 
 #### Generate Certificates
@@ -508,6 +569,78 @@ softkave-forerunner run-env -- npm run dev
 
 **Behavior:** If no `.env*` files exist in the chosen directory, the command exits with an error. If exactly one file exists, it is used without prompting; if multiple exist, an interactive list is shown to select one.
 
+### Security Management (`security`)
+
+Security utilities for generating production-grade passwords and JWT secrets.
+
+#### Generate Password
+
+```bash
+softkave-forerunner security password [options]
+```
+
+**Description**: Generates production-grade password(s) using cryptographically secure random generation. By default, generates passwords with uppercase, lowercase, numbers, symbols, and excludes visually similar characters.
+
+**Options:**
+
+- `-c, --count <number>` - Number of passwords to generate (default: 1)
+- `-l, --length <number>` - Password length (default: 32)
+- `--numbers` / `--no-numbers` - Include/exclude numbers (default: include)
+- `--symbols` / `--no-symbols` - Include/exclude symbols (default: include)
+- `--uppercase` / `--no-uppercase` - Include/exclude uppercase characters (default: include)
+- `--lowercase` / `--no-lowercase` - Include/exclude lowercase characters (default: include)
+- `--exclude-similar` / `--no-exclude-similar` - Exclude/allow visually similar characters like 'i' and 'I' (default: exclude)
+- `--strict` / `--no-strict` - Require at least one character from each enabled pool (default: require)
+- `--exclude <chars>` - Characters to exclude from password (default: "")
+- `--symbols-set <chars>` - Custom symbols to use instead of default symbols (default: "")
+- `-s, --silent` - Silent mode
+
+**Examples:**
+
+```bash
+# Generate a single password with default settings
+softkave-forerunner security password
+
+# Generate 5 passwords
+softkave-forerunner security password --count 5
+
+# Generate a 16-character password without symbols
+softkave-forerunner security password --length 16 --no-symbols
+
+# Generate a password with custom symbols only
+softkave-forerunner security password --symbols-set "!@#$%"
+
+# Generate a password excluding certain characters
+softkave-forerunner security password --exclude "0O1lIi"
+```
+
+#### Generate JWT Secret
+
+```bash
+softkave-forerunner security jwt-secret [options]
+```
+
+**Description**: Generates production-grade JWT secret(s) using cryptographically secure random bytes. Each secret is `length` bytes (default 64) encoded as base64, suitable for JWT signing.
+
+**Options:**
+
+- `-c, --count <number>` - Number of secrets to generate (default: 1)
+- `-l, --length <number>` - Length in bytes of each secret (default: 64)
+- `-s, --silent` - Silent mode
+
+**Examples:**
+
+```bash
+# Generate a single JWT secret (64 bytes, default)
+softkave-forerunner security jwt-secret
+
+# Generate 3 JWT secrets
+softkave-forerunner security jwt-secret --count 3
+
+# Generate a JWT secret with custom length (e.g. 32 bytes)
+softkave-forerunner security jwt-secret --length 32
+```
+
 ## Common Options
 
 Most commands support:
@@ -542,6 +675,12 @@ softkave-forerunner mongo start -c mongo-config.json
 # Start MongoDB instances, setup replica set, and setup users
 softkave-forerunner mongo start --setup-users -c mongo-config.json
 
+# Stop MongoDB instances
+softkave-forerunner mongo stop -c mongo-config.json
+
+# Validate config file
+softkave-forerunner mongo validate-config -c mongo-config.json
+
 # Setup or sync users (if instances are already running)
 softkave-forerunner mongo setup-users -c mongo-config.json
 
@@ -563,6 +702,9 @@ softkave-forerunner postgres scaffold-config
 
 # Generate configuration file with defaults
 softkave-forerunner postgres scaffold-config --defaults
+
+# Validate config file
+softkave-forerunner postgres validate-config -c postgres-config.json
 
 # Generate SSL certificates
 softkave-forerunner postgres generate-certs -c postgres-config.json
@@ -609,6 +751,28 @@ softkave-forerunner pm children-pids 1234
 softkave-forerunner pm children-pids 1234 --silent
 ```
 
+### Security Management
+
+```bash
+# Generate a single password
+softkave-forerunner security password
+
+# Generate 5 passwords
+softkave-forerunner security password --count 5
+
+# Generate a password with custom length
+softkave-forerunner security password --length 16
+
+# Generate a JWT secret
+softkave-forerunner security jwt-secret
+
+# Generate 3 JWT secrets
+softkave-forerunner security jwt-secret --count 3
+
+# Generate a JWT secret with custom length
+softkave-forerunner security jwt-secret --length 32
+```
+
 ## Configuration Files
 
 ### MongoDB Configuration
@@ -643,7 +807,7 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 
 **`caConfig`** (object, required)
 
-- **Description**: Certificate Authority configuration for MongoDB SSL/TLS certificates
+- **Description**: Certificate Authority configuration for MongoDB SSL/TLS certificates. SSL/TLS is always enabled for MongoDB instances; this configuration is required.
 - **Properties**:
   - `days` (number): Certificate validity period in days
   - `subject` (object): X.509 certificate subject information
@@ -654,7 +818,7 @@ The MongoDB commands require a configuration file that specifies MongoDB version
     - `CN` (string): Common name for the CA
   - `passphrase` (string, optional): Passphrase for the CA private key
 
-**`instancesHostnames`** (array, required)
+**`hostnames`** (array, required)
 
 - **Description**: Hostnames for each MongoDB instance in the replica set (one entry per instance). Each entry can be:
   - A **string** (single hostname)
@@ -687,7 +851,7 @@ The MongoDB commands require a configuration file that specifies MongoDB version
     ]
   ]
   ```
-- **Note**: Length must match `instancePorts` and must be at least 3.
+- **Note**: Length must match `ports` and must be at least 3.
 
 **`bindLocalhost`** (boolean, optional)
 
@@ -695,11 +859,11 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 - **Example**: `true`
 - **Default**: `true`
 
-**`instancePorts`** (array, required)
+**`ports`** (array, required)
 
 - **Description**: Port numbers for each MongoDB instance (one per instance)
 - **Example**: `[27017, 27018, 27019]`
-- **Note**: Length must match `instancesHostnames` (minimum 3); ports must be unique
+- **Note**: Length must match `hostnames` (minimum 3); ports must be unique
 
 **`replicaSetName`** (string, required)
 
@@ -752,19 +916,19 @@ The MongoDB commands require a configuration file that specifies MongoDB version
     },
     "passphrase": "mongo-ca-passphrase"
   },
-  "instancesHostnames": [
+  "hostnames": [
     "mongo-1.fimidara.local",
     "mongo-2.fimidara.local",
     "mongo-3.fimidara.local"
   ],
   // Alternative with resolution (DNS-resolved hostnames are not bound to Docker bridge):
-  // "instancesHostnames": [
+  // "hostnames": [
   //   {"hostname": "mongo-1.fimidara.local", "resolution": "dns"},
   //   {"hostname": "mongo-2.fimidara.local", "resolution": "local"},
   //   "mongo-3.fimidara.local"
   // ],
   "bindLocalhost": true,
-  "instancePorts": [27017, 27018, 27019],
+  "ports": [27017, 27018, 27019],
   "replicaSetName": "fimidara-rs",
   "users": [
     {
@@ -1092,6 +1256,8 @@ import {
   setHost,
   removeHost,
   findChildrenPIDs,
+  generatePassword,
+  generateJwtSecret,
   ConsoleForeLogger,
 } from 'softkave-forerunner';
 
@@ -1199,9 +1365,9 @@ const mongoConfig: MongoRunConfig = {
     },
     passphrase: 'optional-passphrase',
   },
-  instancesHostnames: ['mongo1.local', 'mongo2.local', 'mongo3.local'],
+  hostnames: ['mongo1.local', 'mongo2.local', 'mongo3.local'],
   bindLocalhost: true,
-  instancePorts: [27017, 27018, 27019],
+  ports: [27017, 27018, 27019],
   replicaSetName: 'rs0',
   users: [
     {
@@ -1282,6 +1448,75 @@ restoreHostsFile({
   logger,
 });
 ```
+
+### Security Management
+
+#### Generate Password
+
+```typescript
+import {generatePassword} from 'softkave-forerunner';
+
+// Generate a single password with default settings
+const password = generatePassword();
+console.log('Generated password:', password);
+
+// Generate multiple passwords
+const passwords = generatePassword({count: 5});
+console.log('Generated passwords:', passwords);
+
+// Generate password with custom options
+const customPassword = generatePassword({
+  length: 16,
+  numbers: true,
+  symbols: false,
+  uppercase: true,
+  lowercase: true,
+  excludeSimilarCharacters: true,
+  strict: true,
+});
+console.log('Custom password:', customPassword);
+```
+
+**Options:**
+
+- `count` (number, optional): Number of passwords to generate (default: 1)
+- `length` (number, optional): Password length (default: 32)
+- `numbers` (boolean, optional): Include numbers (default: true)
+- `symbols` (boolean | string, optional): Include symbols or custom symbol set (default: true)
+- `uppercase` (boolean, optional): Include uppercase characters (default: true)
+- `lowercase` (boolean, optional): Include lowercase characters (default: true)
+- `excludeSimilarCharacters` (boolean, optional): Exclude visually similar characters (default: true)
+- `strict` (boolean, optional): Require at least one character from each pool (default: true)
+- `exclude` (string, optional): Characters to exclude from password
+
+#### Generate JWT Secret
+
+```typescript
+import {generateJwtSecret} from 'softkave-forerunner';
+
+// Generate a single JWT secret
+const secret = generateJwtSecret();
+console.log('Generated JWT secret:', secret);
+
+// Generate multiple JWT secrets
+const secrets = generateJwtSecret(5);
+console.log('Generated JWT secrets:', secrets);
+
+// Generate a secret with custom length (e.g. 32 bytes)
+const shortSecret = generateJwtSecret(1, 32);
+```
+
+**Parameters:**
+
+- `count` (number, optional): Number of secrets to generate (default: 1)
+- `length` (number, optional): Length in bytes of each secret (default: 64). Base64 encoding yields ~4/3 this length in characters.
+
+**Returns:**
+
+- Single secret string if `count` is 1 or not provided
+- Array of secret strings if `count` > 1
+
+**Note:** Each secret is `length` bytes encoded as base64, suitable for JWT signing. Default 64 bytes yields an 88-character string.
 
 ### Process Management
 
