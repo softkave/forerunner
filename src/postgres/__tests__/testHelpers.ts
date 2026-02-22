@@ -8,7 +8,9 @@ import {isContainerRunning} from '../utils.js';
 const logger = new ConsoleForeLogger({silent: true});
 
 /**
- * Stop and remove the PostgreSQL container and optionally its volume
+ * Stop and remove the PostgreSQL container and its volume (when tests are
+ * done). Pass removeVolume: false only if you need to keep the volume for
+ * inspection.
  */
 export async function cleanupPostgresTest(params: {
   postgresRunConfig: PostgresRunConfig;

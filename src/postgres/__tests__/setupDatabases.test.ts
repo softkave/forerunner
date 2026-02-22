@@ -41,7 +41,10 @@ beforeAll(
 );
 
 afterAll(async () => {
-  await cleanupPostgresTest({postgresRunConfig: baseConfig});
+  await cleanupPostgresTest({
+    postgresRunConfig: baseConfig,
+    removeVolume: true,
+  });
 });
 
 describe('setupDatabases', () => {

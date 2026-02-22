@@ -2,7 +2,7 @@ import fs from 'fs';
 import getPort from 'get-port';
 import os from 'os';
 import path from 'path';
-import {describe, expect, test} from 'vitest';
+import {afterAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/foreLogger/ConsoleForeLogger.js';
 import {
   startPostgresInstance,
@@ -21,6 +21,18 @@ import {
 
 const logger = new ConsoleForeLogger({silent: true});
 
+/** Configs created by tests; afterAll cleans containers and volumes even if a test fails. */
+const configsToCleanup: PostgresRunConfig[] = [];
+
+afterAll(async () => {
+  for (const config of configsToCleanup) {
+    await cleanupPostgresTest({
+      postgresRunConfig: config,
+      removeVolume: true,
+    });
+  }
+});
+
 describe('startPostgresInstance and stopPostgresInstance', () => {
   test(
     'starts with authorization disabled (trust) and no users',
@@ -33,6 +45,7 @@ describe('startPostgresInstance and stopPostgresInstance', () => {
         authorization: 'disabled',
         dbs: ['mydb'],
       }) as PostgresRunConfig;
+      configsToCleanup.push(config);
 
       await startPostgresInstance({
         postgresRunConfig: config,
@@ -67,6 +80,7 @@ describe('startPostgresInstance and stopPostgresInstance', () => {
         users: [{username: 'admin', password: 'admin-pw'}],
         dbs: ['mydb'],
       }) as PostgresRunConfig;
+      configsToCleanup.push(config);
 
       await startPostgresInstance({
         postgresRunConfig: config,
@@ -141,6 +155,7 @@ describe('startPostgresInstance and stopPostgresInstance', () => {
           users: [{username: 'ssluser', password: 'ssl-secret'}],
           dbs: ['mydb'],
         }) as PostgresRunConfig;
+        configsToCleanup.push(config);
 
         await startPostgresInstance({
           postgresRunConfig: config,
@@ -183,6 +198,7 @@ describe('startPostgresInstance and stopPostgresInstance', () => {
         authorization: 'disabled',
         dbs: ['mydb'],
       }) as PostgresRunConfig;
+      configsToCleanup.push(config);
 
       await startPostgresInstance({
         postgresRunConfig: config,
@@ -215,6 +231,7 @@ describe('waitForPostgresReady', () => {
         authorization: 'disabled',
         dbs: ['mydb'],
       }) as PostgresRunConfig;
+      configsToCleanup.push(config);
 
       await startPostgresInstance({
         postgresRunConfig: config,
