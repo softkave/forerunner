@@ -40,7 +40,7 @@ export async function stopMongodInstance(params: {
   }
 
   try {
-    execFileSync('docker', ['rm', containerName], {
+    execFileSync('docker', ['rm', '-v', containerName], {
       stdio: 'pipe',
       encoding: 'utf8',
     });
