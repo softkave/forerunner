@@ -3,7 +3,6 @@ import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
 import {uniq} from 'lodash-es';
 import path from 'path';
-import {convertToArray} from 'softkave-js-utils';
 import {CAConfig, CertConfig} from '../certs/types.js';
 import {extractHostnames, MongoRunConfig} from './mongoRunConfig.js';
 import {generateMongoPassword, getFirstNonLocalhostBindIp} from './utils.js';
@@ -92,17 +91,13 @@ export async function generateCertConfigForMongod(params: {
 
   const entry = params.mongoRunConfig.hostnames[params.instanceNumber - 1];
   let hostnames = extractHostnames(entry ?? []);
-  if (params.mongoRunConfig.bindLocalhost) {
-    hostnames = [...hostnames, 'localhost', '127.0.0.1'];
-  }
-
-  assert.ok(
-    hostnames.length > 0,
-    `instanceHostnames or bindLocalhost must be set for instance ${params.instanceNumber}`
-  );
+  hostnames = [...hostnames, 'localhost', '127.0.0.1'];
 
   const hostname0 = hostnames[0] as string | undefined;
-  assert.ok(hostname0, 'hostname or bindLocalhost must be set');
+  assert.ok(
+    hostname0,
+    `hostname not set for instance ${params.instanceNumber}`
+  );
   const firstNonLocalHostname = getFirstNonLocalhostBindIp({bindIp: hostname0});
   const cn = firstNonLocalHostname || hostname0;
   // Collect all hostnames from all instances for SAN

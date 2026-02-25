@@ -28,7 +28,6 @@ const mongoRunConfig: MongoRunConfig = {
     },
   ],
   workingDir: 'testdir/mongo/test-print-mongo-uri',
-  bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-print-mongo-uri',
   authorization: 'enabled',

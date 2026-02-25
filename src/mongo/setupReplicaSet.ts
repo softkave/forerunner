@@ -14,7 +14,6 @@ function buildMembers(
   return mongoRunConfig.ports.map((port, index) => {
     const hostnames = compileHostnames({
       hostnames: mongoRunConfig.hostnames[index],
-      bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
     });
     const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
     assert.ok(hostname, `hostname must be set for instance ${index + 1}`);
@@ -29,7 +28,6 @@ function getMongoshConnectionUri(params: {
   const {mongoRunConfig, authUser} = params;
   const hostnames = compileHostnames({
     hostnames: mongoRunConfig.hostnames[0],
-    bindLocalhost: false,
   });
   const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
   assert.ok(hostname, `hostname must be set for instance 1`);

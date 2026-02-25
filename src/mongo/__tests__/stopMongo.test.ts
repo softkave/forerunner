@@ -35,7 +35,6 @@ const mongoRunConfig: MongoRunConfig = {
     },
   ],
   workingDir: 'testdir/mongo/test-softkave-forerunner-mongo',
-  bindLocalhost: true,
   mongoVersion: '8.2.3',
   authorization: 'enabled',
   replicaSetName: 'test-softkave-forerunner-mongo',
@@ -81,6 +80,6 @@ describe('stopMongo', () => {
         expect(result).toBe(false);
       }
     },
-    5 * 60 * 1000 // 5 minutes
+    1 * 60 * 1000 // 1 minute
   );
 });

@@ -68,6 +68,9 @@ export const postgresRunConfigSchema = z
 
     // Whether to keep data across restarts
     keep: z.boolean().optional(),
+
+    // Discoverability: "local" = bind 127.0.0.1 only; "global" = bind all interfaces.
+    discoverability: z.enum(['local', 'global']).optional(),
   })
   .transform(data => ({
     ...data,
@@ -77,6 +80,7 @@ export const postgresRunConfigSchema = z
     keep: data.keep ?? false,
     authorization: data.authorization ?? 'disabled',
     ssl: data.ssl ?? 'disabled',
+    discoverability: data.discoverability ?? 'local',
   }))
   .superRefine((data, ctx) => {
     if (data.authorization !== 'enabled') return;

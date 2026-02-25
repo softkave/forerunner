@@ -94,14 +94,6 @@ async function promptForConfig(
     );
     config.replicaSetName = replicaSetName.trim() || 'my-mongo-rs';
 
-    const bindLocalhostStr = await question(
-      rl,
-      'Bind to localhost? (y/n) [y]: '
-    );
-    config.bindLocalhost =
-      bindLocalhostStr.trim().toLowerCase() !== 'n' &&
-      bindLocalhostStr.trim().toLowerCase() !== 'no';
-
     logger.log('\nInstance Configuration (minimum 3 instances required):');
     const instanceCountStr = await question(rl, 'Number of instances [3]: ');
     const instanceCount = instanceCountStr.trim()
@@ -294,7 +286,6 @@ function getDefaultConfig(): MongoRunConfig {
       },
     },
     replicaSetName: 'my-mongo-rs',
-    bindLocalhost: true,
     ports: [27017, 27018, 27019],
     hostnames: ['localhost', 'localhost', 'localhost'],
     authorization: 'enabled',

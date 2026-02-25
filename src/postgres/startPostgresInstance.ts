@@ -155,13 +155,17 @@ function buildDockerRunArgs(params: {
   const image = `postgres:${postgresRunConfig.postgresVersion}`;
   const sslEnabled = postgresRunConfig.ssl === 'enabled';
 
+  const discoverability = postgresRunConfig.discoverability ?? 'local';
+  const portMapping =
+    discoverability === 'local' ? `127.0.0.1:${port}:5432` : `${port}:5432`;
+
   const runArgs: string[] = [
     'run',
     '-d',
     '--name',
     containerName,
     '-p',
-    `127.0.0.1:${port}:5432`, // Bind only to localhost
+    portMapping,
     '-v',
     `${volumeName}:/var/lib/postgresql/data`,
     ...envVars,

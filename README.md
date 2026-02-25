@@ -321,7 +321,7 @@ PostgreSQL instance management via Docker. Supports single PostgreSQL instances 
 
 **Docker is required** for postgres operations (start, stop, setup-users, setup-dbs); instances run as Docker containers.
 
-**Security**: PostgreSQL instances bind only to localhost (127.0.0.1) for security.
+**Discoverability**: By default, instances use `discoverability: "local"` (bind `127.0.0.1:port`, reachable only from this host). Set `discoverability: "global"` to bind to all interfaces (container discoverable globally).
 
 #### Scaffold Configuration
 
@@ -853,12 +853,6 @@ The MongoDB commands require a configuration file that specifies MongoDB version
   ```
 - **Note**: Length must match `ports` and must be at least 3.
 
-**`bindLocalhost`** (boolean, optional)
-
-- **Description**: Whether to bind MongoDB instances to localhost (`127.0.0.1`)
-- **Example**: `true`
-- **Default**: `true`
-
 **`ports`** (array, required)
 
 - **Description**: Port numbers for each MongoDB instance (one per instance)
@@ -927,7 +921,6 @@ The MongoDB commands require a configuration file that specifies MongoDB version
   //   {"hostname": "mongo-2.fimidara.local", "resolution": "local"},
   //   "mongo-3.fimidara.local"
   // ],
-  "bindLocalhost": true,
   "ports": [27017, 27018, 27019],
   "replicaSetName": "fimidara-rs",
   "users": [
@@ -1040,6 +1033,12 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 - **Default**: `false`
 - **Note**: When `false`, existing volumes are removed on start
 
+**`discoverability`** (`"local"` | `"global"`, optional)
+
+- **Description**: Controls whether the container is only discoverable locally or globally. When `"local"`, Docker port mapping uses `127.0.0.1:port` (only reachable from this host). When `"global"`, port mapping uses `port` (reachable from all interfaces).
+- **Example**: `"local"`
+- **Default**: `"local"`
+
 **`users`** (array, optional)
 
 - **Description**: PostgreSQL users. The first user is the admin (set via POSTGRES_USER/POSTGRES_PASSWORD). When authorization is enabled, all users must have a password.
@@ -1066,6 +1065,7 @@ The PostgreSQL commands require a configuration file that specifies port, contai
   "containerName": "postgres-db",
   "volumeName": "postgres-db",
   "keep": true,
+  "discoverability": "local",
   "users": [
     {
       "username": "admin",
@@ -1086,7 +1086,7 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 
 - **`authorization: "disabled"`**: PostgreSQL uses trust authentication (no password). No users are required.
 - **`authorization: "enabled"`**: PostgreSQL uses scram-sha-256. At least one user with a password is required. pg_hba.conf and postgresql.conf are set for password authentication; setup-users creates/updates users and syncs database permissions and connection types from config.
-- **Security**: Instances bind only to `127.0.0.1` (localhost) for security.
+- **Discoverability**: By default, instances use `discoverability: "local"` (bind only to `127.0.0.1`). Set `discoverability: "global"` to make the container reachable from all interfaces.
 
 ### Certificate Configuration
 
@@ -1366,7 +1366,6 @@ const mongoConfig: MongoRunConfig = {
     passphrase: 'optional-passphrase',
   },
   hostnames: ['mongo1.local', 'mongo2.local', 'mongo3.local'],
-  bindLocalhost: true,
   ports: [27017, 27018, 27019],
   replicaSetName: 'rs0',
   users: [

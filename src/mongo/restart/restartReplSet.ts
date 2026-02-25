@@ -154,7 +154,6 @@ async function getInstanceNumberFromMember(
   for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     const hostnames = compileHostnames({
       hostnames: mongoRunConfig.hostnames[i - 1],
-      bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
     });
     if (hostnames.some(hostname => member.name.includes(hostname))) {
       return i;

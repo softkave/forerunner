@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
 import {
   getAuthUserFromConfig,
-  postgresRunConfigSchema,
   PostgresRunConfig,
+  postgresRunConfigSchema,
 } from '../postgresRunConfig.js';
 
 describe('postgresRunConfigSchema', () => {
@@ -19,6 +19,7 @@ describe('postgresRunConfigSchema', () => {
     expect(parsed.keep).toBe(false);
     expect(parsed.authorization).toBe('disabled');
     expect(parsed.ssl).toBe('disabled');
+    expect(parsed.discoverability).toBe('local');
   });
 
   test('when authorization is enabled, at least one user is required', () => {
@@ -143,6 +144,7 @@ describe('getAuthUserFromConfig', () => {
       authorization: 'disabled',
       ssl: 'disabled',
       postgresVersion: '16',
+      discoverability: 'local',
     };
     expect(getAuthUserFromConfig(config)).toBeUndefined();
   });

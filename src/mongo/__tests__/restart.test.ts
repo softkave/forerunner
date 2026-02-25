@@ -44,7 +44,6 @@ const mongoRunConfig: MongoRunConfig = {
     },
   ],
   workingDir: 'testdir/mongo/test-softkave-forerunner-mongo',
-  bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
   authorization: 'enabled',
@@ -62,7 +61,7 @@ beforeAll(
       authUser: mongoRunConfig.users[0],
     });
   },
-  2 * 60 * 1000 // 2 minutes
+  1 * 60 * 1000 // 1 minute
 );
 
 afterAll(async () => {
@@ -80,6 +79,6 @@ describe('restartMongo', () => {
       await restartMongo({mongoRunConfig, logger});
       await assertMongoReplicaSetReady({mongoRunConfig, logger});
     },
-    5 * 60 * 1000 // 5 minutes
+    1 * 60 * 1000 // 1 minute
   );
 });
