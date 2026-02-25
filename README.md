@@ -828,6 +828,7 @@ The MongoDB commands require a configuration file that specifies MongoDB version
   - When `resolution` is `"dns"`, the hostname is resolved via DNS and is **not** bound to Docker bridge IP (`172.17.0.1`). Use this when the hostname is resolvable via DNS and containers can reach it directly.
   - When `resolution` is `"local"` or missing, the hostname is bound to Docker bridge IP (`172.17.0.1`) so containers can reach it via the bridge. Use this for hostnames that are not resolvable via DNS (e.g., entries in `/etc/hosts`).
 - **Docker binding**: When starting MongoDB instances, only non-localhost hostnames with missing `resolution` or `resolution: "local"` are bound to Docker bridge. Hostnames with `resolution: "dns"` are not bound, assuming DNS resolution works from within containers.
+- **Do not use localhost**: Hostnames must not be `localhost` (or `127.0.0.1`). Each replica set member is run in its own container; from inside a container, `localhost` refers to that container only, so other members would not be discoverable when setting up the replica set. Use non-localhost hostnames (e.g. `mongo-1.example.local`) and discovered through DNS by setting `resolution` to `dns`, or set `resolution` to `local` to bind to the Docker IP bridge.
 - **Example (with string array & local resolution)**:
   ```json
   ["mongo-1.fimidara.local", "mongo-2.fimidara.local", "mongo-3.fimidara.local"]
