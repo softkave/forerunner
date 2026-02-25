@@ -101,7 +101,7 @@ function getContainerConfigHash(containerName: string): string | null {
 
 function removeContainer(containerName: string, logger: IForeLogger): void {
   try {
-    execFileSync('docker', ['rm', '-f', containerName], {
+    execFileSync('docker', ['rm', '-f', '-v', containerName], {
       stdio: 'pipe',
       encoding: 'utf8',
     });

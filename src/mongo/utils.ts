@@ -73,7 +73,6 @@ export async function getMongoUriForInstance(params: {
 
   const hostnames = compileHostnames({
     hostnames: mongoRunConfig.hostnames[instanceNumber - 1],
-    bindLocalhost: mongoRunConfig.bindLocalhost ?? false,
   });
   const bindIp0 = params.preferLocalhost
     ? getFirstLocalhostBindIp({hostnames}) || hostnames[0]
@@ -92,14 +91,10 @@ export async function getMongoUriForInstance(params: {
 
 export function compileHostnames(params: {
   hostnames: InstanceHostnameEntry;
-  bindLocalhost: boolean;
 }): string[] {
-  const {hostnames: initialHostnames, bindLocalhost} = params;
+  const {hostnames: initialHostnames} = params;
   let hostnames = extractHostnames(initialHostnames);
-  if (bindLocalhost) {
-    hostnames = [...hostnames, 'localhost', '127.0.0.1'];
-  }
-
+  hostnames = [...hostnames, 'localhost', '127.0.0.1'];
   return hostnames;
 }
 
@@ -115,7 +110,6 @@ export async function getMongoUriForReplicaSet(params: {
   const hostnamesPerInstance = mongoRunConfig.ports.map((_port, index) => {
     const hostnames = compileHostnames({
       hostnames: mongoRunConfig.hostnames[index] ?? [],
-      bindLocalhost: mongoRunConfig.bindLocalhost || false,
     });
     let hostname: string | undefined;
     if (params.preferLocalhost) {
@@ -127,7 +121,7 @@ export async function getMongoUriForReplicaSet(params: {
     const preferredHostname = hostname || hostnames[0];
     assert.ok(
       preferredHostname,
-      `instanceHostnames or bindLocalhost must be set for instance ${index + 1}`
+      `instanceHostnames must be set for instance ${index + 1}`
     );
 
     return preferredHostname;

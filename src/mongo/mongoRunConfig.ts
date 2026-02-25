@@ -95,7 +95,6 @@ export const mongoRunConfigSchema = z
     // ports.length (must match, min 3). Each entry can be: string, string[],
     // {hostname, resolution}, or array of {hostname, resolution}
     hostnames: z.array(InstanceHostnameEntrySchema),
-    bindLocalhost: z.boolean().default(true).optional(),
     ports: z.array(z.number()),
     replicaSetName: z.string().min(1, 'replicaSetName is required'),
 

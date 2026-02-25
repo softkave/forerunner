@@ -70,6 +70,13 @@ async function promptForConfig(
     );
     config.keep = keepStr.trim().toLowerCase() === 'y';
 
+    const discoverabilityStr = await question(
+      rl,
+      'Discoverability: local (127.0.0.1 only) or global (all interfaces)? [local]: '
+    );
+    const d = discoverabilityStr.trim().toLowerCase();
+    config.discoverability = d === 'global' || d === 'g' ? 'global' : 'local';
+
     const authStr = await question(
       rl,
       'Authorization enabled? (local and TCP require password) (y/n) [n]: '
@@ -320,6 +327,7 @@ function getDefaultConfig(): PostgresRunConfig {
     volumeName: 'postgres-db',
     postgresVersion: '16',
     keep: false,
+    discoverability: 'local',
     authorization: 'disabled',
     ssl: 'disabled',
     users: [

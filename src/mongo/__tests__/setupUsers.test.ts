@@ -50,7 +50,6 @@ const baseConfig: MongoRunConfig = {
     },
   ],
   workingDir: 'testdir/mongo/test-setup-users-mongo',
-  bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-setup-users-mongo',
   authorization: 'enabled',
@@ -68,7 +67,7 @@ beforeAll(
       authUser: baseConfig.users[0],
     });
   },
-  5 * 60 * 1000 // 5 minutes
+  1 * 60 * 1000 // 1 minute
 );
 
 afterAll(async () => {
@@ -106,7 +105,7 @@ describe('setupUsers', () => {
         username: 'test-setup-new-user',
       });
     },
-    2 * 60 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -143,7 +142,7 @@ describe('setupUsers', () => {
         db: 'other-db',
       });
     },
-    2 * 60 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -182,7 +181,7 @@ describe('setupUsers', () => {
         })
       ).rejects.toThrow();
     },
-    2 * 60 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -215,6 +214,6 @@ describe('setupUsers', () => {
       expect(adminStillExists).toBe(true);
       await checkAdminCanConnect({mongoRunConfig: baseConfig, logger});
     },
-    2 * 60 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 });

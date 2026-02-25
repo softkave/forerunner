@@ -1,5 +1,5 @@
-import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import getPort from 'get-port';
+import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/foreLogger/ConsoleForeLogger.js';
 import {setupDatabases, setupUsers, startPostgresInstance} from '../index.js';
 import {PostgresRunConfig} from '../postgresRunConfig.js';
@@ -28,6 +28,7 @@ beforeAll(
       postgresVersion: '16',
       users: [{username: 'admin', password: 'admin-secret'}],
       dbs: ['mydb', 'appdb', 'otherdb'],
+      discoverability: 'local',
     };
 
     await startPostgresInstance({

@@ -321,7 +321,7 @@ PostgreSQL instance management via Docker. Supports single PostgreSQL instances 
 
 **Docker is required** for postgres operations (start, stop, setup-users, setup-dbs); instances run as Docker containers.
 
-**Security**: PostgreSQL instances bind only to localhost (127.0.0.1) for security.
+**Discoverability**: By default, instances use `discoverability: "local"` (bind `127.0.0.1:port`, reachable only from this host). Set `discoverability: "global"` to bind to all interfaces (container discoverable globally).
 
 #### Scaffold Configuration
 
@@ -828,6 +828,7 @@ The MongoDB commands require a configuration file that specifies MongoDB version
   - When `resolution` is `"dns"`, the hostname is resolved via DNS and is **not** bound to Docker bridge IP (`172.17.0.1`). Use this when the hostname is resolvable via DNS and containers can reach it directly.
   - When `resolution` is `"local"` or missing, the hostname is bound to Docker bridge IP (`172.17.0.1`) so containers can reach it via the bridge. Use this for hostnames that are not resolvable via DNS (e.g., entries in `/etc/hosts`).
 - **Docker binding**: When starting MongoDB instances, only non-localhost hostnames with missing `resolution` or `resolution: "local"` are bound to Docker bridge. Hostnames with `resolution: "dns"` are not bound, assuming DNS resolution works from within containers.
+- **Do not use localhost**: Hostnames must not be `localhost` (or `127.0.0.1`). Each replica set member is run in its own container; from inside a container, `localhost` refers to that container only, so other members would not be discoverable when setting up the replica set. Use non-localhost hostnames (e.g. `mongo-1.example.local`) and discovered through DNS by setting `resolution` to `dns`, or set `resolution` to `local` to bind to the Docker IP bridge.
 - **Example (with string array & local resolution)**:
   ```json
   ["mongo-1.fimidara.local", "mongo-2.fimidara.local", "mongo-3.fimidara.local"]
@@ -852,12 +853,6 @@ The MongoDB commands require a configuration file that specifies MongoDB version
   ]
   ```
 - **Note**: Length must match `ports` and must be at least 3.
-
-**`bindLocalhost`** (boolean, optional)
-
-- **Description**: Whether to bind MongoDB instances to localhost (`127.0.0.1`)
-- **Example**: `true`
-- **Default**: `true`
 
 **`ports`** (array, required)
 
@@ -927,7 +922,6 @@ The MongoDB commands require a configuration file that specifies MongoDB version
   //   {"hostname": "mongo-2.fimidara.local", "resolution": "local"},
   //   "mongo-3.fimidara.local"
   // ],
-  "bindLocalhost": true,
   "ports": [27017, 27018, 27019],
   "replicaSetName": "fimidara-rs",
   "users": [
@@ -1040,6 +1034,12 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 - **Default**: `false`
 - **Note**: When `false`, existing volumes are removed on start
 
+**`discoverability`** (`"local"` | `"global"`, optional)
+
+- **Description**: Controls whether the container is only discoverable locally or globally. When `"local"`, Docker port mapping uses `127.0.0.1:port` (only reachable from this host). When `"global"`, port mapping uses `port` (reachable from all interfaces).
+- **Example**: `"local"`
+- **Default**: `"local"`
+
 **`users`** (array, optional)
 
 - **Description**: PostgreSQL users. The first user is the admin (set via POSTGRES_USER/POSTGRES_PASSWORD). When authorization is enabled, all users must have a password.
@@ -1066,6 +1066,7 @@ The PostgreSQL commands require a configuration file that specifies port, contai
   "containerName": "postgres-db",
   "volumeName": "postgres-db",
   "keep": true,
+  "discoverability": "local",
   "users": [
     {
       "username": "admin",
@@ -1086,7 +1087,7 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 
 - **`authorization: "disabled"`**: PostgreSQL uses trust authentication (no password). No users are required.
 - **`authorization: "enabled"`**: PostgreSQL uses scram-sha-256. At least one user with a password is required. pg_hba.conf and postgresql.conf are set for password authentication; setup-users creates/updates users and syncs database permissions and connection types from config.
-- **Security**: Instances bind only to `127.0.0.1` (localhost) for security.
+- **Discoverability**: By default, instances use `discoverability: "local"` (bind only to `127.0.0.1`). Set `discoverability: "global"` to make the container reachable from all interfaces.
 
 ### Certificate Configuration
 
@@ -1366,7 +1367,6 @@ const mongoConfig: MongoRunConfig = {
     passphrase: 'optional-passphrase',
   },
   hostnames: ['mongo1.local', 'mongo2.local', 'mongo3.local'],
-  bindLocalhost: true,
   ports: [27017, 27018, 27019],
   replicaSetName: 'rs0',
   users: [

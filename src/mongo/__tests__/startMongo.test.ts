@@ -53,7 +53,6 @@ const mongoRunConfig: MongoRunConfig = {
     },
   ],
   workingDir: 'testdir/mongo/test-softkave-forerunner-mongo',
-  bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-softkave-forerunner-mongo',
   authorization: 'enabled',
@@ -147,7 +146,7 @@ describe('startMongo', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000 // 2 minutes
+    1 * 60 * 1000 // 1 minutes
   );
 
   test(
@@ -165,7 +164,7 @@ describe('startMongo', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000 // 2 minutes
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -191,7 +190,7 @@ describe('startMongo', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000 // 2 minutes
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -215,7 +214,7 @@ describe('startMongo', () => {
         preferLocalhost: false,
       });
     },
-    2 * 60 * 1000 // 2 minutes
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -235,6 +234,6 @@ describe('startMongo', () => {
         username: 'test-user-db',
       });
     },
-    2 * 60 * 1000 // 2 minutes
+    1 * 60 * 1000 // 1 minute
   );
 });

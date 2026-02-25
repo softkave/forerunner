@@ -39,7 +39,6 @@ const mongoRunConfig: MongoRunConfig = {
     },
   ],
   workingDir: 'testdir/mongo/test-replica-set-status',
-  bindLocalhost: true,
   mongoVersion: '8.2.3',
   replicaSetName: 'test-replica-set-status',
   authorization: 'enabled',
@@ -58,7 +57,7 @@ beforeAll(
     });
     await checkAdminCanConnect({mongoRunConfig, logger});
   },
-  5 * 60 * 1000 // 5 minutes
+  1 * 60 * 1000 // 1 minute
 );
 
 afterAll(async () => {
@@ -108,7 +107,7 @@ describe('getReplicaSetStatus', () => {
         expect(member.health).toBeDefined();
       }
     },
-    30 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -123,7 +122,7 @@ describe('getReplicaSetStatus', () => {
       expect(status.set).toBe(mongoRunConfig.replicaSetName);
       expect(status.members.length).toBeGreaterThanOrEqual(1);
     },
-    30 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -140,7 +139,7 @@ describe('getReplicaSetStatus', () => {
       expect(status.rawAll).toBeDefined();
       expect(status.rawAll.length).toBe(mongoRunConfig.ports.length);
     },
-    30 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 
   test(
@@ -156,6 +155,6 @@ describe('getReplicaSetStatus', () => {
       expect(status.set).toBe(mongoRunConfig.replicaSetName);
       expect(status.members.length).toBeGreaterThanOrEqual(1);
     },
-    30 * 1000
+    1 * 60 * 1000 // 1 minute
   );
 });
