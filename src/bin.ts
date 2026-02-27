@@ -961,7 +961,7 @@ securityProgram
         lowercase: options.lowercase !== false,
         excludeSimilarCharacters: options.excludeSimilar !== false,
         strict: options.strict !== false,
-        exclude: options.exclude || undefined,
+        exclude: options.exclude,
       };
 
       const passwords = generatePassword(passwordOptions);
@@ -971,7 +971,7 @@ securityProgram
         logger.log(password);
       });
     } catch (error) {
-      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.error('❌ Error:', error);
       logger.onSilentFail(error);
       process.exit(1);
     }

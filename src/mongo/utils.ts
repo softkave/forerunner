@@ -153,12 +153,10 @@ export function generateMongoPassword() {
   return generate({
     length: 32,
     numbers: true,
-    symbols: true,
+    // Only URI-unreserved symbols so passwords are safe in MongoDB connection
+    // strings
+    symbols: '-._~',
     uppercase: true,
     strict: true,
-    // Exclude URL-reserved characters that can cause issues in MongoDB
-    // connection strings: @ (at sign), # (hash), ! (exclamation), &
-    // (ampersand), | (pipe), % (percent)
-    exclude: '@#!&|%',
   });
 }
