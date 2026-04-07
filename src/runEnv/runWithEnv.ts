@@ -1,4 +1,4 @@
-import select from '@inquirer/select';
+import checkbox from '@inquirer/checkbox';
 import {spawn} from 'child_process';
 import {parse} from 'dotenv';
 import {readFileSync} from 'fs';
@@ -23,76 +23,88 @@ function resolveEnvFilePath(cwd: string, filePath: string): string {
   return path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath);
 }
 
+function readEnvFileUtf8(envFilePath: string): string {
+  try {
+    return readFileSync(envFilePath, 'utf-8');
+  } catch (err) {
+    throw new Error(
+      `Failed to read ${envFilePath}: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
 /**
- * Runs the given command with environment variables loaded from a user-selected
- * .env* file, or from explicit paths when `envFilePaths` is set. Discovers
- * .env* files in cwd when no explicit list is given, lets user pick one (or
- * uses the only one), then spawns the command with merged env and stdio
- * inherited.
+ * Loads and merges dotenv files in order; later files override earlier keys.
  */
-export async function runWithEnvMain(params: RunWithEnvParams): Promise<void> {
-  const {cwd, command, silent = false, logger, envFilePaths} = params;
+function loadMergedEnvFromAbsolutePaths(absolutePaths: string[]): {
+  env: NodeJS.ProcessEnv;
+  logLabels: string[];
+} {
+  let env: NodeJS.ProcessEnv = {...process.env};
+  const logLabels: string[] = [];
 
-  let env: NodeJS.ProcessEnv;
-  let logLabels: string[];
-
-  if (envFilePaths && envFilePaths.length > 0) {
-    env = {...process.env};
-    logLabels = [];
-    for (const p of envFilePaths) {
-      const envFilePath = resolveEnvFilePath(cwd, p);
-      let content: string;
-      try {
-        content = readFileSync(envFilePath, 'utf-8');
-      } catch (err) {
-        throw new Error(
-          `Failed to read ${envFilePath}: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-      const parsed = parse(content);
-      env = {...env, ...parsed};
-      logLabels.push(envFilePath);
-    }
-  } else {
-    const envFiles = discoverEnvFiles(cwd);
-    if (envFiles.length === 0) {
-      throw new Error(
-        `No .env* files found in ${cwd}. Create at least one file whose name starts with .env (e.g. .env, .env.local), or pass explicit files with -e/--env-file.`
-      );
-    }
-
-    let selected: string;
-    if (envFiles.length === 1) {
-      selected = envFiles[0];
-    } else {
-      selected = await select({
-        message: 'Select an env file',
-        choices: envFiles.map(name => ({value: name, name})),
-      });
-    }
-
-    const envFilePath = path.join(cwd, selected);
-    let content: string;
-    try {
-      content = readFileSync(envFilePath, 'utf-8');
-    } catch (err) {
-      throw new Error(
-        `Failed to read ${envFilePath}: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-
+  for (const envFilePath of absolutePaths) {
+    const content = readEnvFileUtf8(envFilePath);
     const parsed = parse(content);
-    env = {...process.env, ...parsed};
-    logLabels = [selected];
+    env = {...env, ...parsed};
+    logLabels.push(envFilePath);
   }
 
-  if (!silent) {
-    for (const label of logLabels) {
-      logger.log(`Using ${label}`);
-    }
+  return {env, logLabels};
+}
+
+function resolveExplicitPathsToAbsolute(
+  cwd: string,
+  paths: string[]
+): string[] {
+  return paths.map(p => resolveEnvFilePath(cwd, p));
+}
+
+function basenamesToAbsolutePaths(cwd: string, basenames: string[]): string[] {
+  return basenames.map(b => path.join(cwd, b));
+}
+
+/**
+ * Keeps merge order aligned with discovery order regardless of how the user
+ * toggled checkboxes.
+ */
+function orderSelectedBasenames(
+  discoveryOrder: string[],
+  selected: string[]
+): string[] {
+  const selectedSet = new Set(selected);
+  return discoveryOrder.filter(b => selectedSet.has(b));
+}
+
+/**
+ * When several `.env*` files exist, prompts for a subset. Space toggles a row,
+ * Enter confirms. First file in discovery order starts checked.
+ */
+async function promptEnvBasenames(discoveryOrder: string[]): Promise<string[]> {
+  if (discoveryOrder.length === 1) {
+    return discoveryOrder;
   }
 
-  await new Promise<void>((resolve, reject) => {
+  const selected = await checkbox({
+    message:
+      'Select env file(s) to load (Space = toggle, Enter = confirm; A = all, I = invert)',
+    choices: discoveryOrder.map((name, index) => ({
+      name,
+      value: name,
+      checked: index === 0,
+    })),
+    required: true,
+  });
+
+  return orderSelectedBasenames(discoveryOrder, selected);
+}
+
+function spawnCommandInherit(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const child = spawn(command, [], {
       shell: true,
       cwd,
@@ -111,4 +123,41 @@ export async function runWithEnvMain(params: RunWithEnvParams): Promise<void> {
       }
     });
   });
+}
+
+/**
+ * Runs the given command with environment variables loaded from `.env*` files.
+ * Use explicit `envFilePaths` to skip discovery; otherwise files are discovered
+ * in `cwd`, and when more than one exists the user picks any subset via a
+ * checkbox prompt (merge order follows discovery order among selected files).
+ */
+export async function runWithEnvMain(params: RunWithEnvParams): Promise<void> {
+  const {cwd, command, silent = false, logger, envFilePaths} = params;
+
+  let env: NodeJS.ProcessEnv;
+  let logLabels: string[];
+
+  if (envFilePaths && envFilePaths.length > 0) {
+    const absolutePaths = resolveExplicitPathsToAbsolute(cwd, envFilePaths);
+    ({env, logLabels} = loadMergedEnvFromAbsolutePaths(absolutePaths));
+  } else {
+    const discovered = discoverEnvFiles(cwd);
+    if (discovered.length === 0) {
+      throw new Error(
+        `No .env* files found in ${cwd}. Create at least one file whose name starts with .env (e.g. .env, .env.local), or pass explicit files with -e/--env-file.`
+      );
+    }
+
+    const chosenBasenames = await promptEnvBasenames(discovered);
+    const absolutePaths = basenamesToAbsolutePaths(cwd, chosenBasenames);
+    ({env, logLabels} = loadMergedEnvFromAbsolutePaths(absolutePaths));
+  }
+
+  if (!silent) {
+    for (const label of logLabels) {
+      logger.log(`Using ${label}`);
+    }
+  }
+
+  await spawnCommandInherit(command, cwd, env);
 }
