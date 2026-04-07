@@ -8,6 +8,7 @@ The project provides a CLI and JS SDK. The CLI is split into sub-programs using 
 
 ## Setup & Build Commands
 
+- Use `pnpm` to run commands
 - `pnpm compile` - To compile the project.
 
 ## Testing Instructions
