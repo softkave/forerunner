@@ -55,6 +55,11 @@ import {
 // Import run-env functionality
 import {runWithEnvMain} from './runEnv/index.js';
 
+/** Accumulate multiple `-e, --env-file` flags into an ordered list. */
+function collectEnvFilePath(value: string, previous?: string[]): string[] {
+  return [...(previous ?? []), value];
+}
+
 // Import security functionality
 import {generateJwtSecret, generatePassword} from './security/index.js';
 
@@ -866,11 +871,16 @@ program
   .command('run-env')
   .allowExcessArguments()
   .description(
-    'Run a command with a selected .env* file (pass command after --)'
+    'Run a command with a selected or explicit .env* file (pass command after --)'
   )
   .option(
     '-w, --cwd <path>',
     'Working directory to scan for .env* and run the command'
+  )
+  .option(
+    '-e, --env-file <path>',
+    'Env file to load (repeat for multiple; later overrides earlier). Skips discovery/select when set; paths relative to --cwd unless absolute',
+    collectEnvFilePath
   )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
@@ -886,12 +896,16 @@ program
       process.exit(1);
     }
     const cwd = options.cwd ? String(options.cwd) : process.cwd();
+    const envFilePaths = Array.isArray(options.envFile)
+      ? options.envFile
+      : undefined;
     try {
       await runWithEnvMain({
         cwd,
         command: command.trim(),
         silent: options.silent,
         logger,
+        ...(envFilePaths?.length ? {envFilePaths} : {}),
       });
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -1058,8 +1072,9 @@ COMMANDS:
   pm                       Process management utilities
     children-pids          Find all child PIDs of a given parent PID
 
-  run-env                  Run a command with a selected .env* file
+  run-env                  Run a command with a selected or explicit .env* file
                            Usage: run-env [options] -- <command> [args...]
+                           Use -e/--env-file for fixed file list (no prompt)
 
   security                 Security utilities
     password               Generate production-grade password(s)
@@ -1097,6 +1112,9 @@ EXAMPLES:
 
   # Run a command with a selected .env file
   softkave-forerunner run-env -- npm run dev
+
+  # Run with explicit env files (no prompt; later files override earlier)
+  softkave-forerunner run-env -e .env -e .env.local -- npm run dev
 
   # Generate a password
   softkave-forerunner security password

@@ -11,48 +11,85 @@ export interface RunWithEnvParams {
   command: string;
   silent?: boolean;
   logger: IForeLogger;
+  /**
+   * When non-empty, load these files in order (later overrides earlier) and
+   * skip discovery / interactive selection. Paths are relative to `cwd` unless
+   * absolute.
+   */
+  envFilePaths?: string[];
+}
+
+function resolveEnvFilePath(cwd: string, filePath: string): string {
+  return path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath);
 }
 
 /**
  * Runs the given command with environment variables loaded from a user-selected
- * .env* file. Discovers .env* files in cwd, lets user pick one (or uses the
- * only one), then spawns the command with merged env and stdio inherited.
+ * .env* file, or from explicit paths when `envFilePaths` is set. Discovers
+ * .env* files in cwd when no explicit list is given, lets user pick one (or
+ * uses the only one), then spawns the command with merged env and stdio
+ * inherited.
  */
 export async function runWithEnvMain(params: RunWithEnvParams): Promise<void> {
-  const {cwd, command, silent = false, logger} = params;
+  const {cwd, command, silent = false, logger, envFilePaths} = params;
 
-  const envFiles = discoverEnvFiles(cwd);
-  if (envFiles.length === 0) {
-    throw new Error(
-      `No .env* files found in ${cwd}. Create at least one file whose name starts with .env (e.g. .env, .env.local).`
-    );
-  }
+  let env: NodeJS.ProcessEnv;
+  let logLabels: string[];
 
-  let selected: string;
-  if (envFiles.length === 1) {
-    selected = envFiles[0];
+  if (envFilePaths && envFilePaths.length > 0) {
+    env = {...process.env};
+    logLabels = [];
+    for (const p of envFilePaths) {
+      const envFilePath = resolveEnvFilePath(cwd, p);
+      let content: string;
+      try {
+        content = readFileSync(envFilePath, 'utf-8');
+      } catch (err) {
+        throw new Error(
+          `Failed to read ${envFilePath}: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+      const parsed = parse(content);
+      env = {...env, ...parsed};
+      logLabels.push(envFilePath);
+    }
   } else {
-    selected = await select({
-      message: 'Select an env file',
-      choices: envFiles.map(name => ({value: name, name})),
-    });
-  }
+    const envFiles = discoverEnvFiles(cwd);
+    if (envFiles.length === 0) {
+      throw new Error(
+        `No .env* files found in ${cwd}. Create at least one file whose name starts with .env (e.g. .env, .env.local), or pass explicit files with -e/--env-file.`
+      );
+    }
 
-  const envFilePath = path.join(cwd, selected);
-  let content: string;
-  try {
-    content = readFileSync(envFilePath, 'utf-8');
-  } catch (err) {
-    throw new Error(
-      `Failed to read ${envFilePath}: ${err instanceof Error ? err.message : String(err)}`
-    );
-  }
+    let selected: string;
+    if (envFiles.length === 1) {
+      selected = envFiles[0];
+    } else {
+      selected = await select({
+        message: 'Select an env file',
+        choices: envFiles.map(name => ({value: name, name})),
+      });
+    }
 
-  const parsed = parse(content);
-  const env = {...process.env, ...parsed};
+    const envFilePath = path.join(cwd, selected);
+    let content: string;
+    try {
+      content = readFileSync(envFilePath, 'utf-8');
+    } catch (err) {
+      throw new Error(
+        `Failed to read ${envFilePath}: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    const parsed = parse(content);
+    env = {...process.env, ...parsed};
+    logLabels = [selected];
+  }
 
   if (!silent) {
-    logger.log(`Using ${selected}`);
+    for (const label of logLabels) {
+      logger.log(`Using ${label}`);
+    }
   }
 
   await new Promise<void>((resolve, reject) => {
