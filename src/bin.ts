@@ -871,7 +871,7 @@ program
   .command('run-env')
   .allowExcessArguments()
   .description(
-    'Run a command with a selected or explicit .env* file (pass command after --)'
+    'Run a command with selected or explicit .env* files (pass command after --)'
   )
   .option(
     '-w, --cwd <path>',
@@ -879,7 +879,7 @@ program
   )
   .option(
     '-e, --env-file <path>',
-    'Env file to load (repeat for multiple; later overrides earlier). Skips discovery/select when set; paths relative to --cwd unless absolute',
+    'Env file to load (repeat for multiple; later overrides earlier). Skips discovery/prompt when set; paths relative to --cwd unless absolute',
     collectEnvFilePath
   )
   .option('-s, --silent', 'Silent mode')
@@ -1072,9 +1072,9 @@ COMMANDS:
   pm                       Process management utilities
     children-pids          Find all child PIDs of a given parent PID
 
-  run-env                  Run a command with a selected or explicit .env* file
+  run-env                  Run a command with selected or explicit .env* files
                            Usage: run-env [options] -- <command> [args...]
-                           Use -e/--env-file for fixed file list (no prompt)
+                           Use -e/--env-file for a fixed list (no checkbox prompt)
 
   security                 Security utilities
     password               Generate production-grade password(s)
@@ -1110,7 +1110,7 @@ EXAMPLES:
   # Find child processes of a PID
   softkave-forerunner pm children-pids 1234
 
-  # Run a command with a selected .env file
+  # Run a command with .env* files (checkbox if several exist)
   softkave-forerunner run-env -- npm run dev
 
   # Run with explicit env files (no prompt; later files override earlier)
