@@ -39,6 +39,7 @@ The project provides a CLI and JS SDK. The CLI is split into sub-programs using 
 
 - Each sub-program/logical group is grouped in a folder.
 - Use `pnpm` as package manager.
+- When writing bin.ts (CLI) tests, have one test file per sub-program.
 
 ## Architecture
 
