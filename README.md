@@ -7,6 +7,7 @@ Application runner & helpers - A CLI tool and SDK for managing certificates, Mon
 Forerunner is a command-line utility and Node.js SDK designed to streamline development and infrastructure management tasks. It provides tools for:
 
 - **Certificate Management**: Generate Certificate Authorities (CAs) and signed certificates
+- **SSH Key Management**: Generate SSH keypairs using `ssh-keygen`
 - **MongoDB Management**: Download, configure, and run MongoDB instances with replica sets
 - **Hosts File Management**: Manage `/etc/hosts` entries for local development
 - **Process Management**: Find, start, and end processes
@@ -53,6 +54,7 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 
 - [`certs ca`](#generate-certificate-authority) - Generate Certificate Authority
 - [`certs cert`](#generate-certificate) - Generate signed certificate
+- [`certs ssh-key`](#generate-ssh-keypair) - Generate an SSH keypair using `ssh-keygen`
 
 #### MongoDB Management
 
@@ -127,6 +129,42 @@ softkave-forerunner certs cert -c <config-path> [options]
 - `-f, --force` - Force regeneration even if certificate already exists
 - `-w, --cwd <path>` - Working directory
 - `-s, --silent` - Silent mode
+
+#### Generate SSH Keypair
+
+```bash
+softkave-forerunner certs ssh-key [options]
+```
+
+**Two modes:**
+
+- **Config file mode**: pass `--config` pointing to a JSON file
+- **Flags mode**: omit `--config` and provide `--comment` and `--passphrase` (required)
+
+**Options:**
+
+- `-c, --config <path>` - Path to SSH key configuration JSON file (optional)
+- `-f, --force` - Force regeneration even if key already exists
+- `-w, --cwd <path>` - Working directory
+- `-a, --algorithm <algorithm>` - `ed25519` | `rsa` | `ecdsa` (default: `ed25519`)
+- `-b, --bits <bits>` - Key size in bits (RSA default: 4096, ECDSA default: 521; ignored for ed25519)
+- `-C, --comment <comment>` - Key comment (**required unless `--config`**)
+- `-p, --passphrase <passphrase>` - Key passphrase (**required unless `--config`**)
+- `-P, --path <path>` - Output folder (ends with `/`) or file path (default: `./ssh-keys/`)
+- `-s, --silent` - Silent mode
+
+**Examples:**
+
+```bash
+# Flags mode (defaults to ed25519)
+softkave-forerunner certs ssh-key -C "me@laptop" -p "my-passphrase" -P ./ssh-keys/
+
+# RSA
+softkave-forerunner certs ssh-key -a rsa -b 4096 -C "deploy-key" -p "my-passphrase" -P ./ssh-keys/deploy_key
+
+# Config file mode
+softkave-forerunner certs ssh-key -c ./ssh-key-config.json
+```
 
 ### MongoDB Management (`mongo`)
 
@@ -1259,6 +1297,29 @@ Certificate generation requires JSON configuration files for both Certificate Au
 }
 ```
 
+### SSH Key Configuration
+
+SSH key generation supports a JSON configuration file (used by `certs ssh-key --config <path>` and by the SDK via `configFilepath`).
+
+**Options:**
+
+- **`algorithm`** (`"ed25519" | "rsa" | "ecdsa"`, optional): default `"ed25519"`
+- **`bits`** (number, optional): ignored for ed25519; recommended defaults are RSA `4096`, ECDSA `521`
+- **`comment`** (string, required): passed to `ssh-keygen -C`
+- **`passphrase`** (string, required): passed to `ssh-keygen -N`
+- **`path`** (string, optional): directory (ends with `/`) or filepath for private key (default: `"./ssh-keys/"`)
+
+**Example SSH key configuration** (`ssh-key-config.json`):
+
+```json
+{
+  "algorithm": "ed25519",
+  "comment": "me@laptop",
+  "passphrase": "my-passphrase",
+  "path": "./ssh-keys/"
+}
+```
+
 ## SDK Usage
 
 Forerunner can also be used as a Node.js SDK for programmatic access to all functionality.
@@ -1361,6 +1422,35 @@ await generateCert({
     cwd: process.cwd(),
     silent: false,
   },
+  logger,
+});
+```
+
+#### Generate SSH Keypair
+
+```typescript
+import {generateSSHKey, SSHKeygenConfig} from 'softkave-forerunner';
+
+const sshConfig: SSHKeygenConfig = {
+  algorithm: 'ed25519',
+  comment: 'me@laptop',
+  passphrase: 'my-passphrase',
+  // path can be a directory (defaults filename based on algorithm) or a full filepath
+  path: './ssh-keys/',
+};
+
+await generateSSHKey({
+  config: sshConfig,
+  force: false,
+  cwd: process.cwd(),
+  logger,
+});
+
+// Or load from a config filepath:
+await generateSSHKey({
+  configFilepath: './ssh-key-config.json',
+  force: false,
+  cwd: process.cwd(),
   logger,
 });
 ```

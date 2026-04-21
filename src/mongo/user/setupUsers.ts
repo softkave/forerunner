@@ -106,7 +106,7 @@ export async function setupUser(
   }
 }
 
-export async function setupUsers(params: GetMongoClientParams) {
+export async function setupMongoUsers(params: GetMongoClientParams) {
   const {mongoRunConfig, logger = new ConsoleForeLogger({silent: true})} =
     params;
 

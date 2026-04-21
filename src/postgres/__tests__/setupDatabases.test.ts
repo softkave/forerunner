@@ -2,7 +2,11 @@ import getPort from 'get-port';
 import {Client} from 'pg';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/foreLogger/ConsoleForeLogger.js';
-import {setupDatabases, setupUsers, startPostgresInstance} from '../index.js';
+import {
+  setupDatabases,
+  setupPostgresUsers,
+  startPostgresInstance,
+} from '../index.js';
 import {PostgresRunConfig} from '../postgresRunConfig.js';
 import {checkUserCanConnect, cleanupPostgresTest} from './testHelpers.js';
 
@@ -33,7 +37,7 @@ beforeAll(
       waitUntilListening: true,
     });
 
-    await setupUsers({
+    await setupPostgresUsers({
       postgresRunConfig: baseConfig,
       logger,
     });

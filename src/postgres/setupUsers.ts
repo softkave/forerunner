@@ -122,12 +122,16 @@ async function revokeDatabasePermissions(
       try {
         // Revoke CREATE privilege on database
         await adminClient.query(
-          `REVOKE CREATE ON DATABASE ${adminClient.escapeIdentifier(db)} FROM ${adminClient.escapeIdentifier(username)}`
+          `REVOKE CREATE ON DATABASE ${adminClient.escapeIdentifier(
+            db
+          )} FROM ${adminClient.escapeIdentifier(username)}`
         );
         // Revoke CONNECT privilege (cluster-level, can be done from any
         // database)
         await adminClient.query(
-          `REVOKE CONNECT ON DATABASE ${adminClient.escapeIdentifier(db)} FROM ${adminClient.escapeIdentifier(username)}`
+          `REVOKE CONNECT ON DATABASE ${adminClient.escapeIdentifier(
+            db
+          )} FROM ${adminClient.escapeIdentifier(username)}`
         );
 
         // For schema-level privileges, we MUST connect to the target database
@@ -139,13 +143,19 @@ async function revokeDatabasePermissions(
         try {
           // Revoke schema privileges
           await dbClient.query(
-            `REVOKE ALL ON SCHEMA public FROM ${dbClient.escapeIdentifier(username)}`
+            `REVOKE ALL ON SCHEMA public FROM ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           await dbClient.query(
-            `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${dbClient.escapeIdentifier(username)}`
+            `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           await dbClient.query(
-            `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ${dbClient.escapeIdentifier(username)}`
+            `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           // Note: We can't easily revoke default privileges, but they won't
           // apply if the user doesn't have access to the database
@@ -195,12 +205,16 @@ async function grantDatabasePermissions(
         // Grant CONNECT privilege (cluster-level, can be done from any
         // database)
         await adminClient.query(
-          `GRANT CONNECT ON DATABASE ${adminClient.escapeIdentifier(db)} TO ${adminClient.escapeIdentifier(username)}`
+          `GRANT CONNECT ON DATABASE ${adminClient.escapeIdentifier(
+            db
+          )} TO ${adminClient.escapeIdentifier(username)}`
         );
         // Grant CREATE privilege on database to allow user to create schemas
         // (namespaces)
         await adminClient.query(
-          `GRANT CREATE ON DATABASE ${adminClient.escapeIdentifier(db)} TO ${adminClient.escapeIdentifier(username)}`
+          `GRANT CREATE ON DATABASE ${adminClient.escapeIdentifier(
+            db
+          )} TO ${adminClient.escapeIdentifier(username)}`
         );
 
         // For schema-level privileges, we MUST connect to the target database
@@ -216,25 +230,35 @@ async function grantDatabasePermissions(
           // Grant usage and create privileges on the public schema (allows user
           // to use and create objects in the schema)
           await dbClient.query(
-            `GRANT USAGE, CREATE ON SCHEMA public TO ${dbClient.escapeIdentifier(username)}`
+            `GRANT USAGE, CREATE ON SCHEMA public TO ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           // Grant all privileges on all current tables in the public schema
           await dbClient.query(
-            `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${dbClient.escapeIdentifier(username)}`
+            `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           // Grant all privileges on all current sequences in the public schema
           await dbClient.query(
-            `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ${dbClient.escapeIdentifier(username)}`
+            `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           // Ensure user gets all privileges on tables created in the future in
           // the public schema
           await dbClient.query(
-            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${dbClient.escapeIdentifier(username)}`
+            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           // Ensure user gets all privileges on sequences created in the future
           // in the public schema
           await dbClient.query(
-            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${dbClient.escapeIdentifier(username)}`
+            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${dbClient.escapeIdentifier(
+              username
+            )}`
           );
           logger.log(
             `Granted permissions on database ${db} to user ${username}`
@@ -360,7 +384,7 @@ async function syncAllUsers(
   }
 }
 
-export async function setupUsers(params: {
+export async function setupPostgresUsers(params: {
   postgresRunConfig: PostgresRunConfig;
   logger?: IForeLogger;
 }) {
@@ -384,11 +408,13 @@ export async function setupUsers(params: {
     let pgHbaContent: string;
     let postgresConfContent: string;
     try {
-      pgHbaContent = readPgHbaConf(containerName);
-      postgresConfContent = readPostgresConfig(containerName);
+      pgHbaContent = await readPgHbaConf(containerName);
+      postgresConfContent = await readPostgresConfig(containerName);
     } catch (err) {
       logger.log(
-        `Could not read pg config: ${err instanceof Error ? err.message : String(err)}`
+        `Could not read pg config: ${
+          err instanceof Error ? err.message : String(err)
+        }`
       );
       pgHbaContent = '';
       postgresConfContent = '';
@@ -418,7 +444,7 @@ export async function setupUsers(params: {
       );
       // Generate new pg_hba.conf with user-specific entries
       const newPgHba = pgHbaEntries.join('\n') + '\n';
-      writePgHbaConf(containerName, newPgHba);
+      await writePgHbaConf(containerName, newPgHba);
       await reloadPostgresConfigViaClient(client);
       logger.log(
         'Updated pg_hba.conf to trust with user-specific entries and reloaded'
@@ -443,8 +469,8 @@ export async function setupUsers(params: {
       const newPgHba = pgHbaEntries.join('\n') + '\n';
       const updatedConf =
         setPostgresConfPasswordEncryption(postgresConfContent);
-      writePgHbaConf(containerName, newPgHba);
-      writePostgresConfig(containerName, updatedConf);
+      await writePgHbaConf(containerName, newPgHba);
+      await writePostgresConfig(containerName, updatedConf);
       await reloadPostgresConfigViaClient(client);
       logger.log(
         'Updated pg_hba and postgresql.conf to scram-sha-256 with user-specific entries and reloaded'
@@ -467,7 +493,7 @@ export async function setupUsers(params: {
       const newPgHba = pgHbaEntries.join('\n') + '\n';
       // Only update if content has changed
       if (newPgHba.trim() !== pgHbaContent.trim()) {
-        writePgHbaConf(containerName, newPgHba);
+        await writePgHbaConf(containerName, newPgHba);
         await reloadPostgresConfigViaClient(client);
         logger.log('Updated pg_hba.conf with user-specific database entries');
       }

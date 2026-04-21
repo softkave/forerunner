@@ -1,7 +1,11 @@
 import getPort from 'get-port';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/foreLogger/ConsoleForeLogger.js';
-import {setupDatabases, setupUsers, startPostgresInstance} from '../index.js';
+import {
+  setupDatabases,
+  setupPostgresUsers,
+  startPostgresInstance,
+} from '../index.js';
 import {PostgresRunConfig} from '../postgresRunConfig.js';
 import {
   checkUserCanConnect,
@@ -42,7 +46,7 @@ beforeAll(
       logger,
     });
 
-    await setupUsers({
+    await setupPostgresUsers({
       postgresRunConfig: baseConfig,
       logger,
     });
@@ -87,7 +91,7 @@ describe('setupUsers - user and access management', () => {
           },
         ],
       };
-      await setupUsers({
+      await setupPostgresUsers({
         postgresRunConfig: configWithNewUser,
         logger,
       });
@@ -127,7 +131,7 @@ describe('setupUsers - user and access management', () => {
           },
         ],
       };
-      await setupUsers({
+      await setupPostgresUsers({
         postgresRunConfig: configUpdatedDbs,
         logger,
       });
@@ -168,7 +172,7 @@ describe('setupUsers - user and access management', () => {
           },
         ],
       };
-      await setupUsers({
+      await setupPostgresUsers({
         postgresRunConfig: configNewPassword,
         logger,
       });
@@ -208,7 +212,7 @@ describe('setupUsers - user and access management', () => {
           },
         ],
       };
-      await setupUsers({
+      await setupPostgresUsers({
         postgresRunConfig: configMultiDb,
         logger,
       });

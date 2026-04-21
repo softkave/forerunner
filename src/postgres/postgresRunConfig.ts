@@ -2,7 +2,7 @@ import fs from 'fs';
 import {ensureFile} from 'fs-extra';
 import path from 'path';
 import z from 'zod';
-import {CAConfigSchema} from '../certs/types.js';
+import {CAConfig, CAConfigSchema} from '../certs/types.js';
 
 export const PostgresConnectionTypeSchema = z.enum(['tcp', 'local']);
 export type PostgresConnectionType = z.infer<
@@ -131,7 +131,20 @@ export const postgresRunConfigSchema = z
     });
   });
 
-export type PostgresRunConfig = z.infer<typeof postgresRunConfigSchema>;
+export interface PostgresRunConfig {
+  workingDir: string;
+  port: number;
+  authorization: 'enabled' | 'disabled';
+  ssl: 'enabled' | 'disabled';
+  caConfig?: CAConfig;
+  users?: PostgresUser[];
+  postgresVersion: string;
+  containerName: string;
+  volumeName: string;
+  dbs?: string[];
+  keep: boolean;
+  discoverability: 'local' | 'global';
+}
 
 /**
  * Returns the user to use for authenticated DB operations (setup-users, setup-dbs, etc.).

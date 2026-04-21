@@ -1,8 +1,9 @@
-import {execFileSync} from 'child_process';
+import {execFile} from 'child_process';
 import crypto from 'crypto';
 import {ensureDir} from 'fs-extra';
 import {chmod} from 'fs/promises';
 import path from 'path';
+import {promisify} from 'util';
 import {
   containerExists,
   ensureDockerAvailable,
@@ -10,6 +11,7 @@ import {
 } from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {spawnInherit} from '../utils/spawnInherit.js';
 import {
   assertMongoInstanceListening,
   assertMongoInstancesListening,
@@ -32,10 +34,12 @@ import {
 } from './mongoRunConfig.js';
 import {setupReplicaSet} from './setupReplicaSet.js';
 import {findAdminUser} from './user/findUtils.js';
-import {setupUsers} from './user/setupUsers.js';
+import {setupMongoUsers} from './user/setupUsers.js';
 
 const kDefaultMongoVersion = '8.2.3';
 const kConfigHashLabel = 'forerunner.configHash';
+
+const execFileAsync = promisify(execFile);
 
 /** Docker bridge IP: host as seen from inside containers; used so containers
  * can reach each other via host port mappings. */
@@ -80,9 +84,11 @@ function getRunConfigFingerprint(params: {
   return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16);
 }
 
-function getContainerConfigHash(containerName: string): string | null {
+async function getContainerConfigHash(
+  containerName: string
+): Promise<string | null> {
   try {
-    const out = execFileSync(
+    const {stdout} = await execFileAsync(
       'docker',
       [
         'inspect',
@@ -90,19 +96,21 @@ function getContainerConfigHash(containerName: string): string | null {
         `{{index .Config.Labels "${kConfigHashLabel}"}}`,
         containerName,
       ],
-      {stdio: 'pipe', encoding: 'utf8'}
+      {encoding: 'utf8'}
     );
-    const value = out.trim();
+    const value = String(stdout).trim();
     return value || null;
   } catch {
     return null;
   }
 }
 
-function removeContainer(containerName: string, logger: IForeLogger): void {
+async function removeContainer(
+  containerName: string,
+  logger: IForeLogger
+): Promise<void> {
   try {
-    execFileSync('docker', ['rm', '-f', '-v', containerName], {
-      stdio: 'pipe',
+    await execFileAsync('docker', ['rm', '-f', '-v', containerName], {
       encoding: 'utf8',
     });
     logger.log(`Removed existing container ${containerName} (config changed).`);
@@ -296,8 +304,8 @@ export async function startMongodInstance(params: {
 
   runArgs.push(...mongodArgs);
 
-  if (containerExists(containerName)) {
-    const existingHash = getContainerConfigHash(containerName);
+  if (await containerExists(containerName)) {
+    const existingHash = await getContainerConfigHash(containerName);
     const configChanged =
       existingHash === null || existingHash !== configFingerprint;
 
@@ -305,9 +313,9 @@ export async function startMongodInstance(params: {
       logger.log(
         `Config changed for ${instanceRunName} (container ${containerName}); removing and recreating.`
       );
-      removeContainer(containerName, logger);
+      await removeContainer(containerName, logger);
       // Fall through to create new container below.
-    } else if (isContainerRunning(containerName)) {
+    } else if (await isContainerRunning(containerName)) {
       logger.log(
         `${instanceRunName} (container ${containerName}) is already running; skipping start`
       );
@@ -326,10 +334,7 @@ export async function startMongodInstance(params: {
         `${instanceRunName} (container ${containerName}) exists but is not running; starting it...`
       );
       try {
-        execFileSync('docker', ['start', containerName], {
-          stdio: 'inherit',
-          encoding: 'utf8',
-        });
+        await spawnInherit('docker', ['start', containerName]);
         logger.log(`Started existing container ${containerName}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -357,10 +362,7 @@ export async function startMongodInstance(params: {
     logger.log('Starting mongod via Docker...');
 
     try {
-      execFileSync('docker', runArgs, {
-        stdio: 'inherit',
-        encoding: 'utf8',
-      });
+      await spawnInherit('docker', runArgs);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(
@@ -398,7 +400,7 @@ export async function startMongoMain(params: {
     shouldSetupUsers = false,
   } = params;
 
-  ensureDockerAvailable();
+  await ensureDockerAvailable();
 
   // Generate certificates if not already present
   await ensureMongoCertificates({mongoRunConfig, logger});
@@ -464,7 +466,7 @@ export async function startMongoMain(params: {
       users: mongoRunConfig.users,
       isRequired: true,
     });
-    await setupUsers({
+    await setupMongoUsers({
       mongoRunConfig,
       logger,
       authUser: {

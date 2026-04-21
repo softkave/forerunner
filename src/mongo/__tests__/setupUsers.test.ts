@@ -4,8 +4,8 @@ import {
   findAdminUser,
   generateMongoPassword,
   getExistingUsers,
+  setupMongoUsers,
   setupReplicaSetMain,
-  setupUsers,
 } from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
 import {
@@ -91,7 +91,7 @@ describe('setupUsers', () => {
         ...baseConfig,
         users: [...baseConfig.users, newUser],
       };
-      await setupUsers({
+      await setupMongoUsers({
         mongoRunConfig: configWithNewUser,
         logger,
         authUser: findAdminUser({
@@ -129,7 +129,7 @@ describe('setupUsers', () => {
             : u
         ),
       };
-      await setupUsers({
+      await setupMongoUsers({
         mongoRunConfig: configWithUpdatedRole,
         logger,
         authUser: adminUser,
@@ -158,7 +158,7 @@ describe('setupUsers', () => {
           u => u.username !== 'test-setup-new-user'
         ),
       };
-      await setupUsers({
+      await setupMongoUsers({
         mongoRunConfig: configWithoutNewUser,
         logger,
         authUser: adminUser,
@@ -197,7 +197,7 @@ describe('setupUsers', () => {
           u => !u.roles.some(r => r.role === 'userAdminAnyDatabase')
         ),
       };
-      await setupUsers({
+      await setupMongoUsers({
         mongoRunConfig: configWithNoAdmin,
         logger,
         authUser: adminUser,
