@@ -13,45 +13,52 @@ export {
   volumeExists,
 } from '../utils/docker.js';
 
-export function readPostgresConfig(containerName: string): string {
-  return execInContainer(containerName, [
+export async function readPostgresConfig(
+  containerName: string
+): Promise<string> {
+  return await execInContainer(containerName, [
     'cat',
     '/var/lib/postgresql/data/postgresql.conf',
   ]);
 }
 
-export function writePostgresConfig(
+export async function writePostgresConfig(
   containerName: string,
   content: string
-): void {
+): Promise<void> {
   // Use base64 encoding to safely pass content through docker exec
   const encoded = Buffer.from(content, 'utf8').toString('base64');
-  execInContainer(containerName, [
+  await execInContainer(containerName, [
     'bash',
     '-c',
     `echo '${encoded}' | base64 -d > /var/lib/postgresql/data/postgresql.conf`,
   ]);
 }
 
-export function readPgHbaConf(containerName: string): string {
-  return execInContainer(containerName, [
+export async function readPgHbaConf(containerName: string): Promise<string> {
+  return await execInContainer(containerName, [
     'cat',
     '/var/lib/postgresql/data/pg_hba.conf',
   ]);
 }
 
-export function writePgHbaConf(containerName: string, content: string): void {
+export async function writePgHbaConf(
+  containerName: string,
+  content: string
+): Promise<void> {
   // Use base64 encoding to safely pass content through docker exec
   const encoded = Buffer.from(content, 'utf8').toString('base64');
-  execInContainer(containerName, [
+  await execInContainer(containerName, [
     'bash',
     '-c',
     `echo '${encoded}' | base64 -d > /var/lib/postgresql/data/pg_hba.conf`,
   ]);
 }
 
-export function reloadPostgresConfig(containerName: string): void {
-  execInContainer(containerName, [
+export async function reloadPostgresConfig(
+  containerName: string
+): Promise<void> {
+  await execInContainer(containerName, [
     'psql',
     '-U',
     'postgres',
@@ -316,7 +323,7 @@ export async function waitForPostgresReady(params: {
   let attempts = 0;
 
   while (attempts < maxAttempts) {
-    if (isContainerRunning(containerName)) {
+    if (await isContainerRunning(containerName)) {
       try {
         const clientConfig: ConstructorParameters<typeof Client>[0] = {
           host: '127.0.0.1',

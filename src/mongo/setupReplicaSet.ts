@@ -1,12 +1,14 @@
 import assert from 'assert';
-import {execFileSync} from 'child_process';
+import {execFile} from 'child_process';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {getDockerContainerName, startMongoMain} from './startMongo.js';
 import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
+import {promisify} from 'util';
 
 const kMongoshFirstInstance = 1;
+const execFileAsync = promisify(execFile);
 
 function buildMembers(
   mongoRunConfig: MongoRunConfig
@@ -41,12 +43,12 @@ function getMongoshConnectionUri(params: {
   return `mongodb://${auth}${hostname}:${port}`;
 }
 
-function runMongoshInContainer(params: {
+async function runMongoshInContainer(params: {
   containerName: string;
   uri: string;
   script: string;
   logger: IForeLogger;
-}): {stdout: string; stderr: string} {
+}): Promise<{stdout: string; stderr: string}> {
   const {containerName, uri, script, logger} = params;
   const args = [
     'exec',
@@ -62,21 +64,21 @@ function runMongoshInContainer(params: {
     '--quiet',
   ];
   logger.log('Running mongosh in container:', containerName);
-  const result = execFileSync('docker', args, {
+  const {stdout} = await execFileAsync('docker', args, {
     encoding: 'utf8',
     maxBuffer: 1024 * 1024,
   });
-  return {stdout: result, stderr: ''};
+  return {stdout: String(stdout), stderr: ''};
 }
 
-function runMongoshInContainerOrThrow(params: {
+async function runMongoshInContainerOrThrow(params: {
   containerName: string;
   uri: string;
   script: string;
   logger: IForeLogger;
-}): string {
+}): Promise<string> {
   try {
-    const {stdout} = runMongoshInContainer(params);
+    const {stdout} = await runMongoshInContainer(params);
     return stdout;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -110,7 +112,7 @@ export async function setupReplicaSet(params: {
   // Check if replica set is already initialized using mongosh
   let alreadyInitialized = false;
   try {
-    runMongoshInContainer({
+    await runMongoshInContainer({
       containerName,
       uri,
       script: 'rs.status()',
@@ -128,7 +130,7 @@ export async function setupReplicaSet(params: {
     const members = buildMembers(mongoRunConfig);
     const config = {_id: replicaSetName, members};
     const script = `rs.initiate(${JSON.stringify(config)})`;
-    runMongoshInContainerOrThrow({
+    await runMongoshInContainerOrThrow({
       containerName,
       uri,
       script,

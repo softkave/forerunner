@@ -84,7 +84,7 @@ export async function waitUntilContainerStopped(
 ): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (!isContainerRunning(containerName)) return;
+    if (!(await isContainerRunning(containerName))) return;
     await new Promise(r => setTimeout(r, 500));
   }
   throw new Error(

@@ -1,10 +1,13 @@
-import {execFileSync} from 'child_process';
+import {execFile} from 'child_process';
 import {containerExists} from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getInstanceRunName} from './constants.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {getDockerContainerName} from './startMongo.js';
+import {promisify} from 'util';
+
+const execFileAsync = promisify(execFile);
 
 export async function stopMongodInstance(params: {
   instanceNumber: number;
@@ -22,7 +25,7 @@ export async function stopMongodInstance(params: {
   const instanceRunName = getInstanceRunName(instanceNumber);
   const containerName = getDockerContainerName(mongoRunConfig, instanceNumber);
 
-  if (!containerExists(containerName)) {
+  if (!(await containerExists(containerName))) {
     logger.log(
       `Container ${containerName} does not exist for ${instanceRunName}`
     );
@@ -33,15 +36,14 @@ export async function stopMongodInstance(params: {
 
   const stopOpts = force ? ['kill', containerName] : ['stop', containerName];
   try {
-    execFileSync('docker', stopOpts, {stdio: 'pipe', encoding: 'utf8'});
+    await execFileAsync('docker', stopOpts, {encoding: 'utf8'});
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to stop Docker container ${containerName}: ${msg}`);
   }
 
   try {
-    execFileSync('docker', ['rm', '-v', containerName], {
-      stdio: 'pipe',
+    await execFileAsync('docker', ['rm', '-v', containerName], {
       encoding: 'utf8',
     });
     logger.log(`Removed container ${containerName}`);

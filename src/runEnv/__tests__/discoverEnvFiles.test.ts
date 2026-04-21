@@ -28,7 +28,7 @@ describe('discoverEnvFiles', () => {
     await mkdir(path.join(dir, '.env.d'), {recursive: true});
     await writeFile(path.join(dir, 'other'), 'x', 'utf-8');
 
-    const result = discoverEnvFiles(dir);
+    const result = await discoverEnvFiles(dir);
 
     expect(result).toContain('.env');
     expect(result).toContain('.env.local');
@@ -46,7 +46,7 @@ describe('discoverEnvFiles', () => {
     await writeFile(path.join(dir, '.env.a'), 'a', 'utf-8');
     await writeFile(path.join(dir, '.env'), 'base', 'utf-8');
 
-    const result = discoverEnvFiles(dir);
+    const result = await discoverEnvFiles(dir);
 
     expect(result).toEqual(['.env', '.env.a', '.env.z']);
   });
@@ -55,14 +55,14 @@ describe('discoverEnvFiles', () => {
     const emptyDir = path.join(testDir, 'empty');
     await ensureDir(emptyDir);
 
-    const result = discoverEnvFiles(emptyDir);
+    const result = await discoverEnvFiles(emptyDir);
 
     expect(result).toEqual([]);
   });
 
   test('throws when directory does not exist', () => {
-    expect(() => discoverEnvFiles(path.join(testDir, 'nonexistent'))).toThrow(
-      /Failed to read directory/
-    );
+    expect(async () => {
+      await discoverEnvFiles(path.join(testDir, 'nonexistent'));
+    }).rejects.toThrow(/Failed to read directory/);
   });
 });
