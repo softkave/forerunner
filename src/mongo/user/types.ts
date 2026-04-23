@@ -1,13 +1,44 @@
 import z from 'zod';
 
-/** Supported built-in roles we special-case for autocomplete (any string is
- * allowed too). */
+/**
+ * Self-managed deployment built-in role names (MongoDB manual).
+ * Excludes internal-only `__system` (not for application users).
+ *
+ * @see https://www.mongodb.com/docs/manual/reference/built-in-roles/?deployment-type=self
+ */
+export const MONGO_SELF_MANAGED_BUILTIN_ROLES = [
+  'backup',
+  'clusterAdmin',
+  'clusterManager',
+  'clusterMonitor',
+  'dbAdmin',
+  'dbAdminAnyDatabase',
+  'dbOwner',
+  'directShardOperations',
+  'enableSharding',
+  'hostManager',
+  'read',
+  'readAnyDatabase',
+  'readWrite',
+  'readWriteAnyDatabase',
+  'restore',
+  'root',
+  'searchCoordinator',
+  'userAdmin',
+  'userAdminAnyDatabase',
+] as const;
+
+/** Union of known self-managed built-in role names; custom roles still use `string`. */
 export type MongoBuiltInRole =
-  | 'userAdminAnyDatabase'
-  | 'readAnyDatabase'
-  | 'clusterAdmin'
-  | 'readWrite'
-  | 'read';
+  (typeof MONGO_SELF_MANAGED_BUILTIN_ROLES)[number];
+
+/**
+ * Zod enum for built-in role names only.
+ * Pair with `.or(z.string())` when the value may be a user-defined role.
+ */
+export const MongoBuiltInRoleNameSchema = z.enum(
+  MONGO_SELF_MANAGED_BUILTIN_ROLES
+);
 
 /** A single role grant for a MongoDB user. */
 export interface MongoUserRole {
@@ -39,15 +70,7 @@ export const MongoUserSchema = z.object({
   authDb: z.string().optional(),
   roles: z.array(
     z.object({
-      role: z
-        .enum([
-          'userAdminAnyDatabase',
-          'readAnyDatabase',
-          'clusterAdmin',
-          'readWrite',
-          'read',
-        ])
-        .or(z.string()),
+      role: MongoBuiltInRoleNameSchema.or(z.string()),
       db: z.string(),
     })
   ),
