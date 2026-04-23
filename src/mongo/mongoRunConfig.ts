@@ -7,6 +7,29 @@ import {CAConfig} from '../certs/types.js';
 import {MongoUser, MongoUserListSchema} from './user/types.js';
 import {isLocalhostname} from './utils.js';
 
+/** How a hostname should be resolved by containers. */
+export type HostnameResolution = 'dns' | 'local';
+
+/** Object form of an instance hostname entry. */
+export interface InstanceHostnameObject {
+  /** Hostname (must be non-empty). */
+  hostname: string;
+  /** `dns` hostnames are not bound to Docker bridge; `local` are. */
+  resolution: HostnameResolution;
+}
+
+/**
+ * Hostname entry format supported by config for each MongoDB instance.
+ *
+ * - **string**: single hostname
+ * - **InstanceHostnameObject**: hostname + resolution
+ * - **array**: multiple hostnames; items can be strings or objects
+ */
+export type InstanceHostnameEntry =
+  | string
+  | InstanceHostnameObject
+  | Array<string | InstanceHostnameObject>;
+
 /**
  * Schema for a single instance hostname entry.
  * Supports backwards compatibility with string/string[] and new object format.
@@ -28,8 +51,6 @@ export const InstanceHostnameEntrySchema = z.union([
     resolution: z.enum(['dns', 'local']),
   }),
 ]);
-
-export type InstanceHostnameEntry = z.infer<typeof InstanceHostnameEntrySchema>;
 
 /**
  * Extract hostnames (strings) from an InstanceHostnameEntry.
@@ -68,6 +89,7 @@ export function extractHostnamesForDockerBinding(
     .filter((h): h is string => h !== null);
 }
 
+/** Full MongoDB run config schema (replica set only). */
 export const mongoRunConfigSchema = z
   .object({
     // Working dir
@@ -118,15 +140,25 @@ export const mongoRunConfigSchema = z
   );
 
 export interface MongoRunConfig {
+  /** Working directory where configs/logs/data are written. */
   workingDir: string;
+  /** MongoDB version used for download/run (defaults to '8.2.3'). */
   mongoVersion?: string;
+  /** Optional container name (backwards compatibility). */
   containerName?: string;
+  /** CA config used for instance cert generation (SSL/TLS is always enabled). */
   caConfig?: Pick<CAConfig, 'days' | 'subject' | 'passphrase'>;
+  /** Hostnames (one entry per instance, minimum 3; supports multiple formats). */
   hostnames: InstanceHostnameEntry[];
+  /** Ports (one per instance; length must match `hostnames`, minimum 3). */
   ports: number[];
+  /** Replica set name. */
   replicaSetName: string;
+  /** Users to create/sync in MongoDB. */
   users: MongoUser[];
+  /** Whether authorization is enabled (defaults to `enabled`). */
   authorization?: 'enabled' | 'disabled';
+  /** Optional Docker labels applied to each `mongod` container. */
   labels?: Record<string, string>;
 }
 
