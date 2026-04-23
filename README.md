@@ -952,6 +952,14 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 - `read`: Read-only privileges for a specific database
 - Any string. See [MongoDB self-managed built-in roles](https://www.mongodb.com/docs/manual/reference/built-in-roles/?deployment-type=self)
 
+**`labels`** (object, optional)
+
+- **Description**: Docker labels applied to each `mongod` container on `mongo start`
+- **Example**:
+  ```json
+  {"com.mycompany.env": "dev", "com.mycompany.service": "mongo"}
+  ```
+
 **Example MongoDB Configuration** (`src/mongo/examples/mongo-run-config.json`):
 
 ```json
@@ -1114,6 +1122,15 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 - **Description**: Databases to create. The first is created via POSTGRES_DB during container startup.
 - **Example**: `["mydb", "testdb"]`
 
+**`labels`** (object, optional)
+
+- **Description**: Docker labels applied to the Postgres container on `postgres start` (same idea as `docker run --label`).
+- **Example**:
+  ```json
+  {"com.mycompany.env": "dev", "com.mycompany.service": "postgres"}
+  ```
+- **Note**: Keys must be non-empty strings; values are strings (matches run config validation).
+
 **Example PostgreSQL Configuration** (`postgres-run-config.json`):
 
 ```json
@@ -1127,6 +1144,10 @@ The PostgreSQL commands require a configuration file that specifies port, contai
   "volumeName": "postgres-db",
   "keep": true,
   "discoverability": "local",
+  "labels": {
+    "com.mycompany.env": "dev",
+    "com.mycompany.service": "postgres"
+  },
   "users": [
     {
       "username": "admin",
