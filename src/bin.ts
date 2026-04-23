@@ -710,7 +710,9 @@ postgresProgram
 // Setup PostgreSQL users
 postgresProgram
   .command('setup-users')
-  .description('Setup PostgreSQL users (excluding admin)')
+  .description(
+    'Sync PostgreSQL users from config (roles, passwords, pg_hba, DB grants)'
+  )
   .requiredOption('-c, --config <path>', 'Path to postgres run config file')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
@@ -1114,7 +1116,7 @@ COMMANDS:
     scaffold-config        Generate PostgreSQL configuration file
     start                  Start PostgreSQL instance
     stop                   Stop PostgreSQL instance
-    setup-users            Setup PostgreSQL users (excluding admin)
+    setup-users            Sync PostgreSQL users from config with instance
     setup-dbs              Setup PostgreSQL databases
 
   etc-hosts                Manage /etc/hosts file entries

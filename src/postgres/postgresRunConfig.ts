@@ -71,6 +71,9 @@ export const postgresRunConfigSchema = z
 
     // Discoverability: "local" = bind 127.0.0.1 only; "global" = bind all interfaces.
     discoverability: z.enum(['local', 'global']).optional(),
+
+    // Optional Docker labels added to the container on start.
+    labels: z.record(z.string().min(1), z.string()).optional(),
   })
   .transform(data => ({
     ...data,
@@ -136,7 +139,7 @@ export interface PostgresRunConfig {
   port: number;
   authorization: 'enabled' | 'disabled';
   ssl: 'enabled' | 'disabled';
-  caConfig?: CAConfig;
+  caConfig?: Pick<CAConfig, 'days' | 'subject' | 'passphrase'>;
   users?: PostgresUser[];
   postgresVersion: string;
   containerName: string;
@@ -144,6 +147,7 @@ export interface PostgresRunConfig {
   dbs?: string[];
   keep: boolean;
   discoverability: 'local' | 'global';
+  labels?: Record<string, string>;
 }
 
 /**

@@ -90,11 +90,6 @@ async function ensureContainerNotRunning(params: {
 }): Promise<void> {
   const {containerName, logger} = params;
 
-  if (await isContainerRunning(containerName)) {
-    logger.log(`Container ${containerName} is already running; skipping start`);
-    return;
-  }
-
   if (await containerExists(containerName)) {
     logger.log(`Removing existing stopped container ${containerName}...`);
     try {
@@ -169,6 +164,12 @@ function buildDockerRunArgs(params: {
     `${volumeName}:/var/lib/postgresql/data`,
     ...envVars,
   ];
+
+  if (postgresRunConfig.labels) {
+    for (const [k, v] of Object.entries(postgresRunConfig.labels)) {
+      runArgs.push('--label', `${k}=${v}`);
+    }
+  }
 
   // Mount SSL certificates if SSL is enabled
   if (sslEnabled) {
@@ -381,7 +382,45 @@ export async function startPostgresInstance(params: {
     logger,
   });
 
-  // Ensure container is not running
+  if (await isContainerRunning(containerName)) {
+    logger.log(
+      `Container ${containerName} is already running; skipping new container start`
+    );
+    if (waitUntilListening) {
+      await waitForPostgresReady({
+        postgresRunConfig,
+        containerName,
+        port,
+        sslEnabled: false,
+        logger,
+        maxAttempts: 10,
+        retryIntervalMs: 1000,
+      });
+      const client = await getPostgresClient({
+        postgresRunConfig,
+        database: 'postgres',
+        ssl: false,
+      });
+      try {
+        await configurePostgresAuthorization({
+          postgresRunConfig,
+          containerName,
+          client,
+          logger,
+        });
+        await configurePostgresSSL({
+          postgresRunConfig,
+          containerName,
+          client,
+          logger,
+        });
+      } finally {
+        await client.end();
+      }
+    }
+    return;
+  }
+
   await ensureContainerNotRunning({containerName, logger});
 
   // Build Docker command arguments

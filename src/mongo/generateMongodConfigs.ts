@@ -106,10 +106,16 @@ export async function generateMongoDockerConfigForMongod(params: {
   overwrite?: boolean;
 }) {
   const {instanceNumber, mongoRunConfig, overwrite = true} = params;
+
+  if (!mongoRunConfig.caConfig) {
+    throw new Error('caConfig is required for generating mongod config');
+  }
+
   const configFilePath = getMongodDockerConfigFilePath(
     mongoRunConfig,
     instanceNumber
   );
+
   if ((await exists(configFilePath)) && !overwrite) {
     const config = load(await fs.promises.readFile(configFilePath, 'utf8'));
     return config as MongoConfig;

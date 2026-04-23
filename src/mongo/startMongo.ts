@@ -60,6 +60,7 @@ function getRunConfigFingerprint(params: {
   configDir: string;
   nonLocalhostHostnames: string[];
   initEnv?: {username: string; password: string};
+  labels?: Record<string, string>;
 }): string {
   const {
     port,
@@ -70,7 +71,9 @@ function getRunConfigFingerprint(params: {
     configDir,
     nonLocalhostHostnames,
     initEnv,
+    labels,
   } = params;
+
   const payload = JSON.stringify({
     port,
     image,
@@ -80,6 +83,9 @@ function getRunConfigFingerprint(params: {
     configDir: path.resolve(configDir),
     addHost: [...nonLocalhostHostnames].sort(),
     initUser: initEnv ? {u: initEnv.username, p: initEnv.password} : null,
+    labels: labels
+      ? Object.entries(labels).sort(([a], [b]) => a.localeCompare(b))
+      : null,
   });
   return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16);
 }
@@ -261,6 +267,7 @@ export async function startMongodInstance(params: {
     configDir,
     nonLocalhostHostnames,
     initEnv,
+    labels: mongoRunConfig.labels,
   });
 
   const runArgs: string[] = [
@@ -270,6 +277,12 @@ export async function startMongodInstance(params: {
     containerName,
     '--label',
     `${kConfigHashLabel}=${configFingerprint}`,
+    ...(mongoRunConfig.labels
+      ? Object.entries(mongoRunConfig.labels).flatMap(([k, v]) => [
+          '--label',
+          `${k}=${v}`,
+        ])
+      : []),
     ...nonLocalhostHostnames.flatMap(hostname => [
       '--add-host',
       `${hostname}:${kDockerBridgeIp}`,

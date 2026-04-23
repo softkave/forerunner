@@ -133,8 +133,50 @@ export const GenerateSSHKeyCLIOptionsSchema = z.object({
   path: z.string().min(1, 'Path is required'),
 });
 
-export type CAConfig = z.infer<typeof CAConfigSchema>;
-export type CertConfig = z.infer<typeof CertConfigSchema>;
+export interface CAConfig {
+  outDir: string;
+  days: number;
+  subject: {
+    C: string;
+    ST: string;
+    L: string;
+    O: string;
+    CN: string;
+  };
+  files: {
+    key: string;
+    cert: string;
+    csr: string;
+    chain: string;
+  };
+  passphrase?: string;
+}
+
+export interface CertConfig {
+  outDir: string;
+  days: number;
+  subject: {
+    C: string;
+    ST: string;
+    L: string;
+    O: string;
+    CN: string;
+  };
+  san: string[];
+  files: {
+    key: string;
+    cert: string;
+    csr: string;
+    fullchain: string;
+    crtAndKey?: string;
+  };
+  ca: {
+    dir: string;
+    passphrase?: string;
+  };
+  passphrase?: string;
+}
+
 export type GenerateCertsCLIOptions = z.infer<
   typeof GenerateCertsCLIOptionsSchema
 >;

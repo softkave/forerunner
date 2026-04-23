@@ -457,7 +457,7 @@ softkave-forerunner postgres stop [options]
 softkave-forerunner postgres setup-users -c <config-path> [options]
 ```
 
-**Description**: Sets up PostgreSQL users (excluding the first admin user which is created via POSTGRES_USER/POSTGRES_PASSWORD). Creates users that don't exist and updates passwords for existing users. Syncs each user's database permissions (CONNECT/REVOKE) and connection types (TCP and/or local) from config to pg_hba.conf. If transitioning from trust to password authentication, automatically updates pg_hba.conf and postgresql.conf to use scram-sha-256.
+**Description**: Syncs **every** user listed in the run config with the running instance. The first user is typically created by the container image (`POSTGRES_USER` / `POSTGRES_PASSWORD`); this command still updates that user when present (password, grants, `pg_hba` entries) alongside any additional users. Creates roles that do not exist, updates passwords when provided in config, and syncs each user's database permissions (CONNECT/REVOKE) and connection types (TCP and/or local) to `pg_hba.conf`. If transitioning from trust to password authentication, updates `pg_hba.conf` and `postgresql.conf` for scram-sha-256.
 
 **Prerequisites**: Expects PostgreSQL instance to be running and connects using the admin user from config.
 
@@ -771,7 +771,7 @@ softkave-forerunner postgres stop -c postgres-config.json
 # Stop PostgreSQL instance with container name only
 softkave-forerunner postgres stop --container-name postgres-db
 
-# Setup users (excluding admin)
+# Sync users from config with the running instance (includes admin from config)
 softkave-forerunner postgres setup-users -c postgres-config.json
 
 # Setup databases (excluding default database)

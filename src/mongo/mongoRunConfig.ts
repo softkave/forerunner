@@ -3,7 +3,8 @@ import {ensureFile} from 'fs-extra';
 import path from 'path';
 import {convertToArray} from 'softkave-js-utils';
 import z from 'zod';
-import {MongoUserListSchema} from './user/types.js';
+import {CAConfig} from '../certs/types.js';
+import {MongoUser, MongoUserListSchema} from './user/types.js';
 import {isLocalhostname} from './utils.js';
 
 /**
@@ -73,7 +74,7 @@ export const mongoRunConfigSchema = z
     workingDir: z.string(),
 
     // Mongo version
-    mongoVersion: z.string().optional(),
+    mongoVersion: z.string().default('8.2.3'),
 
     // Container name (optional, for backwards compatibility)
     containerName: z.string().optional(),
@@ -104,6 +105,9 @@ export const mongoRunConfigSchema = z
       .enum(['enabled', 'disabled'])
       .default('enabled')
       .optional(),
+
+    // Optional Docker labels added to each mongod container on start.
+    labels: z.record(z.string().min(1), z.string()).optional(),
   })
   .refine(
     data =>
@@ -113,7 +117,18 @@ export const mongoRunConfigSchema = z
     }
   );
 
-export type MongoRunConfig = z.infer<typeof mongoRunConfigSchema>;
+export interface MongoRunConfig {
+  workingDir: string;
+  mongoVersion?: string;
+  containerName?: string;
+  caConfig?: Pick<CAConfig, 'days' | 'subject' | 'passphrase'>;
+  hostnames: InstanceHostnameEntry[];
+  ports: number[];
+  replicaSetName: string;
+  users: MongoUser[];
+  authorization?: 'enabled' | 'disabled';
+  labels?: Record<string, string>;
+}
 
 export function getCachedMongoRunConfigFilepath(params: {
   mongoRunConfig: MongoRunConfig;

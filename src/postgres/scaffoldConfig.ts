@@ -106,13 +106,6 @@ async function promptForConfig(
       );
 
       config.caConfig = {
-        outDir: path.resolve(config.workingDir ?? process.cwd(), 'certs'),
-        files: {
-          key: 'ca.key.pem',
-          cert: 'ca.crt.pem',
-          csr: 'ca.csr.pem',
-          chain: 'ca-chain.pem',
-        },
         days: caDaysStr.trim() ? parseInt(caDaysStr.trim(), 10) : 365,
         subject: {
           C: caCountry.trim() || 'NG',

@@ -1,5 +1,5 @@
 import {execFile} from 'child_process';
-import {containerExists} from '../utils/docker.js';
+import {containerExists, isContainerRunning} from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getInstanceRunName} from './constants.js';
@@ -28,6 +28,13 @@ export async function stopMongodInstance(params: {
   if (!(await containerExists(containerName))) {
     logger.log(
       `Container ${containerName} does not exist for ${instanceRunName}`
+    );
+    return;
+  }
+
+  if (!(await isContainerRunning(containerName))) {
+    logger.log(
+      `${instanceRunName} (container ${containerName}) is not running; skipping stop`
     );
     return;
   }
