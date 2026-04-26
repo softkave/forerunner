@@ -1,8 +1,10 @@
-import {execFileSync} from 'child_process';
+import {execFile} from 'child_process';
 import path from 'path';
 import {Client} from 'pg';
+import {promisify} from 'util';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {spawnInherit} from '../utils/spawnInherit.js';
 import {getPostgresCertOutDir} from './generatePostgresCertConfigs.js';
 import {generatePostgresCertsMain} from './generatePostgresCerts.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
@@ -25,6 +27,8 @@ import {
   writePgHbaConf,
   writePostgresConfig,
 } from './utils.js';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Ensures SSL certificates are generated if SSL is enabled
@@ -49,19 +53,18 @@ async function ensureSSLCertificates(params: {
 /**
  * Ensures the Docker volume exists, removing it first if keep=false
  */
-function ensureVolume(params: {
+async function ensureVolume(params: {
   volumeName: string;
   keep: boolean;
   logger: IForeLogger;
-}): void {
+}): Promise<void> {
   const {volumeName, keep, logger} = params;
-  const volumeExistsCheck = volumeExists(volumeName);
+  const volumeExistsCheck = await volumeExists(volumeName);
 
   if (!keep && volumeExistsCheck) {
     logger.log(`Removing existing volume ${volumeName} (keep=false)...`);
     try {
-      execFileSync('docker', ['volume', 'rm', volumeName], {
-        stdio: 'pipe',
+      await execFileAsync('docker', ['volume', 'rm', volumeName], {
         encoding: 'utf8',
       });
     } catch (err) {
@@ -70,10 +73,9 @@ function ensureVolume(params: {
     }
   }
 
-  if (!volumeExists(volumeName)) {
+  if (!(await volumeExists(volumeName))) {
     logger.log(`Creating volume ${volumeName}...`);
-    execFileSync('docker', ['volume', 'create', volumeName], {
-      stdio: 'pipe',
+    await execFileAsync('docker', ['volume', 'create', volumeName], {
       encoding: 'utf8',
     });
   }
@@ -82,24 +84,16 @@ function ensureVolume(params: {
 /**
  * Ensures container is not running, removing it if it exists but is stopped
  */
-function ensureContainerNotRunning(params: {
+async function ensureContainerNotRunning(params: {
   containerName: string;
   logger: IForeLogger;
-}): void {
+}): Promise<void> {
   const {containerName, logger} = params;
 
-  if (isContainerRunning(containerName)) {
-    logger.log(`Container ${containerName} is already running; skipping start`);
-    return;
-  }
-
-  if (containerExists(containerName)) {
+  if (await containerExists(containerName)) {
     logger.log(`Removing existing stopped container ${containerName}...`);
     try {
-      execFileSync('docker', ['rm', containerName], {
-        stdio: 'pipe',
-        encoding: 'utf8',
-      });
+      await execFileAsync('docker', ['rm', containerName], {encoding: 'utf8'});
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(
@@ -171,6 +165,12 @@ function buildDockerRunArgs(params: {
     ...envVars,
   ];
 
+  if (postgresRunConfig.labels) {
+    for (const [k, v] of Object.entries(postgresRunConfig.labels)) {
+      runArgs.push('--label', `${k}=${v}`);
+    }
+  }
+
   // Mount SSL certificates if SSL is enabled
   if (sslEnabled) {
     const certsDir = getPostgresCertOutDir(postgresRunConfig);
@@ -190,14 +190,14 @@ function buildDockerRunArgs(params: {
 /**
  * Starts the Docker container
  */
-function startDockerContainer(params: {
+async function startDockerContainer(params: {
   containerName: string;
   port: number;
   volumeName: string;
   image: string;
   runArgs: string[];
   logger: IForeLogger;
-}): void {
+}): Promise<void> {
   const {containerName, port, volumeName, image, runArgs, logger} = params;
 
   logger.log(`Starting PostgreSQL container ${containerName}...`);
@@ -206,10 +206,7 @@ function startDockerContainer(params: {
   logger.log(`Image: ${image}`);
 
   try {
-    execFileSync('docker', runArgs, {
-      stdio: 'inherit',
-      encoding: 'utf8',
-    });
+    await spawnInherit('docker', runArgs);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -257,13 +254,13 @@ async function configurePostgresAuthorization(params: {
   }
 
   // Update postgresql.conf for scram-sha-256
-  const postgresConfContent = readPostgresConfig(containerName);
+  const postgresConfContent = await readPostgresConfig(containerName);
   const confScram = setPostgresConfPasswordEncryption(postgresConfContent);
 
   let configChanged = false;
 
   if (confScram !== postgresConfContent) {
-    writePostgresConfig(containerName, confScram);
+    await writePostgresConfig(containerName, confScram);
     logger.log('Updated postgresql.conf (password_encryption=scram-sha-256)');
     configChanged = true;
   }
@@ -287,10 +284,10 @@ async function configurePostgresAuthorization(params: {
   }
 
   const newPgHba = pgHbaEntries.join('\n') + '\n';
-  const pgHbaContent = readPgHbaConf(containerName);
+  const pgHbaContent = await readPgHbaConf(containerName);
 
   if (newPgHba.trim() !== pgHbaContent.trim()) {
-    writePgHbaConf(containerName, newPgHba);
+    await writePgHbaConf(containerName, newPgHba);
     logger.log(
       'Updated pg_hba.conf with user-specific database entries (scram-sha-256)'
     );
@@ -318,8 +315,8 @@ async function configurePostgresSSL(params: {
     return;
   }
 
-  const pgHbaContent = readPgHbaConf(containerName);
-  const postgresConfContent = readPostgresConfig(containerName);
+  const pgHbaContent = await readPgHbaConf(containerName);
+  const postgresConfContent = await readPostgresConfig(containerName);
 
   // Update postgresql.conf with SSL settings
   const certPath = '/var/lib/postgresql/certs/server.crt.pem';
@@ -340,13 +337,13 @@ async function configurePostgresSSL(params: {
   let configChanged = false;
 
   if (confWithSSL !== postgresConfContent) {
-    writePostgresConfig(containerName, confWithSSL);
+    await writePostgresConfig(containerName, confWithSSL);
     logger.log('Updated postgresql.conf (SSL enabled)');
     configChanged = true;
   }
 
   if (hbaWithSSL !== pgHbaContent) {
-    writePgHbaConf(containerName, hbaWithSSL);
+    await writePgHbaConf(containerName, hbaWithSSL);
     logger.log('Updated pg_hba.conf (SSL required for host connections)');
     configChanged = true;
   }
@@ -368,7 +365,7 @@ export async function startPostgresInstance(params: {
     waitUntilListening = false,
   } = params;
 
-  ensureDockerAvailable();
+  await ensureDockerAvailable();
 
   const containerName = postgresRunConfig.containerName;
   const volumeName = postgresRunConfig.volumeName;
@@ -379,21 +376,59 @@ export async function startPostgresInstance(params: {
   await ensureSSLCertificates({postgresRunConfig, logger});
 
   // Ensure volume exists
-  ensureVolume({
+  await ensureVolume({
     volumeName,
     keep: postgresRunConfig.keep ?? false,
     logger,
   });
 
-  // Ensure container is not running
-  ensureContainerNotRunning({containerName, logger});
+  if (await isContainerRunning(containerName)) {
+    logger.log(
+      `Container ${containerName} is already running; skipping new container start`
+    );
+    if (waitUntilListening) {
+      await waitForPostgresReady({
+        postgresRunConfig,
+        containerName,
+        port,
+        sslEnabled: false,
+        logger,
+        maxAttempts: 10,
+        retryIntervalMs: 1000,
+      });
+      const client = await getPostgresClient({
+        postgresRunConfig,
+        database: 'postgres',
+        ssl: false,
+      });
+      try {
+        await configurePostgresAuthorization({
+          postgresRunConfig,
+          containerName,
+          client,
+          logger,
+        });
+        await configurePostgresSSL({
+          postgresRunConfig,
+          containerName,
+          client,
+          logger,
+        });
+      } finally {
+        await client.end();
+      }
+    }
+    return;
+  }
+
+  await ensureContainerNotRunning({containerName, logger});
 
   // Build Docker command arguments
   const envVars = buildDockerEnvVars({postgresRunConfig});
   const runArgs = buildDockerRunArgs({postgresRunConfig, envVars, logger});
 
   // Start the container
-  startDockerContainer({
+  await startDockerContainer({
     containerName,
     port,
     volumeName,

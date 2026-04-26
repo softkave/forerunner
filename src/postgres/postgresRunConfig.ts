@@ -2,13 +2,38 @@ import fs from 'fs';
 import {ensureFile} from 'fs-extra';
 import path from 'path';
 import z from 'zod';
-import {CAConfigSchema} from '../certs/types.js';
+import {CAConfig, CAConfigSchema} from '../certs/types.js';
 
+/** Connection mode used for `pg_hba.conf` entries. */
 export const PostgresConnectionTypeSchema = z.enum(['tcp', 'local']);
-export type PostgresConnectionType = z.infer<
-  typeof PostgresConnectionTypeSchema
->;
+/** Type for `PostgresConnectionTypeSchema` (explicit for editor autocomplete). */
+export type PostgresConnectionType = 'tcp' | 'local';
 
+/** Postgres user definition used in run config `users`. */
+export interface PostgresUser {
+  /** Role/user name. */
+  username: string;
+  /**
+   * Password for scram-sha-256.
+   * Required when `authorization: "enabled"`.
+   */
+  password?: string;
+  /**
+   * Databases this user can access.
+   * If omitted, user can access all databases.
+   */
+  databases?: string[];
+  /**
+   * Allowed connection types for this user.
+   * If omitted, both `tcp` and `local` are allowed.
+   */
+  connectionTypes?: PostgresConnectionType[];
+}
+
+/** List of `PostgresUser` entries. */
+export type PostgresUserList = PostgresUser[];
+
+/** User definition used by `setup-users` and `pg_hba.conf` generation. */
 export const PostgresUserSchema = z.object({
   username: z.string().min(1, 'username is required'),
   // Optional - if missing, user has no password (trust auth, if no other user
@@ -29,48 +54,25 @@ export const PostgresUserSchema = z.object({
     .optional(),
 });
 
+/** Array form of `PostgresUserSchema` (run config `users`). */
 export const PostgresUserListSchema = z.array(PostgresUserSchema);
 
-export type PostgresUser = z.infer<typeof PostgresUserSchema>;
-export type PostgresUserList = z.infer<typeof PostgresUserListSchema>;
-
+/** Full run config schema (defaults + cross-field validation). */
 export const postgresRunConfigSchema = z
   .object({
-    // Working dir
     workingDir: z.string().optional(),
-
-    // Port
     port: z.number().int().positive('Port must be a positive integer'),
-
-    // Authorization: when enabled, local and TCP require password (scram-sha-256)
     authorization: z.enum(['enabled', 'disabled']).optional(),
-
-    // SSL: when enabled, connections require SSL/TLS
     ssl: z.enum(['enabled', 'disabled']).optional(),
-
-    // CA config for SSL certificates (required when ssl is enabled)
     caConfig: CAConfigSchema.optional(),
-
-    // Users - when authorization enabled: at least one required (admin), all need password
     users: PostgresUserListSchema.optional(),
-
-    // PostgreSQL version
     postgresVersion: z.string().optional(),
-
-    // Container name
     containerName: z.string().min(1, 'containerName is required'),
-
-    // Volume name (defaults to containerName)
     volumeName: z.string().optional(),
-
-    // Databases - first is POSTGRES_DB
     dbs: z.array(z.string().min(1, 'database name cannot be empty')).optional(),
-
-    // Whether to keep data across restarts
     keep: z.boolean().optional(),
-
-    // Discoverability: "local" = bind 127.0.0.1 only; "global" = bind all interfaces.
     discoverability: z.enum(['local', 'global']).optional(),
+    labels: z.record(z.string().min(1), z.string()).optional(),
   })
   .transform(data => ({
     ...data,
@@ -131,12 +133,40 @@ export const postgresRunConfigSchema = z
     });
   });
 
-export type PostgresRunConfig = z.infer<typeof postgresRunConfigSchema>;
+export interface PostgresRunConfig {
+  /** Working directory for certs and config cache. */
+  workingDir: string;
+  /** Port exposed on the host for the Postgres container. */
+  port: number;
+  /** Whether password auth is required (scram-sha-256) or trust is used. */
+  authorization: 'enabled' | 'disabled';
+  /** Whether SSL/TLS is required for connections. */
+  ssl: 'enabled' | 'disabled';
+  /** CA config used when `ssl: "enabled"`. */
+  caConfig?: Pick<CAConfig, 'days' | 'subject' | 'passphrase'>;
+  /** Users to create/sync (admin first). */
+  users?: PostgresUserList;
+  /** Postgres image major version (defaulted by schema). */
+  postgresVersion: string;
+  /** Docker container name. */
+  containerName: string;
+  /** Docker volume name (defaults to `containerName`). */
+  volumeName: string;
+  /** Databases to create (first becomes `POSTGRES_DB`). */
+  dbs?: string[];
+  /** Whether to keep data volumes across restarts. */
+  keep: boolean;
+  /** Port binding mode (`local` binds 127.0.0.1; `global` binds all). */
+  discoverability: 'local' | 'global';
+  /** Optional Docker labels applied to the container on start. */
+  labels?: Record<string, string>;
+}
 
 /**
- * Returns the user to use for authenticated DB operations (setup-users, setup-dbs, etc.).
- * When authorization is enabled: postgres if in users list, else first user (both must have password).
- * When authorization is disabled: first user if present, else undefined (use postgres with trust).
+ * Returns the user to use for authenticated DB operations (setup-users,
+ * setup-dbs, etc.). When authorization is enabled: postgres if in users list,
+ * else first user (both must have password). When authorization is disabled:
+ * first user if present, else undefined (use postgres with trust).
  */
 export function getAuthUserFromConfig(
   config: PostgresRunConfig

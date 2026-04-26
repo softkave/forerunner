@@ -51,7 +51,12 @@ export async function generateCAConfigForPostgres(params: {
     outDir: getPostgresCertOutDir(params.postgresRunConfig),
     days: params.postgresRunConfig.caConfig.days,
     subject: params.postgresRunConfig.caConfig.subject,
-    files: params.postgresRunConfig.caConfig.files,
+    files: {
+      key: 'ca.key.pem',
+      cert: 'ca.crt.pem',
+      csr: 'ca.csr.pem',
+      chain: 'ca-chain.pem',
+    },
   };
 
   await ensureFile(configFilePath);

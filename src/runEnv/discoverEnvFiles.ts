@@ -1,4 +1,4 @@
-import {readdirSync, statSync} from 'fs';
+import {promises as fsp} from 'fs';
 import path from 'path';
 
 /**
@@ -6,25 +6,30 @@ import path from 'path';
  * Returns only files (not directories), sorted with `.env` first, then
  * alphabetically.
  */
-export function discoverEnvFiles(cwd: string): string[] {
+export async function discoverEnvFiles(cwd: string): Promise<string[]> {
   let entries: string[];
   try {
-    entries = readdirSync(cwd);
+    entries = await fsp.readdir(cwd);
   } catch (err) {
     throw new Error(
       `Failed to read directory ${cwd}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
-  const envFiles = entries.filter(name => {
-    if (!name.startsWith('.env')) return false;
-    const fullPath = path.join(cwd, name);
-    try {
-      return statSync(fullPath).isFile();
-    } catch {
-      return false;
-    }
-  });
+  const checks = await Promise.all(
+    entries.map(async name => {
+      if (!name.startsWith('.env')) return {name, isEnv: false};
+      const fullPath = path.join(cwd, name);
+      try {
+        const st = await fsp.stat(fullPath);
+        return {name, isEnv: st.isFile()};
+      } catch {
+        return {name, isEnv: false};
+      }
+    })
+  );
+
+  const envFiles = checks.filter(x => x.isEnv).map(x => x.name);
 
   envFiles.sort((a, b) => {
     if (a === '.env') return -1;

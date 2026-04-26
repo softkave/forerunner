@@ -1,13 +1,22 @@
-import {execSync} from 'child_process';
-import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
+import {promises as fsp} from 'fs';
 import {join} from 'path';
 import {fs} from 'zx';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {spawnInherit} from '../utils/spawnInherit.js';
 import {
   CertConfig,
   CertConfigSchema,
   GenerateCertsCLIOptions,
 } from './types.js';
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await fsp.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export class CertGenerator {
   private config: CertConfig;
@@ -26,10 +35,9 @@ export class CertGenerator {
     const keyPath = join(certDir, this.config.files.key);
     const certPath = join(certDir, this.config.files.cert);
 
-    if (existsSync(keyPath) && existsSync(certPath)) {
+    if ((await fileExists(keyPath)) && (await fileExists(certPath))) {
       if (force) {
-        unlinkSync(keyPath);
-        unlinkSync(certPath);
+        await Promise.allSettled([fsp.unlink(keyPath), fsp.unlink(certPath)]);
       } else {
         this.logger.log(
           `✅ Certificate already exists at ${certDir}. Use --force to regenerate.`
@@ -41,69 +49,112 @@ export class CertGenerator {
     this.logger.log(`🔐 Generating certificate: ${this.config.outDir}`);
 
     // Create output directory
-    mkdirSync(certDir, {recursive: true});
+    await fsp.mkdir(certDir, {recursive: true});
 
     // Generate OpenSSL configuration with SAN
     const opensslConfig = this.generateOpenSSLConfig();
     const configPath = join(certDir, `openssl-${this.config.files.key}.cnf`);
-    writeFileSync(configPath, opensslConfig);
+    await fsp.writeFile(configPath, opensslConfig);
 
     try {
       // Generate private key
       this.logger.log('  Generating private key...');
-      const keyCmd = this.config.passphrase
-        ? `openssl genrsa -aes256 -passout pass:'${this.config.passphrase}' -out "${keyPath}" 2048`
-        : `openssl genrsa -out "${keyPath}" 2048`;
-
-      execSync(keyCmd, {stdio: 'inherit'});
+      const genrsaArgs = this.config.passphrase
+        ? [
+            'genrsa',
+            '-aes256',
+            '-passout',
+            `pass:${this.config.passphrase}`,
+            '-out',
+            keyPath,
+            '2048',
+          ]
+        : ['genrsa', '-out', keyPath, '2048'];
+      await spawnInherit('openssl', genrsaArgs);
 
       // Generate CSR
       this.logger.log('  Generating CSR...');
       const csrPath = join(certDir, this.config.files.csr);
-      const csrCmd = this.config.passphrase
-        ? `openssl req -new -key "${keyPath}" -passin pass:'${this.config.passphrase}' -out "${csrPath}" -config "${configPath}"`
-        : `openssl req -new -key "${keyPath}" -out "${csrPath}" -config "${configPath}"`;
-
-      execSync(csrCmd, {stdio: 'inherit'});
+      const csrArgs = this.config.passphrase
+        ? [
+            'req',
+            '-new',
+            '-key',
+            keyPath,
+            '-passin',
+            `pass:${this.config.passphrase}`,
+            '-out',
+            csrPath,
+            '-config',
+            configPath,
+          ]
+        : [
+            'req',
+            '-new',
+            '-key',
+            keyPath,
+            '-out',
+            csrPath,
+            '-config',
+            configPath,
+          ];
+      await spawnInherit('openssl', csrArgs);
 
       // Sign certificate with CA
       this.logger.log('  Signing certificate with CA...');
       const caKeyPath = join(this.config.ca.dir, 'ca.key.pem');
       const caCertPath = join(this.config.ca.dir, 'ca.crt.pem');
 
-      if (!existsSync(caKeyPath) || !existsSync(caCertPath)) {
+      if (!(await fileExists(caKeyPath)) || !(await fileExists(caCertPath))) {
         throw new Error(`CA files not found at ${this.config.ca.dir}`);
       }
 
-      const signCmd = this.config.ca.passphrase
-        ? `openssl x509 -req -in "${csrPath}" -CA "${caCertPath}" -CAkey "${caKeyPath}" -passin pass:'${this.config.ca.passphrase}' -CAcreateserial -out "${certPath}" -days ${this.config.days} -sha256 -extfile "${configPath}" -extensions req_ext`
-        : `openssl x509 -req -in "${csrPath}" -CA "${caCertPath}" -CAkey "${caKeyPath}" -CAcreateserial -out "${certPath}" -days ${this.config.days} -sha256 -extfile "${configPath}" -extensions req_ext`;
-
-      execSync(signCmd, {stdio: 'inherit'});
+      const signArgsBase = [
+        'x509',
+        '-req',
+        '-in',
+        csrPath,
+        '-CA',
+        caCertPath,
+        '-CAkey',
+        caKeyPath,
+        ...(this.config.ca.passphrase
+          ? ['-passin', `pass:${this.config.ca.passphrase}`]
+          : []),
+        '-CAcreateserial',
+        '-out',
+        certPath,
+        '-days',
+        String(this.config.days),
+        '-sha256',
+        '-extfile',
+        configPath,
+        '-extensions',
+        'req_ext',
+      ];
+      await spawnInherit('openssl', signArgsBase);
 
       // Create full chain
       this.logger.log('  Creating full chain...');
       const fullchainPath = join(certDir, this.config.files.fullchain);
       const caChainPath = join(this.config.ca.dir, 'ca-chain.pem');
 
-      if (existsSync(caChainPath)) {
-        // Use existing CA chain
-        execSync(`cat "${certPath}" "${caChainPath}" > "${fullchainPath}"`, {
-          stdio: 'inherit',
-        });
-      } else {
-        // Just use CA cert
-        execSync(`cat "${certPath}" "${caCertPath}" > "${fullchainPath}"`, {
-          stdio: 'inherit',
-        });
+      {
+        const certPem = await fsp.readFile(certPath, 'utf8');
+        const chainPem = (await fileExists(caChainPath))
+          ? await fsp.readFile(caChainPath, 'utf8')
+          : await fsp.readFile(caCertPath, 'utf8');
+        await fsp.writeFile(fullchainPath, certPem);
+        await fsp.appendFile(fullchainPath, chainPem);
       }
 
       if (this.config.files.crtAndKey) {
         this.logger.log('  Creating CRT and key...');
         const crtAndKeyPath = join(certDir, this.config.files.crtAndKey);
-        execSync(`cat "${certPath}" "${keyPath}" > "${crtAndKeyPath}"`, {
-          stdio: 'inherit',
-        });
+        const certPem = await fsp.readFile(certPath, 'utf8');
+        const keyPem = await fsp.readFile(keyPath, 'utf8');
+        await fsp.writeFile(crtAndKeyPath, certPem);
+        await fsp.appendFile(crtAndKeyPath, keyPem);
       }
 
       this.logger.log(`✅ Certificate generated successfully at ${certDir}`);

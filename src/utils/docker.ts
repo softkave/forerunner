@@ -1,9 +1,11 @@
-import {execFileSync} from 'child_process';
+import {execFile} from 'child_process';
+import {promisify} from 'util';
 
-export function containerExists(containerName: string): boolean {
+const execFileAsync = promisify(execFile);
+
+export async function containerExists(containerName: string): Promise<boolean> {
   try {
-    execFileSync('docker', ['inspect', '-f', '{{.Id}}', containerName], {
-      stdio: 'pipe',
+    await execFileAsync('docker', ['inspect', '-f', '{{.Id}}', containerName], {
       encoding: 'utf8',
     });
     return true;
@@ -12,23 +14,24 @@ export function containerExists(containerName: string): boolean {
   }
 }
 
-export function isContainerRunning(containerName: string): boolean {
+export async function isContainerRunning(
+  containerName: string
+): Promise<boolean> {
   try {
-    const out = execFileSync(
+    const {stdout} = await execFileAsync(
       'docker',
       ['inspect', '-f', '{{.State.Running}}', containerName],
-      {stdio: 'pipe', encoding: 'utf8'}
+      {encoding: 'utf8'}
     );
-    return out.trim() === 'true';
+    return String(stdout).trim() === 'true';
   } catch {
     return false;
   }
 }
 
-export function volumeExists(volumeName: string): boolean {
+export async function volumeExists(volumeName: string): Promise<boolean> {
   try {
-    execFileSync('docker', ['volume', 'inspect', volumeName], {
-      stdio: 'pipe',
+    await execFileAsync('docker', ['volume', 'inspect', volumeName], {
       encoding: 'utf8',
     });
     return true;
@@ -37,9 +40,9 @@ export function volumeExists(volumeName: string): boolean {
   }
 }
 
-export function ensureDockerAvailable(): void {
+export async function ensureDockerAvailable(): Promise<void> {
   try {
-    execFileSync('docker', ['info'], {stdio: 'pipe', encoding: 'utf8'});
+    await execFileAsync('docker', ['info'], {encoding: 'utf8'});
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -48,12 +51,14 @@ export function ensureDockerAvailable(): void {
   }
 }
 
-export function execInContainer(
+export async function execInContainer(
   containerName: string,
   command: string[]
-): string {
-  return execFileSync('docker', ['exec', containerName, ...command], {
-    stdio: 'pipe',
-    encoding: 'utf8',
-  }).trim();
+): Promise<string> {
+  const {stdout} = await execFileAsync(
+    'docker',
+    ['exec', containerName, ...command],
+    {encoding: 'utf8'}
+  );
+  return String(stdout).trim();
 }

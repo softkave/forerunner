@@ -7,6 +7,7 @@ Application runner & helpers - A CLI tool and SDK for managing certificates, Mon
 Forerunner is a command-line utility and Node.js SDK designed to streamline development and infrastructure management tasks. It provides tools for:
 
 - **Certificate Management**: Generate Certificate Authorities (CAs) and signed certificates
+- **SSH Key Management**: Generate SSH keypairs using `ssh-keygen`
 - **MongoDB Management**: Download, configure, and run MongoDB instances with replica sets
 - **Hosts File Management**: Manage `/etc/hosts` entries for local development
 - **Process Management**: Find, start, and end processes
@@ -53,6 +54,8 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 
 - [`certs ca`](#generate-certificate-authority) - Generate Certificate Authority
 - [`certs cert`](#generate-certificate) - Generate signed certificate
+- [`certs ssh-key`](#generate-ssh-keypair) - Generate an SSH keypair using `ssh-keygen`
+- [`certs keyfile`](#generate-keyfile) - Generate a keyfile (e.g. MongoDB keyFile)
 
 #### MongoDB Management
 
@@ -127,6 +130,84 @@ softkave-forerunner certs cert -c <config-path> [options]
 - `-f, --force` - Force regeneration even if certificate already exists
 - `-w, --cwd <path>` - Working directory
 - `-s, --silent` - Silent mode
+
+#### Generate SSH Keypair
+
+```bash
+softkave-forerunner certs ssh-key [options]
+```
+
+**Two modes:**
+
+- **Config file mode**: pass `--config` pointing to a JSON file
+- **Flags mode**: omit `--config` and provide `--comment` and `--passphrase` (required)
+
+**Options:**
+
+- `-c, --config <path>` - Path to SSH key configuration JSON file (optional)
+- `-f, --force` - Force regeneration even if key already exists
+- `-w, --cwd <path>` - Working directory
+- `-a, --algorithm <algorithm>` - `ed25519` | `rsa` | `ecdsa` (default: `ed25519`)
+- `-b, --bits <bits>` - Key size in bits (RSA default: 4096, ECDSA default: 521; ignored for ed25519)
+- `-C, --comment <comment>` - Key comment (**required unless `--config`**)
+- `-p, --passphrase <passphrase>` - Key passphrase (**required unless `--config`**)
+- `-P, --path <path>` - Output folder (ends with `/`) or file path (default: `./ssh-keys/`)
+- `-s, --silent` - Silent mode
+
+**Examples:**
+
+```bash
+# Flags mode (defaults to ed25519)
+softkave-forerunner certs ssh-key -C "me@laptop" -p "my-passphrase" -P ./ssh-keys/
+
+# RSA
+softkave-forerunner certs ssh-key -a rsa -b 4096 -C "deploy-key" -p "my-passphrase" -P ./ssh-keys/deploy_key
+
+# Config file mode
+softkave-forerunner certs ssh-key -c ./ssh-key-config.json
+```
+
+#### Generate Keyfile
+
+Generates a keyfile with secure randomness. By default it produces a **MongoDB-compatible** keyFile:
+
+- base64 encoded
+- newline-terminated
+- chmod `0400`
+
+```bash
+softkave-forerunner certs keyfile [options]
+```
+
+**Two modes:**
+
+- **Config file mode**: pass `--config` pointing to a JSON file
+- **Flags mode**: omit `--config` and provide `--path` (required)
+
+**Options:**
+
+- `-c, --config <path>` - Path to keyfile configuration JSON file (optional)
+- `-f, --force` - Force regeneration even if keyfile already exists
+- `-w, --cwd <path>` - Working directory
+- `-P, --path <path>` - Output filepath (**required unless `--config`**)
+- `--format <format>` - `mongodb` | `generic` (default: `mongodb`)
+- `--bytes <bytes>` - Random bytes before encoding (default: 756 for mongodb, 32 for generic)
+- `--encoding <encoding>` - `base64` | `hex` (default: `base64`)
+- `--mode <mode>` - File mode in octal (e.g. `400`, `600`) (default: `400`)
+- `--newline` / `--no-newline` - Append trailing newline (default: append)
+
+**Examples:**
+
+```bash
+# MongoDB keyFile (recommended defaults)
+softkave-forerunner certs keyfile -P ./keyfiles/mongo.keyfile
+
+# Generic hex keyfile
+softkave-forerunner certs keyfile -P ./secrets/app.key --format generic --bytes 64 --encoding hex --mode 600
+
+# Config file mode
+softkave-forerunner certs keyfile -c ./keyfile-config.json
+```
 
 ### MongoDB Management (`mongo`)
 
@@ -419,7 +500,7 @@ softkave-forerunner postgres stop [options]
 softkave-forerunner postgres setup-users -c <config-path> [options]
 ```
 
-**Description**: Sets up PostgreSQL users (excluding the first admin user which is created via POSTGRES_USER/POSTGRES_PASSWORD). Creates users that don't exist and updates passwords for existing users. Syncs each user's database permissions (CONNECT/REVOKE) and connection types (TCP and/or local) from config to pg_hba.conf. If transitioning from trust to password authentication, automatically updates pg_hba.conf and postgresql.conf to use scram-sha-256.
+**Description**: Syncs **every** user listed in the run config with the running instance. The first user is typically created by the container image (`POSTGRES_USER` / `POSTGRES_PASSWORD`); this command still updates that user when present (password, grants, `pg_hba` entries) alongside any additional users. Creates roles that do not exist, updates passwords when provided in config, and syncs each user's database permissions (CONNECT/REVOKE) and connection types (TCP and/or local) to `pg_hba.conf`. If transitioning from trust to password authentication, updates `pg_hba.conf` and `postgresql.conf` for scram-sha-256.
 
 **Prerequisites**: Expects PostgreSQL instance to be running and connects using the admin user from config.
 
@@ -733,7 +814,7 @@ softkave-forerunner postgres stop -c postgres-config.json
 # Stop PostgreSQL instance with container name only
 softkave-forerunner postgres stop --container-name postgres-db
 
-# Setup users (excluding admin)
+# Sync users from config with the running instance (includes admin from config)
 softkave-forerunner postgres setup-users -c postgres-config.json
 
 # Setup databases (excluding default database)
@@ -914,6 +995,14 @@ The MongoDB commands require a configuration file that specifies MongoDB version
 - `read`: Read-only privileges for a specific database
 - Any string. See [MongoDB self-managed built-in roles](https://www.mongodb.com/docs/manual/reference/built-in-roles/?deployment-type=self)
 
+**`labels`** (object, optional)
+
+- **Description**: Docker labels applied to each `mongod` container on `mongo start`
+- **Example**:
+  ```json
+  {"com.mycompany.env": "dev", "com.mycompany.service": "mongo"}
+  ```
+
 **Example MongoDB Configuration** (`src/mongo/examples/mongo-run-config.json`):
 
 ```json
@@ -1076,6 +1165,15 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 - **Description**: Databases to create. The first is created via POSTGRES_DB during container startup.
 - **Example**: `["mydb", "testdb"]`
 
+**`labels`** (object, optional)
+
+- **Description**: Docker labels applied to the Postgres container on `postgres start` (same idea as `docker run --label`).
+- **Example**:
+  ```json
+  {"com.mycompany.env": "dev", "com.mycompany.service": "postgres"}
+  ```
+- **Note**: Keys must be non-empty strings; values are strings (matches run config validation).
+
 **Example PostgreSQL Configuration** (`postgres-run-config.json`):
 
 ```json
@@ -1089,6 +1187,10 @@ The PostgreSQL commands require a configuration file that specifies port, contai
   "volumeName": "postgres-db",
   "keep": true,
   "discoverability": "local",
+  "labels": {
+    "com.mycompany.env": "dev",
+    "com.mycompany.service": "postgres"
+  },
   "users": [
     {
       "username": "admin",
@@ -1259,6 +1361,55 @@ Certificate generation requires JSON configuration files for both Certificate Au
 }
 ```
 
+### SSH Key Configuration
+
+SSH key generation supports a JSON configuration file (used by `certs ssh-key --config <path>` and by the SDK via `configFilepath`).
+
+**Options:**
+
+- **`algorithm`** (`"ed25519" | "rsa" | "ecdsa"`, optional): default `"ed25519"`
+- **`bits`** (number, optional): ignored for ed25519; recommended defaults are RSA `4096`, ECDSA `521`
+- **`comment`** (string, required): passed to `ssh-keygen -C`
+- **`passphrase`** (string, required): passed to `ssh-keygen -N`
+- **`path`** (string, optional): directory (ends with `/`) or filepath for private key (default: `"./ssh-keys/"`)
+
+**Example SSH key configuration** (`ssh-key-config.json`):
+
+```json
+{
+  "algorithm": "ed25519",
+  "comment": "me@laptop",
+  "passphrase": "my-passphrase",
+  "path": "./ssh-keys/"
+}
+```
+
+### Keyfile Configuration
+
+Keyfile generation supports a JSON configuration file (used by `certs keyfile --config <path>` and by the SDK via `configFilepath`).
+
+**Options:**
+
+- **`path`** (string, required): output filepath for the keyfile
+- **`format`** (`"mongodb" | "generic"`, optional): default `"mongodb"`
+- **`bytes`** (number, optional): random bytes before encoding (default: 756 for mongodb, 32 for generic). Note: base64 increases length by ~33%, so 756 bytes becomes 1008 chars (plus optional newline), staying under the 1024-char limit.
+- **`encoding`** (`"base64" | "hex"`, optional): default `"base64"` (mongodb requires base64)
+- **`mode`** (number, optional): chmod mode (default `400` / `0o400`)
+- **`newline`** (boolean, optional): append trailing newline (default: true)
+
+**Example keyfile configuration** (`keyfile-config.json`):
+
+```json
+{
+  "path": "./keyfiles/mongo.keyfile",
+  "format": "mongodb",
+  "bytes": 756,
+  "encoding": "base64",
+  "mode": 400,
+  "newline": true
+}
+```
+
 ## SDK Usage
 
 Forerunner can also be used as a Node.js SDK for programmatic access to all functionality.
@@ -1361,6 +1512,62 @@ await generateCert({
     cwd: process.cwd(),
     silent: false,
   },
+  logger,
+});
+```
+
+#### Generate SSH Keypair
+
+```typescript
+import {generateSSHKey, SSHKeygenConfig} from 'softkave-forerunner';
+
+const sshConfig: SSHKeygenConfig = {
+  algorithm: 'ed25519',
+  comment: 'me@laptop',
+  passphrase: 'my-passphrase',
+  // path can be a directory (defaults filename based on algorithm) or a full filepath
+  path: './ssh-keys/',
+};
+
+await generateSSHKey({
+  config: sshConfig,
+  force: false,
+  cwd: process.cwd(),
+  logger,
+});
+
+// Or load from a config filepath:
+await generateSSHKey({
+  configFilepath: './ssh-key-config.json',
+  force: false,
+  cwd: process.cwd(),
+  logger,
+});
+```
+
+#### Generate Keyfile
+
+```typescript
+import {generateKeyfile, KeyfileConfig} from 'softkave-forerunner';
+
+const keyfileConfig: KeyfileConfig = {
+  path: './keyfiles/mongo.keyfile',
+  format: 'mongodb',
+  // bytes, encoding, mode, newline are optional (reasonable defaults)
+};
+
+await generateKeyfile({
+  config: keyfileConfig,
+  force: false,
+  cwd: process.cwd(),
+  logger,
+});
+
+// Or load from a config filepath:
+await generateKeyfile({
+  configFilepath: './keyfile-config.json',
+  force: false,
+  cwd: process.cwd(),
   logger,
 });
 ```

@@ -1,14 +1,17 @@
 /* eslint-disable n/no-process-exit */
 
 import assert from 'assert';
-import {execSync} from 'child_process';
-import {readFileSync, writeFileSync} from 'fs';
+import {execFile} from 'child_process';
+import {promises as fsp} from 'fs';
 import {exists} from 'fs-extra';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {promisify} from 'util';
 
 const HOSTS_FILE = '/etc/hosts';
 const BACKUP_FILE = '/etc/hosts.backup';
+
+const execFileAsync = promisify(execFile);
 
 export interface HostEntry {
   ip: string;
@@ -64,12 +67,12 @@ export function formatHostsFile(params: {entries: HostEntry[]}): string {
   return lines.join('\n') + '\n';
 }
 
-export function backupHostsFile(params: {
+export async function backupHostsFile(params: {
   hostsFilePath?: string;
   backupFilePath?: string;
   logger: IForeLogger;
   dontExitOnError?: boolean;
-}): void {
+}): Promise<void> {
   const {
     hostsFilePath = HOSTS_FILE,
     backupFilePath = BACKUP_FILE,
@@ -77,7 +80,7 @@ export function backupHostsFile(params: {
     dontExitOnError = false,
   } = params;
   try {
-    execSync(`cp ${hostsFilePath} ${backupFilePath}`, {stdio: 'inherit'});
+    await execFileAsync('cp', [hostsFilePath, backupFilePath]);
     logger.log(`Backup created at ${BACKUP_FILE}`);
   } catch (error) {
     logger.error('Failed to create backup:', error);
@@ -88,12 +91,12 @@ export function backupHostsFile(params: {
   }
 }
 
-export function restoreHostsFile(params: {
+export async function restoreHostsFile(params: {
   hostsFilePath?: string;
   backupFilePath?: string;
   logger: IForeLogger;
   dontExitOnError?: boolean;
-}): void {
+}): Promise<void> {
   const {
     hostsFilePath = HOSTS_FILE,
     backupFilePath = BACKUP_FILE,
@@ -101,7 +104,7 @@ export function restoreHostsFile(params: {
     dontExitOnError = false,
   } = params;
   try {
-    execSync(`cp ${backupFilePath} ${hostsFilePath}`, {stdio: 'inherit'});
+    await execFileAsync('cp', [backupFilePath, hostsFilePath]);
     logger.log('Hosts file restored from backup');
   } catch (error) {
     logger.error('Failed to restore from backup:', error);
@@ -112,18 +115,21 @@ export function restoreHostsFile(params: {
   }
 }
 
-export function readHostsFile<TDontExitOnError extends boolean>(params: {
+export async function readHostsFile<TDontExitOnError extends boolean>(params: {
   hostsFilePath?: string;
   logger: IForeLogger;
   dontExitOnError?: TDontExitOnError;
-}): TDontExitOnError extends true ? string | undefined : string {
+}): Promise<TDontExitOnError extends true ? string | undefined : string> {
   const {
     hostsFilePath = HOSTS_FILE,
     logger = new ConsoleForeLogger({silent: true}),
     dontExitOnError = false,
   } = params;
   try {
-    return readFileSync(hostsFilePath, 'utf8');
+    return (await fsp.readFile(
+      hostsFilePath,
+      'utf8'
+    )) as TDontExitOnError extends true ? string | undefined : string;
   } catch (error) {
     logger.error('Failed to read hosts file:', error);
     logger.onSilentFail(error);
@@ -163,7 +169,7 @@ export async function writeHostsFile(params: {
 
     // Try to write directly first
     try {
-      writeFileSync(hostsFilePath, content, 'utf8');
+      await fsp.writeFile(hostsFilePath, content, 'utf8');
       logger.log('Hosts file updated successfully');
       return;
     } catch (writeError) {
@@ -172,27 +178,27 @@ export async function writeHostsFile(params: {
 
     // If direct write fails, use sudo
     const tempFile = '/tmp/hosts.tmp';
-    writeFileSync(tempFile, content, 'utf8');
-    execSync(`sudo cp ${tempFile} ${hostsFilePath}`, {stdio: 'inherit'});
-    execSync(`rm ${tempFile}`, {stdio: 'inherit'});
+    await fsp.writeFile(tempFile, content, 'utf8');
+    await execFileAsync('sudo', ['cp', tempFile, hostsFilePath]);
+    await execFileAsync('rm', [tempFile]);
     logger.log('Hosts file updated successfully with sudo');
   } catch (error) {
     logger.error('Failed to write hosts file:', error);
     logger.onSilentFail(error);
-    restoreHostsFile({dontExitOnError, logger});
+    await restoreHostsFile({dontExitOnError, logger});
     if (!dontExitOnError) {
       process.exit(1);
     }
   }
 }
 
-export function setHost(params: {
+export async function setHost(params: {
   hostsFilePath?: string;
   dontExitOnError?: boolean;
   logger: IForeLogger;
   hostname: string;
   ip?: string;
-}): void {
+}): Promise<void> {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
@@ -203,7 +209,7 @@ export function setHost(params: {
 
   logger.log(`Setting ${hostname} to ${ip}`);
 
-  const content = readHostsFile({hostsFilePath, logger});
+  const content = await readHostsFile({hostsFilePath, logger});
   assert.ok(content, 'Hosts file not found');
   const entries = parseHostsFile({content});
   let madeChange = false;
@@ -225,7 +231,7 @@ export function setHost(params: {
 
   if (madeChange) {
     const newContent = formatHostsFile({entries});
-    writeHostsFile({
+    await writeHostsFile({
       content: newContent,
       hostsFilePath,
       logger,
@@ -234,12 +240,12 @@ export function setHost(params: {
   }
 }
 
-export function removeHost(params: {
+export async function removeHost(params: {
   hostsFilePath?: string;
   dontExitOnError?: boolean;
   logger: IForeLogger;
   hostname: string;
-}): void {
+}): Promise<void> {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
@@ -249,7 +255,7 @@ export function removeHost(params: {
 
   logger.log(`Removing ${hostname}`);
 
-  const content = readHostsFile({hostsFilePath, logger});
+  const content = await readHostsFile({hostsFilePath, logger});
   assert.ok(content, 'Hosts file not found');
   const entries = parseHostsFile({content});
 
@@ -263,21 +269,26 @@ export function removeHost(params: {
 
   logger.log(`Removed ${hostname} from hosts file`);
   const newContent = formatHostsFile({entries: filteredEntries});
-  writeHostsFile({content: newContent, hostsFilePath, logger, dontExitOnError});
+  await writeHostsFile({
+    content: newContent,
+    hostsFilePath,
+    logger,
+    dontExitOnError,
+  });
 }
 
-export function listHosts(params: {
+export async function listHosts(params: {
   hostsFilePath?: string;
   dontExitOnError?: boolean;
   logger: IForeLogger;
-}): HostEntry[] {
+}): Promise<HostEntry[]> {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
     logger = new ConsoleForeLogger({silent: true}),
   } = params;
 
-  const content = readHostsFile({hostsFilePath, dontExitOnError, logger});
+  const content = await readHostsFile({hostsFilePath, dontExitOnError, logger});
   assert.ok(content, 'Hosts file not found');
   const entries = parseHostsFile({content});
 
@@ -288,18 +299,18 @@ export function listHosts(params: {
   return entries;
 }
 
-export function listHostsAndPrint(params: {
+export async function listHostsAndPrint(params: {
   hostsFilePath?: string;
   dontExitOnError?: boolean;
   logger: IForeLogger;
-}): void {
+}): Promise<void> {
   const {
     hostsFilePath = HOSTS_FILE,
     dontExitOnError = false,
     logger = new ConsoleForeLogger({silent: true}),
   } = params;
 
-  const entries = listHosts({hostsFilePath, dontExitOnError, logger});
+  const entries = await listHosts({hostsFilePath, dontExitOnError, logger});
 
   if (entries.length === 0) {
     logger.log('No host entries found');

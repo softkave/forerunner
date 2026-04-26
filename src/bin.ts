@@ -8,6 +8,8 @@ import {getVersion} from './version.js';
 // Import certs functionality
 import {generateCA} from './certs/caGenerator.js';
 import {generateCert} from './certs/certGenerator.js';
+import {generateSSHKeyFromCliOptions} from './certs/sshKeyGenerator.js';
+import {generateKeyfileFromCliOptions} from './certs/keyfileGenerator.js';
 import {GenerateCertsCLIOptionsSchema} from './certs/types.js';
 
 // Import mongo functionality
@@ -35,7 +37,7 @@ import {
 } from './etcHosts/helpers.js';
 
 // Import process management functionality
-import {setupUsers} from './mongo/user/setupUsers.js';
+import {setupMongoUsers} from './mongo/user/setupUsers.js';
 import {findChildrenPIDs} from './pid/findChildrenPIDs.js';
 
 // Import postgres functionality
@@ -46,7 +48,7 @@ import {
   postgresRunConfigSchema,
   scaffoldPostgresConfig,
   setupDatabases,
-  setupUsers as setupPostgresUsers,
+  setupPostgresUsers,
   startPostgresInstance,
   stopPostgresInstance,
   validatePostgresConfig,
@@ -132,6 +134,112 @@ certsProgram
       });
 
       await generateCert({opts: cliOptions, logger});
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// SSH key command
+certsProgram
+  .command('ssh-key')
+  .description('Generate an SSH keypair using ssh-keygen')
+  .option('-c, --config <path>', 'Path to SSH key configuration JSON file')
+  .option('-f, --force', 'Force regeneration even if key already exists')
+  .option('-w, --cwd <path>', 'Working directory')
+  .option('-s, --silent', 'Silent mode')
+  .option(
+    '-a, --algorithm <algorithm>',
+    'Algorithm: ed25519 | rsa | ecdsa (default: ed25519)'
+  )
+  .option(
+    '-b, --bits <bits>',
+    'Key size (RSA default: 4096, ECDSA default: 521; ignored for ed25519)'
+  )
+  .option(
+    '-C, --comment <comment>',
+    'Key comment (required unless --config is provided)'
+  )
+  .option(
+    '-p, --passphrase <passphrase>',
+    'Key passphrase (required unless --config is provided)'
+  )
+  .option(
+    '-P, --path <path>',
+    'Output folder (ends with /) or file path (default: ./ssh-keys/)'
+  )
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+
+    try {
+      await generateSSHKeyFromCliOptions({
+        opts: {
+          force: options.force,
+          config: options.config,
+          cwd: options.cwd,
+          silent: options.silent,
+          algorithm: options.algorithm,
+          bits: options.bits ? parseInt(String(options.bits), 10) : undefined,
+          comment: options.comment,
+          passphrase: options.passphrase,
+          path: options.path,
+        },
+        logger,
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Keyfile command
+certsProgram
+  .command('keyfile')
+  .description('Generate a keyfile (default: MongoDB-compatible keyFile)')
+  .option('-c, --config <path>', 'Path to keyfile configuration JSON file')
+  .option('-f, --force', 'Force regeneration even if keyfile already exists')
+  .option('-w, --cwd <path>', 'Working directory')
+  .option('-s, --silent', 'Silent mode')
+  .option(
+    '-P, --path <path>',
+    'Output filepath for the keyfile (required unless --config is provided)'
+  )
+  .option('--format <format>', 'Format: mongodb | generic (default: mongodb)')
+  .option(
+    '--bytes <bytes>',
+    'Random bytes before encoding (default: 96 for mongodb, 32 for generic)'
+  )
+  .option('--encoding <encoding>', 'Encoding: base64 | hex (default: base64)')
+  .option('--mode <mode>', 'File mode (octal like 400, 600; default: 400)')
+  .option('--newline', 'Append trailing newline (default: true)')
+  .option('--no-newline', 'Do not append trailing newline')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+
+    try {
+      const mode =
+        options.mode !== undefined
+          ? parseInt(String(options.mode), 8)
+          : undefined;
+      await generateKeyfileFromCliOptions({
+        opts: {
+          force: options.force,
+          config: options.config,
+          cwd: options.cwd,
+          silent: options.silent,
+          path: options.path,
+          format: options.format,
+          bytes: options.bytes
+            ? parseInt(String(options.bytes), 10)
+            : undefined,
+          encoding: options.encoding,
+          mode,
+          newline: options.newline,
+        },
+        logger,
+      });
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -318,7 +426,7 @@ mongoProgram
       const mongoRunConfig = await getMongoRunConfig({
         mongoRunConfigFilepath: options.config,
       });
-      await setupUsers({mongoRunConfig, logger});
+      await setupMongoUsers({mongoRunConfig, logger});
       logger.log('✅ MongoDB users setup completed successfully');
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
@@ -656,7 +764,9 @@ postgresProgram
 // Setup PostgreSQL users
 postgresProgram
   .command('setup-users')
-  .description('Setup PostgreSQL users (excluding admin)')
+  .description(
+    'Sync PostgreSQL users from config (roles, passwords, pg_hba, DB grants)'
+  )
   .requiredOption('-c, --config <path>', 'Path to postgres run config file')
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
@@ -710,11 +820,11 @@ etcHostsProgram
   .argument('[ip]', 'IP address (defaults to 127.0.0.1)', '127.0.0.1')
   .option('-f, --hosts-file <path>', 'path to hosts file', '/etc/hosts')
   .option('-s, --silent', 'silent mode')
-  .action((hostname: string, ip: string, options) => {
+  .action(async (hostname: string, ip: string, options) => {
     const logger = new ConsoleForeLogger({silent: options.silent});
 
     try {
-      setHost({
+      await setHost({
         hostname,
         ip,
         hostsFilePath: options.hostsFile,
@@ -735,10 +845,10 @@ etcHostsProgram
   .argument('<hostname>', 'hostname to remove')
   .option('-f, --hosts-file <path>', 'path to hosts file', '/etc/hosts')
   .option('-s, --silent', 'silent mode')
-  .action((hostname: string, options) => {
+  .action(async (hostname: string, options) => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      removeHost({
+      await removeHost({
         hostname,
         hostsFilePath: options.hostsFile,
         logger,
@@ -757,10 +867,10 @@ etcHostsProgram
   .description('List all current host entries')
   .option('-f, --hosts-file <path>', 'path to hosts file', '/etc/hosts')
   .option('-s, --silent', 'silent mode')
-  .action(options => {
+  .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      listHostsAndPrint({
+      await listHostsAndPrint({
         hostsFilePath: options.hostsFile,
         logger,
       });
@@ -782,10 +892,10 @@ etcHostsProgram
     '/etc/hosts.backup'
   )
   .option('-s, --silent', 'silent mode')
-  .action(options => {
+  .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      backupHostsFile({
+      await backupHostsFile({
         hostsFilePath: options.hostsFile,
         backupFilePath: options.backupFile,
         logger,
@@ -809,10 +919,10 @@ etcHostsProgram
     '/etc/hosts.backup'
   )
   .option('-s, --silent', 'silent mode')
-  .action(options => {
+  .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      restoreHostsFile({
+      await restoreHostsFile({
         hostsFilePath: options.hostsFile,
         backupFilePath: options.backupFile,
         logger,
@@ -1043,6 +1153,7 @@ COMMANDS:
   certs                    CA and certificates generator
     ca                     Generate a Certificate Authority
     cert                   Generate a signed certificate using a CA
+    ssh-key                Generate an SSH keypair using ssh-keygen
 
   mongo                    MongoDB management utilities
     generate-certs         Generate MongoDB certificates
@@ -1059,7 +1170,7 @@ COMMANDS:
     scaffold-config        Generate PostgreSQL configuration file
     start                  Start PostgreSQL instance
     stop                   Stop PostgreSQL instance
-    setup-users            Setup PostgreSQL users (excluding admin)
+    setup-users            Sync PostgreSQL users from config with instance
     setup-dbs              Setup PostgreSQL databases
 
   etc-hosts                Manage /etc/hosts file entries
@@ -1088,6 +1199,12 @@ EXAMPLES:
 
   # Generate a certificate
   softkave-forerunner certs cert -c cert-config.json
+
+  # Generate an SSH keypair (flags mode)
+  softkave-forerunner certs ssh-key -C "me@laptop" -p "my-passphrase" -P ./ssh-keys/
+
+  # Generate an SSH keypair (config file mode)
+  softkave-forerunner certs ssh-key -c ssh-key-config.json
 
   # Setup MongoDB replica set (requires config file)
   softkave-forerunner mongo setup-replica-set -c mongo-config.json

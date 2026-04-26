@@ -4,7 +4,7 @@
 // https://github.com/vkarpov15/run-rs/blob/a50bb1162eec4ad7612a003a2e360d8f273f576c/LICENSE
 
 import assert from 'assert';
-import {execSync} from 'child_process';
+import {spawn} from 'child_process';
 import {ensureDir, exists} from 'fs-extra';
 import path from 'path';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
@@ -13,6 +13,35 @@ import {IForeLogger} from '../utils/foreLogger/types.js';
 export const kDefaultMongoVersion = '8.2.3';
 export const kDefaultMongodBinName = 'mongod';
 const kMongoBinDir = 'mongodb-bin';
+
+function spawnShellInherit(command: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    const child = spawn(command, {
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout?.on('data', d => (stdout += String(d)));
+    child.stderr?.on('data', d => (stderr += String(d)));
+    child.on('error', reject);
+    child.on('close', code => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`Command failed (${code}): ${command}\n${stderr}`));
+    });
+  });
+}
+
+async function spawnShellInheritNoCapture(command: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, {shell: true, stdio: 'inherit'});
+    child.on('error', reject);
+    child.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`Command failed (${code}): ${command}`));
+    });
+  });
+}
 
 export function getMongoDownloadDir(params: {
   workingDir: string;
@@ -133,7 +162,7 @@ export async function downloadMongo(params: {
     // Create a temporary extraction directory
     const tempExtractDir = `temp-mongo-extract-${Date.now()}`;
 
-    execSync(
+    await spawnShellInheritNoCapture(
       'powershell.exe -nologo -noprofile -command "&{' +
         'Add-Type -AssemblyName System.IO.Compression.FileSystem;' +
         `(New-Object Net.WebClient).DownloadFile('${url}', '${filename}');` +
@@ -146,29 +175,31 @@ export async function downloadMongo(params: {
         '}"'
     );
   } else {
-    execSync(`curl -OL ${url}`);
+    await spawnShellInheritNoCapture(`curl -OL ${url}`);
 
     // Create a temporary extraction directory
     const tempExtractDir = `temp-mongo-extract-${Date.now()}`;
-    execSync(`mkdir -p ${tempExtractDir}`);
+    await spawnShellInheritNoCapture(`mkdir -p ${tempExtractDir}`);
 
     // Extract to the temporary directory
-    execSync(`tar -zxf ${filename} -C ${tempExtractDir}`);
+    await spawnShellInheritNoCapture(
+      `tar -zxf ${filename} -C ${tempExtractDir}`
+    );
 
     // Find the extracted directory (should be the only subdirectory)
-    const extractedDir = execSync(`ls ${tempExtractDir}`, {
-      encoding: 'utf8',
-    }).trim();
+    const extractedDir = (
+      await spawnShellInherit(`ls ${tempExtractDir}`)
+    ).trim();
     const extractedDirPath = `${tempExtractDir}/${extractedDir}`;
 
     // Move the bin directory to the final location
-    execSync(
+    await spawnShellInheritNoCapture(
       `mv ${extractedDirPath}/bin ${getMongoDownloadDir({workingDir, mongoVersion})}`
     );
 
     // Clean up
-    execSync(`rm -rf ${tempExtractDir}`);
-    execSync(`rm ./${filename}`);
+    await spawnShellInheritNoCapture(`rm -rf ${tempExtractDir}`);
+    await spawnShellInheritNoCapture(`rm ./${filename}`);
   }
 
   return {

@@ -5,6 +5,51 @@ import path from 'path';
 import {z} from 'zod';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
+/** TLS subsection of `net` used by the generated `mongod` config. */
+export interface MongoNetTlsConfig {
+  /** TLS mode used by `mongod`. */
+  mode: 'requireTLS' | 'preferTLS';
+  /** Combined certificate+key PEM file path. */
+  certificateKeyFile: string;
+  /** CA file path. */
+  CAFile: string;
+  /** x509 cluster auth attributes (string form). */
+  clusterAuthX509: {attributes: string};
+  /** Allow clients without certificates (we use this for dev). */
+  allowConnectionsWithoutCertificates: boolean;
+}
+
+/** Subset of the `mongod` YAML config we generate for Docker runs. */
+export interface MongoConfig {
+  /** Log settings (`systemLog`). */
+  systemLog: {
+    destination: 'file';
+    path: string;
+    logAppend: boolean;
+    logRotate: 'rename' | 'reopen';
+  };
+  /** Process settings (`processManagement`). */
+  processManagement: {fork: boolean};
+  /** Network settings (`net`). */
+  net: {
+    bindIp: string;
+    port: number;
+    tls?: MongoNetTlsConfig;
+  };
+  /** Security settings (`security`). */
+  security: {
+    authorization: 'enabled' | 'disabled';
+    transitionToAuth?: boolean;
+    keyFile?: string;
+    clusterAuthMode?: 'x509' | 'keyFile' | 'sendX509';
+  };
+  /** Replica set settings (`replication`). */
+  replication?: {replSetName: string};
+  /** Storage settings (`storage`). */
+  storage: {dbPath: string};
+}
+
+/** Subset of the `mongod` YAML config we generate for Docker runs. */
 export const MongoConfigSchema = z.object({
   systemLog: z.object({
     destination: z.literal('file'),
@@ -47,8 +92,6 @@ export const MongoConfigSchema = z.object({
     dbPath: z.string(),
   }),
 });
-
-export type MongoConfig = z.infer<typeof MongoConfigSchema>;
 
 export function getMongodDockerConfigFilePath(
   mongoRunConfig: MongoRunConfig,
@@ -106,10 +149,16 @@ export async function generateMongoDockerConfigForMongod(params: {
   overwrite?: boolean;
 }) {
   const {instanceNumber, mongoRunConfig, overwrite = true} = params;
+
+  if (!mongoRunConfig.caConfig) {
+    throw new Error('caConfig is required for generating mongod config');
+  }
+
   const configFilePath = getMongodDockerConfigFilePath(
     mongoRunConfig,
     instanceNumber
   );
+
   if ((await exists(configFilePath)) && !overwrite) {
     const config = load(await fs.promises.readFile(configFilePath, 'utf8'));
     return config as MongoConfig;

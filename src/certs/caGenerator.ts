@@ -1,8 +1,9 @@
-import {execFileSync} from 'child_process';
 import console from 'console';
-import {existsSync, mkdirSync, unlinkSync, writeFileSync} from 'fs';
+import {promises as fsp} from 'fs';
+import {existsSync} from 'fs';
 import {join} from 'path';
 import {fs} from 'zx';
+import {spawnInherit} from '../utils/spawnInherit.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {CAConfig, CAConfigSchema, GenerateCertsCLIOptions} from './types.js';
 
@@ -25,8 +26,7 @@ export class CAGenerator {
 
     if (existsSync(keyPath) && existsSync(certPath)) {
       if (force) {
-        unlinkSync(keyPath);
-        unlinkSync(certPath);
+        await Promise.allSettled([fsp.unlink(keyPath), fsp.unlink(certPath)]);
       } else {
         this.logger.log(
           `✅ CA already exists at ${caDir}. Use --force to regenerate.`
@@ -38,15 +38,15 @@ export class CAGenerator {
     this.logger.log(`🔑 Generating CA: ${this.config.outDir}`);
 
     // Create output directory
-    mkdirSync(caDir, {recursive: true});
+    await fsp.mkdir(caDir, {recursive: true});
 
     // Generate OpenSSL configuration
     const opensslConfig = this.generateOpenSSLConfig();
     const configPath = join(caDir, `openssl-${this.config.files.key}.cnf`);
-    writeFileSync(configPath, opensslConfig);
+    await fsp.writeFile(configPath, opensslConfig);
 
     try {
-      // Generate private key (use execFileSync so passphrase is not interpreted by shell)
+      // Generate private key (use execFile so passphrase is not interpreted by shell)
       this.logger.log('  Generating private key...');
       const genrsaArgs = this.config.passphrase
         ? [
@@ -59,10 +59,10 @@ export class CAGenerator {
             '4096',
           ]
         : ['genrsa', '-out', keyPath, '4096'];
-      execFileSync('openssl', genrsaArgs, {stdio: 'inherit'});
+      await spawnInherit('openssl', genrsaArgs);
 
       // Set proper permissions
-      execFileSync('chmod', ['400', keyPath], {stdio: 'inherit'});
+      await spawnInherit('chmod', ['400', keyPath]);
 
       // Generate certificate
       this.logger.log('  Generating certificate...');
@@ -95,7 +95,7 @@ export class CAGenerator {
             '-config',
             configPath,
           ];
-      execFileSync('openssl', reqArgs, {stdio: 'inherit'});
+      await spawnInherit('openssl', reqArgs);
 
       this.logger.log(`✅ CA generated successfully at ${caDir}`);
     } catch (error) {
