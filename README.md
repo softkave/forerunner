@@ -55,6 +55,7 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 - [`certs ca`](#generate-certificate-authority) - Generate Certificate Authority
 - [`certs cert`](#generate-certificate) - Generate signed certificate
 - [`certs ssh-key`](#generate-ssh-keypair) - Generate an SSH keypair using `ssh-keygen`
+- [`certs keyfile`](#generate-keyfile) - Generate a keyfile (e.g. MongoDB keyFile)
 
 #### MongoDB Management
 
@@ -164,6 +165,48 @@ softkave-forerunner certs ssh-key -a rsa -b 4096 -C "deploy-key" -p "my-passphra
 
 # Config file mode
 softkave-forerunner certs ssh-key -c ./ssh-key-config.json
+```
+
+#### Generate Keyfile
+
+Generates a keyfile with secure randomness. By default it produces a **MongoDB-compatible** keyFile:
+
+- base64 encoded
+- newline-terminated
+- chmod `0400`
+
+```bash
+softkave-forerunner certs keyfile [options]
+```
+
+**Two modes:**
+
+- **Config file mode**: pass `--config` pointing to a JSON file
+- **Flags mode**: omit `--config` and provide `--path` (required)
+
+**Options:**
+
+- `-c, --config <path>` - Path to keyfile configuration JSON file (optional)
+- `-f, --force` - Force regeneration even if keyfile already exists
+- `-w, --cwd <path>` - Working directory
+- `-P, --path <path>` - Output filepath (**required unless `--config`**)
+- `--format <format>` - `mongodb` | `generic` (default: `mongodb`)
+- `--bytes <bytes>` - Random bytes before encoding (default: 756 for mongodb, 32 for generic)
+- `--encoding <encoding>` - `base64` | `hex` (default: `base64`)
+- `--mode <mode>` - File mode in octal (e.g. `400`, `600`) (default: `400`)
+- `--newline` / `--no-newline` - Append trailing newline (default: append)
+
+**Examples:**
+
+```bash
+# MongoDB keyFile (recommended defaults)
+softkave-forerunner certs keyfile -P ./keyfiles/mongo.keyfile
+
+# Generic hex keyfile
+softkave-forerunner certs keyfile -P ./secrets/app.key --format generic --bytes 64 --encoding hex --mode 600
+
+# Config file mode
+softkave-forerunner certs keyfile -c ./keyfile-config.json
 ```
 
 ### MongoDB Management (`mongo`)
@@ -1341,6 +1384,32 @@ SSH key generation supports a JSON configuration file (used by `certs ssh-key --
 }
 ```
 
+### Keyfile Configuration
+
+Keyfile generation supports a JSON configuration file (used by `certs keyfile --config <path>` and by the SDK via `configFilepath`).
+
+**Options:**
+
+- **`path`** (string, required): output filepath for the keyfile
+- **`format`** (`"mongodb" | "generic"`, optional): default `"mongodb"`
+- **`bytes`** (number, optional): random bytes before encoding (default: 756 for mongodb, 32 for generic). Note: base64 increases length by ~33%, so 756 bytes becomes 1008 chars (plus optional newline), staying under the 1024-char limit.
+- **`encoding`** (`"base64" | "hex"`, optional): default `"base64"` (mongodb requires base64)
+- **`mode`** (number, optional): chmod mode (default `400` / `0o400`)
+- **`newline`** (boolean, optional): append trailing newline (default: true)
+
+**Example keyfile configuration** (`keyfile-config.json`):
+
+```json
+{
+  "path": "./keyfiles/mongo.keyfile",
+  "format": "mongodb",
+  "bytes": 756,
+  "encoding": "base64",
+  "mode": 400,
+  "newline": true
+}
+```
+
 ## SDK Usage
 
 Forerunner can also be used as a Node.js SDK for programmatic access to all functionality.
@@ -1470,6 +1539,33 @@ await generateSSHKey({
 // Or load from a config filepath:
 await generateSSHKey({
   configFilepath: './ssh-key-config.json',
+  force: false,
+  cwd: process.cwd(),
+  logger,
+});
+```
+
+#### Generate Keyfile
+
+```typescript
+import {generateKeyfile, KeyfileConfig} from 'softkave-forerunner';
+
+const keyfileConfig: KeyfileConfig = {
+  path: './keyfiles/mongo.keyfile',
+  format: 'mongodb',
+  // bytes, encoding, mode, newline are optional (reasonable defaults)
+};
+
+await generateKeyfile({
+  config: keyfileConfig,
+  force: false,
+  cwd: process.cwd(),
+  logger,
+});
+
+// Or load from a config filepath:
+await generateKeyfile({
+  configFilepath: './keyfile-config.json',
   force: false,
   cwd: process.cwd(),
   logger,

@@ -9,6 +9,7 @@ import {getVersion} from './version.js';
 import {generateCA} from './certs/caGenerator.js';
 import {generateCert} from './certs/certGenerator.js';
 import {generateSSHKeyFromCliOptions} from './certs/sshKeyGenerator.js';
+import {generateKeyfileFromCliOptions} from './certs/keyfileGenerator.js';
 import {GenerateCertsCLIOptionsSchema} from './certs/types.js';
 
 // Import mongo functionality
@@ -183,6 +184,59 @@ certsProgram
           comment: options.comment,
           passphrase: options.passphrase,
           path: options.path,
+        },
+        logger,
+      });
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Keyfile command
+certsProgram
+  .command('keyfile')
+  .description('Generate a keyfile (default: MongoDB-compatible keyFile)')
+  .option('-c, --config <path>', 'Path to keyfile configuration JSON file')
+  .option('-f, --force', 'Force regeneration even if keyfile already exists')
+  .option('-w, --cwd <path>', 'Working directory')
+  .option('-s, --silent', 'Silent mode')
+  .option(
+    '-P, --path <path>',
+    'Output filepath for the keyfile (required unless --config is provided)'
+  )
+  .option('--format <format>', 'Format: mongodb | generic (default: mongodb)')
+  .option(
+    '--bytes <bytes>',
+    'Random bytes before encoding (default: 96 for mongodb, 32 for generic)'
+  )
+  .option('--encoding <encoding>', 'Encoding: base64 | hex (default: base64)')
+  .option('--mode <mode>', 'File mode (octal like 400, 600; default: 400)')
+  .option('--newline', 'Append trailing newline (default: true)')
+  .option('--no-newline', 'Do not append trailing newline')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+
+    try {
+      const mode =
+        options.mode !== undefined
+          ? parseInt(String(options.mode), 8)
+          : undefined;
+      await generateKeyfileFromCliOptions({
+        opts: {
+          force: options.force,
+          config: options.config,
+          cwd: options.cwd,
+          silent: options.silent,
+          path: options.path,
+          format: options.format,
+          bytes: options.bytes
+            ? parseInt(String(options.bytes), 10)
+            : undefined,
+          encoding: options.encoding,
+          mode,
+          newline: options.newline,
         },
         logger,
       });
