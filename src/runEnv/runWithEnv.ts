@@ -80,7 +80,7 @@ function orderSelectedBasenames(
 
 /**
  * When several `.env*` files exist, prompts for a subset. Space toggles a row,
- * Enter confirms. First file in discovery order starts checked.
+ * Enter confirms.
  */
 async function promptEnvBasenames(discoveryOrder: string[]): Promise<string[]> {
   if (discoveryOrder.length === 1) {
@@ -93,7 +93,6 @@ async function promptEnvBasenames(discoveryOrder: string[]): Promise<string[]> {
     choices: discoveryOrder.map((name, index) => ({
       name,
       value: name,
-      checked: index === 0,
     })),
     required: true,
   });
