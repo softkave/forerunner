@@ -1,7 +1,6 @@
 import {execFile} from 'child_process';
 import crypto from 'crypto';
 import {ensureDir} from 'fs-extra';
-import {chmod} from 'fs/promises';
 import path from 'path';
 import {promisify} from 'util';
 import {
@@ -33,7 +32,7 @@ import {
   MongoRunConfig,
 } from './mongoRunConfig.js';
 import {setupReplicaSet} from './setupReplicaSet.js';
-import {findAdminUser} from './user/findUtils.js';
+import {findAdminUser, findClusterAdminUser} from './user/findUtils.js';
 import {setupMongoUsers} from './user/setupUsers.js';
 
 const kDefaultMongoVersion = '8.2.3';
@@ -230,20 +229,17 @@ export async function startMongodInstance(params: {
   await ensureDir(configDir);
   // Mongo container runs as user 'mongodb' (UID 999); make data and log dirs
   // writable so it can create files.
-  await chmod(path.resolve(dataDir), 0o777);
-  await chmod(path.resolve(systemLogDir), 0o777);
+  // await chmod(path.resolve(dataDir), 0o777);
+  // await chmod(path.resolve(systemLogDir), 0o777);
   await generateMongoDockerConfigForMongod({
     instanceNumber,
     mongoRunConfig,
   });
 
-  logger.log('Data dir:', path.resolve(mongoRunConfig.workingDir, dataDir));
-  logger.log(
-    'System log dir:',
-    path.resolve(mongoRunConfig.workingDir, systemLogDir)
-  );
-  logger.log('Certs dir:', path.resolve(mongoRunConfig.workingDir, certsDir));
-  logger.log('Config dir:', path.resolve(mongoRunConfig.workingDir, configDir));
+  logger.log('Data dir:', path.resolve(dataDir));
+  logger.log('System log dir:', path.resolve(systemLogDir));
+  logger.log('Certs dir:', path.resolve(certsDir));
+  logger.log('Config dir:', path.resolve(configDir));
 
   const nonLocalhostHostnames =
     getNonLocalhostInstanceHostnames(mongoRunConfig);
@@ -438,13 +434,15 @@ export async function startMongoMain(params: {
       users: mongoRunConfig.users,
       isRequired: true,
     });
+    const clusterAdminUser = findClusterAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
     await setupReplicaSet({
       mongoRunConfig,
       logger,
-      authUser: {
-        username: adminUser.username,
-        password: adminUser.password,
-      },
+      adminUser,
+      clusterAdminUser,
     });
     // After setting up replica set, always assert it's ready
     logger.log('Waiting for replica set to be ready...');

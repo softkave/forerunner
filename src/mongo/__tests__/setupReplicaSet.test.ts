@@ -1,13 +1,9 @@
-import {afterAll, beforeAll, describe, test} from 'vitest';
+import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {ConsoleForeLogger} from '../../utils/exports.js';
-import {
-  assertMongoReplicaSetReady,
-  generateMongoPassword,
-  setupReplicaSetMain,
-} from '../index.js';
+import {generateMongoPassword, setupReplicaSetMain} from '../index.js';
 import {MongoRunConfig} from '../mongoRunConfig.js';
-import {restartMongo} from '../restart/restart.js';
-import {cleanupMongoTest} from '../testHelpers.js';
+import {setupReplicaSet} from '../setupReplicaSet.js';
+import {checkAdminCanConnect, cleanupMongoTest} from '../testHelpers.js';
 
 const mongoRunConfig: MongoRunConfig = {
   caConfig: {
@@ -25,31 +21,26 @@ const mongoRunConfig: MongoRunConfig = {
     'test-2.softkave-forerunner-mongo.fimidara.com',
     'test-3.softkave-forerunner-mongo.fimidara.com',
   ],
-  ports: [27030, 27031, 27032],
+  ports: [27070, 27071, 27072],
   users: [
     {
-      username: 'test-user-admin',
+      username: 'test-repl-init-admin',
       roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
       password: generateMongoPassword(),
     },
     {
-      username: 'test-user-cluster-admin',
+      username: 'test-repl-init-cluster-admin',
       roles: [{role: 'clusterAdmin', db: 'admin'}],
       password: generateMongoPassword(),
     },
-    {
-      username: 'test-user-db',
-      roles: [{role: 'readWrite', db: 'test-db'}],
-      password: generateMongoPassword(),
-    },
   ],
-  workingDir: 'testdir/mongo/test-softkave-forerunner-mongo',
+  workingDir: 'testdir/mongo/test-setup-replica-set-idempotent',
   mongoVersion: '8.2.3',
-  replicaSetName: 'test-softkave-forerunner-mongo',
+  replicaSetName: 'test-setup-replica-set-idempotent',
   authorization: 'enabled',
 };
 
-const logger = new ConsoleForeLogger();
+const logger = new ConsoleForeLogger({silent: true});
 
 beforeAll(
   async () => {
@@ -59,6 +50,7 @@ beforeAll(
       logger,
       shouldSetupUsers: true,
     });
+    await checkAdminCanConnect({mongoRunConfig, logger});
   },
   1 * 60 * 1000 // 1 minute
 );
@@ -71,12 +63,20 @@ afterAll(async () => {
   });
 });
 
-describe('restartMongo', () => {
+describe('setupReplicaSet', () => {
   test(
-    'should restart replica set',
+    'does not attempt to initialize when replica set is already initialized',
     async () => {
-      await restartMongo({mongoRunConfig, logger});
-      await assertMongoReplicaSetReady({mongoRunConfig, logger});
+      // If `setupReplicaSet` incorrectly tried `rs.initiate(...)` again, mongosh
+      // would fail with an "already initialized" error and this would throw.
+      await expect(
+        setupReplicaSet({
+          mongoRunConfig,
+          logger,
+          adminUser: mongoRunConfig.users[0],
+          clusterAdminUser: mongoRunConfig.users[1],
+        })
+      ).resolves.toEqual({alreadyInitialized: true});
     },
     1 * 60 * 1000 // 1 minute
   );

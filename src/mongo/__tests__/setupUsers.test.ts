@@ -64,7 +64,6 @@ beforeAll(
       mongoRunConfig: baseConfig,
       logger,
       shouldSetupUsers: false,
-      authUser: baseConfig.users[0],
     });
   },
   1 * 60 * 1000 // 1 minute

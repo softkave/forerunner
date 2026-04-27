@@ -53,7 +53,6 @@ beforeAll(
       mongoRunConfig,
       logger,
       shouldSetupUsers: true,
-      authUser: mongoRunConfig.users[0],
     });
     await checkAdminCanConnect({mongoRunConfig, logger});
   },

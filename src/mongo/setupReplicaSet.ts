@@ -1,11 +1,11 @@
 import assert from 'assert';
 import {execFile} from 'child_process';
+import {promisify} from 'util';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {getDockerContainerName, startMongoMain} from './startMongo.js';
 import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
-import {promisify} from 'util';
 
 const kMongoshFirstInstance = 1;
 const execFileAsync = promisify(execFile);
@@ -91,12 +91,14 @@ async function runMongoshInContainerOrThrow(params: {
 export async function setupReplicaSet(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
-  authUser?: {username: string; password: string};
+  adminUser?: {username: string; password: string};
+  clusterAdminUser?: {username: string; password: string};
 }) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
-    authUser,
+    adminUser,
+    clusterAdminUser,
   } = params;
 
   logger.log('Setting up replica set...');
@@ -107,22 +109,51 @@ export async function setupReplicaSet(params: {
     mongoRunConfig,
     kMongoshFirstInstance
   );
-  const uri = getMongoshConnectionUri({mongoRunConfig, authUser});
+  const adminUri = getMongoshConnectionUri({
+    mongoRunConfig,
+    authUser: adminUser,
+  });
+  const clusterAdminUri = getMongoshConnectionUri({
+    mongoRunConfig,
+    authUser: clusterAdminUser,
+  });
+
+  async function tryRsStatus(uri: string) {
+    try {
+      const {stdout} = await runMongoshInContainer({
+        containerName,
+        uri,
+        script: 'rs.status()',
+        logger,
+      });
+      logger.log('rs.status() output:', stdout);
+      return {initialized: true};
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        'Error checking if replica set is already initialized:',
+        msg
+      );
+      return {
+        initialized: false,
+        notAuthorized: msg.includes('not authorized'),
+      };
+    }
+  }
 
   // Check if replica set is already initialized using mongosh
-  let alreadyInitialized = false;
-  try {
-    await runMongoshInContainer({
-      containerName,
-      uri,
-      script: 'rs.status()',
-      logger,
-    });
-    alreadyInitialized = true;
-    logger.log('Replica set already initialized');
-  } catch {
-    // rs.status() failed => not initialized or other error; we will try to
-    // initiate
+  const [adminRsCheck, clusterAdminRsCheck] = await Promise.all([
+    tryRsStatus(adminUri),
+    tryRsStatus(clusterAdminUri),
+  ]);
+
+  const alreadyInitialized =
+    adminRsCheck.initialized || clusterAdminRsCheck.initialized;
+  const notAuthorized =
+    adminRsCheck.notAuthorized && clusterAdminRsCheck.notAuthorized;
+
+  if (notAuthorized) {
+    throw new Error('Not authorized to check replica set status');
   }
 
   if (!alreadyInitialized) {
@@ -132,12 +163,14 @@ export async function setupReplicaSet(params: {
     const script = `rs.initiate(${JSON.stringify(config)})`;
     await runMongoshInContainerOrThrow({
       containerName,
-      uri,
+      uri: adminUri,
       script,
       logger,
     });
     logger.log('Replica set initialization completed');
   }
+
+  return {alreadyInitialized};
 }
 
 /**
@@ -147,7 +180,6 @@ export async function setupReplicaSetMain(params: {
   mongoRunConfig: MongoRunConfig;
   logger?: IForeLogger;
   shouldSetupUsers?: boolean;
-  authUser?: {username: string; password: string};
 }) {
   // This function is kept for backwards compatibility.
   // It now delegates to startMongodInstancesMain which handles everything.
