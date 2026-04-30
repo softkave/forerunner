@@ -9,6 +9,7 @@ Forerunner is a command-line utility and Node.js SDK designed to streamline deve
 - **Certificate Management**: Generate Certificate Authorities (CAs) and signed certificates
 - **SSH Key Management**: Generate SSH keypairs using `ssh-keygen`
 - **MongoDB Management**: Download, configure, and run MongoDB instances with replica sets
+- **Redis Management**: Run Redis in Docker (single instance, Redis Cluster, or Sentinel-managed replication)
 - **Hosts File Management**: Manage `/etc/hosts` entries for local development
 - **Process Management**: Find, start, and end processes
 - **Run env**: Run arbitrary commands with variables from `.env*` files (explicit paths or discovery with multi-file checkbox selection)
@@ -79,6 +80,15 @@ import {generateCA, initMongo} from 'softkave-forerunner';
 - [`postgres stop`](#stop-postgresql-instance) - Stop PostgreSQL instance
 - [`postgres setup-users`](#setup-postgresql-users) - Setup PostgreSQL users
 - [`postgres setup-dbs`](#setup-postgresql-databases) - Setup PostgreSQL databases
+
+#### Redis Management
+
+- [`redis scaffold-config`](#redis-scaffold-configuration) - Generate Redis configuration file
+- [`redis validate-config`](#redis-validate-configuration) - Validate Redis configuration file
+- [`redis generate-certs`](#redis-generate-certificates) - Generate Redis TLS certificates
+- [`redis start`](#redis-start) - Start Redis (single/cluster/sentinel)
+- [`redis stop`](#redis-stop) - Stop Redis
+- [`redis status`](#redis-status) - Print topology status
 
 #### Hosts File Management
 
@@ -734,6 +744,90 @@ softkave-forerunner security jwt-secret --count 3
 softkave-forerunner security jwt-secret --length 32
 ```
 
+### Redis Management (`redis`)
+
+Redis management via Docker with three supported topologies:
+
+- **single**: one Redis container
+- **cluster**: Redis Cluster (multiple nodes, bootstrapped automatically)
+- **sentinel**: master + replicas + sentinels
+
+**Production-safe defaults**: `discoverability: "local"`, `auth: "enabled"`, `tls: "disabled"`.
+
+**Guardrail**: `discoverability: "global"` requires `auth: "enabled"` unless `allowInsecureGlobal: true` is set.
+
+#### Redis scaffold configuration
+
+```bash
+softkave-forerunner redis scaffold-config [options]
+```
+
+**Options**:
+
+- `--defaults` - Use default values instead of prompting (default: false)
+- `-o, --output <path>` - Output file path (default: `./redis-run-config.json`)
+- `-s, --silent` - Silent mode
+
+#### Redis validate configuration
+
+```bash
+softkave-forerunner redis validate-config -c <config-path> [options]
+```
+
+**Options**: `-c, --config <path>` (required), `-s, --silent`
+
+#### Redis generate certificates
+
+Generates a CA + server certificate under `workingDir/redis-out/certs`. Only required when `tls: "enabled"`.
+
+```bash
+softkave-forerunner redis generate-certs -c <config-path> [options]
+```
+
+**Options**:
+
+- `--overwriteConfig` - Overwrite existing cert config JSON files
+- `--overwriteCA` - Overwrite existing CA
+- `--overwriteCerts` - Overwrite existing server cert/key
+- `-s, --silent` - Silent mode
+
+#### Redis start
+
+```bash
+softkave-forerunner redis start -c <config-path> [options]
+```
+
+**Options**:
+
+- `--no-wait` - Do not wait for readiness checks
+- `-s, --silent` - Silent mode
+
+Behavior:
+
+- Generates per-node config under `workingDir/redis-out/*`.
+- If `auth: "enabled"` and `password` is missing, forerunner generates one and caches it in `workingDir/redis-run-config.json`.
+- For `mode: "cluster"`, forerunner bootstraps the cluster automatically (`redis-cli --cluster create ... --cluster-yes`).
+
+#### Redis stop
+
+```bash
+softkave-forerunner redis stop -c <config-path> [options]
+```
+
+**Options**:
+
+- `--force` - Force stop (kill) containers
+- `--remove-volumes` - Remove volumes even if `keep: true`
+- `-s, --silent` - Silent mode
+
+#### Redis status
+
+```bash
+softkave-forerunner redis status -c <config-path> [options]
+```
+
+Prints per-node PING/role plus cluster/sentinel diagnostics when relevant.
+
 ## Common Options
 
 Most commands support:
@@ -1212,6 +1306,64 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 - **`authorization: "disabled"`**: PostgreSQL uses trust authentication (no password). No users are required.
 - **`authorization: "enabled"`**: PostgreSQL uses scram-sha-256. At least one user with a password is required. pg_hba.conf and postgresql.conf are set for password authentication; setup-users creates/updates users and syncs database permissions and connection types from config.
 - **Discoverability**: By default, instances use `discoverability: "local"` (bind only to `127.0.0.1`). Set `discoverability: "global"` to make the container reachable from all interfaces.
+
+### Redis configuration
+
+#### Single instance example (`mode: "single"`)
+
+```json
+{
+  "mode": "single",
+  "workingDir": "./redis-data",
+  "redisVersion": "8.6.2",
+  "discoverability": "local",
+  "auth": "enabled",
+  "tls": "disabled",
+  "containerName": "redis",
+  "port": 6379,
+  "keep": true,
+  "persistence": {"aof": "enabled", "rdbSnapshots": "enabled"}
+}
+```
+
+##### Cluster example (`mode: "cluster"`)
+
+```json
+{
+  "mode": "cluster",
+  "workingDir": "./redis-cluster",
+  "redisVersion": "8.6.2",
+  "discoverability": "local",
+  "auth": "enabled",
+  "tls": "disabled",
+  "containerNamePrefix": "redis-cluster",
+  "masters": 3,
+  "replicasPerMaster": 1,
+  "basePort": 7000,
+  "keep": true
+}
+```
+
+##### Sentinel example (`mode: "sentinel"`)
+
+```json
+{
+  "mode": "sentinel",
+  "workingDir": "./redis-sentinel",
+  "redisVersion": "8.6.2",
+  "discoverability": "local",
+  "auth": "enabled",
+  "tls": "disabled",
+  "containerNamePrefix": "redis-sentinel",
+  "masterPort": 6379,
+  "replicas": 2,
+  "replicaBasePort": 6381,
+  "sentinels": 3,
+  "sentinelBasePort": 26379,
+  "quorum": 2,
+  "keep": true
+}
+```
 
 ### Certificate Configuration
 

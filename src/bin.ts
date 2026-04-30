@@ -8,8 +8,8 @@ import {getVersion} from './version.js';
 // Import certs functionality
 import {generateCA} from './certs/caGenerator.js';
 import {generateCert} from './certs/certGenerator.js';
-import {generateSSHKeyFromCliOptions} from './certs/sshKeyGenerator.js';
 import {generateKeyfileFromCliOptions} from './certs/keyfileGenerator.js';
+import {generateSSHKeyFromCliOptions} from './certs/sshKeyGenerator.js';
 import {GenerateCertsCLIOptionsSchema} from './certs/types.js';
 
 // Import mongo functionality
@@ -53,6 +53,17 @@ import {
   stopPostgresInstance,
   validatePostgresConfig,
 } from './postgres/index.js';
+
+// Import redis functionality
+import {
+  generateRedisCertsMain,
+  getRedisRunConfig,
+  redisStatusMain,
+  scaffoldRedisConfig,
+  startRedisMain,
+  stopRedisMain,
+  validateRedisConfig,
+} from './redis/index.js';
 
 // Import run-env functionality
 import {runWithEnvMain} from './runEnv/index.js';
@@ -806,6 +817,150 @@ postgresProgram
   });
 
 // ============================================================================
+// REDIS SUB-PROGRAM
+// ============================================================================
+const redisProgram = program
+  .command('redis')
+  .description('Redis management utilities');
+
+redisProgram
+  .command('scaffold-config')
+  .description('Generate Redis configuration file')
+  .option('--defaults', 'Use default values instead of prompting', false)
+  .option('-o, --output <path>', 'Output file path', './redis-run-config.json')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await scaffoldRedisConfig({
+        outputPath: options.output,
+        logger,
+        useDefaults: options.defaults,
+      });
+      logger.log('✅ Redis configuration generated successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+redisProgram
+  .command('validate-config')
+  .description('Validate Redis configuration file and print errors')
+  .requiredOption('-c, --config <path>', 'Path to redis run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      await validateRedisConfig({configPath: options.config, logger});
+    } catch (error) {
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+redisProgram
+  .command('generate-certs')
+  .description('Generate Redis TLS certificates (CA + server cert)')
+  .requiredOption('-c, --config <path>', 'Path to redis run config file')
+  .option('--overwriteConfig', 'Overwrite existing config', false)
+  .option('--overwriteCA', 'Overwrite existing CA', false)
+  .option('--overwriteCerts', 'Overwrite existing certs', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const redisRunConfig = await getRedisRunConfig({
+        redisRunConfigFilepath: options.config,
+      });
+      await generateRedisCertsMain({
+        redisRunConfig,
+        overwriteConfig: options.overwriteConfig,
+        overwriteCA: options.overwriteCA,
+        overwriteCerts: options.overwriteCerts,
+        logger,
+      });
+      logger.log('✅ Redis certificates generation completed successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+redisProgram
+  .command('start')
+  .description('Start Redis (single, cluster, or sentinel) via Docker')
+  .requiredOption('-c, --config <path>', 'Path to redis run config file')
+  .option('--no-wait', 'Do not wait for readiness checks')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const redisRunConfig = await getRedisRunConfig({
+        redisRunConfigFilepath: options.config,
+      });
+      await startRedisMain({
+        redisRunConfig,
+        logger,
+        waitUntilListening: options.wait ?? true,
+      });
+      logger.log('✅ Redis started successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+redisProgram
+  .command('stop')
+  .description('Stop Redis containers')
+  .requiredOption('-c, --config <path>', 'Path to redis run config file')
+  .option('--force', 'Force stop (kill) containers', false)
+  .option('--remove-volumes', 'Remove volumes even if keep=true', false)
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const redisRunConfig = await getRedisRunConfig({
+        redisRunConfigFilepath: options.config,
+      });
+      await stopRedisMain({
+        redisRunConfig,
+        logger,
+        force: options.force,
+        removeVolumes: options.removeVolumes,
+      });
+      logger.log('✅ Redis stopped successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+redisProgram
+  .command('status')
+  .description('Print Redis status for the configured topology')
+  .requiredOption('-c, --config <path>', 'Path to redis run config file')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const redisRunConfig = await getRedisRunConfig({
+        redisRunConfigFilepath: options.config,
+      });
+      await redisStatusMain({redisRunConfig, logger});
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
 // ETC HOSTS SUB-PROGRAM
 // ============================================================================
 const etcHostsProgram = program
@@ -1173,6 +1328,14 @@ COMMANDS:
     setup-users            Sync PostgreSQL users from config with instance
     setup-dbs              Setup PostgreSQL databases
 
+  redis                    Redis management utilities
+    scaffold-config        Generate Redis configuration file
+    validate-config        Validate Redis configuration file
+    generate-certs         Generate Redis TLS certificates
+    start                  Start Redis (single/cluster/sentinel)
+    stop                   Stop Redis containers
+    status                 Print Redis topology status
+
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP
     remove                 Remove hostname from hosts file
@@ -1214,6 +1377,9 @@ EXAMPLES:
 
   # Stop PostgreSQL instance
   softkave-forerunner postgres stop --container-name postgres-db
+
+  # Start Redis (single instance)
+  softkave-forerunner redis start -c redis-run-config.json
 
   # Set a host entry
   softkave-forerunner etc-hosts set example.com 127.0.0.1

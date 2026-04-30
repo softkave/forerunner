@@ -40,6 +40,38 @@ export async function volumeExists(volumeName: string): Promise<boolean> {
   }
 }
 
+export async function removeVolume(volumeName: string): Promise<void> {
+  try {
+    await execFileAsync('docker', ['volume', 'rm', volumeName], {
+      encoding: 'utf8',
+    });
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Create the volume if it does not exist. If `keep=false` and the volume exists,
+ * it is removed and recreated (useful for ephemeral dev/test runs).
+ */
+export async function ensureVolume(params: {
+  volumeName: string;
+  keep: boolean;
+}): Promise<void> {
+  const {volumeName, keep} = params;
+  const exists = await volumeExists(volumeName);
+
+  if (!keep && exists) {
+    await removeVolume(volumeName);
+  }
+
+  if (!(await volumeExists(volumeName))) {
+    await execFileAsync('docker', ['volume', 'create', volumeName], {
+      encoding: 'utf8',
+    });
+  }
+}
+
 export async function ensureDockerAvailable(): Promise<void> {
   try {
     await execFileAsync('docker', ['info'], {encoding: 'utf8'});
@@ -61,4 +93,32 @@ export async function execInContainer(
     {encoding: 'utf8'}
   );
   return String(stdout).trim();
+}
+
+export async function networkExists(networkName: string): Promise<boolean> {
+  try {
+    await execFileAsync('docker', ['network', 'inspect', networkName], {
+      encoding: 'utf8',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function ensureNetwork(networkName: string): Promise<void> {
+  if (await networkExists(networkName)) return;
+  await execFileAsync('docker', ['network', 'create', networkName], {
+    encoding: 'utf8',
+  });
+}
+
+export async function removeNetwork(networkName: string): Promise<void> {
+  try {
+    await execFileAsync('docker', ['network', 'rm', networkName], {
+      encoding: 'utf8',
+    });
+  } catch {
+    // ignore
+  }
 }
