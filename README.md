@@ -635,7 +635,7 @@ Runs a command with variables loaded from dotenv-style files, merged on top of t
 **Usage:**
 
 ```bash
-softkave-forerunner run-env [options] -- <command> [args...]
+softkave-forerunner run-env [options] --cmd <command>
 ```
 
 **Two modes:**
@@ -647,20 +647,23 @@ softkave-forerunner run-env [options] -- <command> [args...]
 **Examples:**
 
 ```bash
-softkave-forerunner run-env -- npm run dev
+softkave-forerunner run-env --cmd "npm run dev"
 
-softkave-forerunner run-env -e .env -e .env.local -- npm run dev
+softkave-forerunner run-env -e .env -e .env.local --cmd "npm run dev"
 
-softkave-forerunner run-env -w ./my-app -e config/.env -- npm run build
+softkave-forerunner run-env -w ./my-app -e config/.env --cmd "npm run build"
 ```
 
 **Options:**
 
 - `-w, --cwd <path>` - Working directory: where the command runs, where relative `--env-file` paths resolve, and where `.env*` discovery runs (default: current directory)
 - `-e, --env-file <path>` - Env file to load; repeat for multiple files in merge order (optional; omit to use discovery / checkbox prompt when several files exist)
+- `--cmd <command>` - Shell command to run (required; quote if it contains multiple words). Named `--cmd` instead of `-c` so it does not collide with `sh -c` or `npx -c`.
 - `-s, --silent` - Silent mode (suppress non-essential output such as which env file(s) were used)
 
 **Behavior:** In discovery mode, if no `.env*` files exist in the chosen directory, the command exits with an error (use `-e` to point at explicit files instead). With `-e`, each path must be readable; missing files produce a clear error.
+
+**Migration:** Older versions accepted the child command after `--` (e.g. `run-env -- npm run dev`). Replace that with `--cmd` (e.g. `run-env --cmd "npm run dev"`).
 
 ### Security Management (`security`)
 
@@ -848,10 +851,10 @@ softkave-forerunner pm children-pids 1234 --silent
 
 ```bash
 # Checkbox prompt when multiple .env* files exist (Space toggles, Enter confirms)
-softkave-forerunner run-env -- npm run dev
+softkave-forerunner run-env --cmd "npm run dev"
 
 # Fixed file list (no prompt); .env.local overrides .env
-softkave-forerunner run-env -e .env -e .env.local -- npm run dev
+softkave-forerunner run-env -e .env -e .env.local --cmd "npm run dev"
 ```
 
 ### Security Management
