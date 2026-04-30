@@ -216,7 +216,10 @@ export async function writeSentinelConf(params: {
   failoverTimeoutMs: number;
   password?: string;
 }) {
-  const {redisRunConfig, sentinelName, ...sentinelConfParams} = params;
+  // Omit only `sentinelName` (paths / folders). `renderSentinelConf` still
+  // needs `redisRunConfig` (e.g. for `auth` / `sentinel auth-pass`).
+  const {sentinelName, ...renderParams} = params;
+  const {redisRunConfig} = renderParams;
   const outDir = path.join(
     redisRunConfig.workingDir,
     'redis-out',
@@ -227,9 +230,7 @@ export async function writeSentinelConf(params: {
     redisRunConfig,
     sentinelName,
   });
-  // sentinelName is used for file layout only; the sentinel config itself
-  // doesn't need to know its container name.
-  const rendered = renderSentinelConf(sentinelConfParams);
+  const rendered = renderSentinelConf(renderParams);
   await fs.promises.writeFile(filepath, rendered, 'utf8');
   return {filepath, outDir: path.resolve(outDir)};
 }

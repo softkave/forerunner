@@ -2,7 +2,7 @@ import fs from 'fs';
 import {ensureFile} from 'fs-extra';
 import path from 'path';
 import z from 'zod';
-import {CAConfigSchema} from '../certs/types.js';
+import {CAConfig, CAConfigSchema} from '../certs/types.js';
 import {generateMongoPassword} from '../mongo/utils.js';
 
 export const RedisDiscoverabilitySchema = z.enum(['local', 'global']);
@@ -31,7 +31,8 @@ export const RedisMaxmemoryPolicySchema = z.enum([
 /**
  * Redis eviction policy applied when `maxmemory` is reached.
  *
- * - **noeviction**: refuse writes that would exceed maxmemory (reads still work).
+ * - **noeviction**: refuse writes that would exceed maxmemory (reads still
+ *   work).
  * - **allkeys-lru**: evict least-recently-used keys across *all* keys.
  * - **allkeys-lfu**: evict least-frequently-used keys across *all* keys.
  * - **allkeys-random**: evict random keys across *all* keys.
@@ -59,51 +60,48 @@ export type RedisMemory = z.infer<typeof RedisMemorySchema>;
 
 export const RedisPersistenceSchema = z
   .object({
-    /**
-     * AOF (Append Only File) persistence.
-     *
-     * When enabled, Redis logs write operations to an append-only log so it can
-     * rebuild state after a restart. This typically gives better durability
-     * (lower data loss) than RDB snapshots, at the cost of more write overhead.
-     *
-     * Contrast with `rdbSnapshots`: RDB saves point-in-time snapshots on a
-     * schedule (e.g. every N seconds if there were N changes). AOF is a log of
-     * writes.
-     */
     aof: RedisPersistenceModeSchema.default('enabled'),
-    /**
-     * RDB snapshot persistence. When enabled and `save` is omitted, we use a
-     * conservative default.
-     *
-     * RDB writes a compact snapshot file (`dump.rdb`) periodically. This can be
-     * faster to load than replaying a long AOF, but may lose more recent writes
-     * since it only captures state at snapshot times.
-     */
     rdbSnapshots: RedisPersistenceModeSchema.default('enabled'),
-    /**
-     * One entry per `save <seconds> <changes>` line.
-     *
-     * Meaning: “after `<seconds>` seconds, if at least `<changes>` keys were
-     * modified, create an RDB snapshot.”
-     *
-     * Example `["900 1", "300 10"]`:
-     * - `save 900 1`: snapshot if *at least 1 write* happened within 15 minutes
-     * - `save 300 10`: snapshot if *at least 10 writes* happened within 5 minutes
-     *
-     * Redis treats multiple `save` lines as OR conditions: if any rule matches,
-     * a background save is triggered.
-     * Only used when `rdbSnapshots=enabled`.
-     */
     save: z.array(z.string().min(1)).optional(),
   })
   .default({aof: 'enabled', rdbSnapshots: 'enabled'});
 
 export interface RedisPersistence {
-  /** AOF persistence on/off. */
+  /**
+   * AOF (Append Only File) persistence.
+   *
+   * When enabled, Redis logs write operations to an append-only log so it can
+   * rebuild state after a restart. This typically gives better durability
+   * (lower data loss) than RDB snapshots, at the cost of more write overhead.
+   *
+   * Contrast with `rdbSnapshots`: RDB saves point-in-time snapshots on a
+   * schedule (e.g. every N seconds if there were N changes). AOF is a log of
+   * writes.
+   */
   aof: RedisPersistenceMode;
-  /** RDB snapshot persistence on/off. */
+  /**
+   * RDB snapshot persistence. When enabled and `save` is omitted, we use a
+   * conservative default.
+   *
+   * RDB writes a compact snapshot file (`dump.rdb`) periodically. This can be
+   * faster to load than replaying a long AOF, but may lose more recent writes
+   * since it only captures state at snapshot times.
+   */
   rdbSnapshots: RedisPersistenceMode;
-  /** Optional `save` rules (see doc above). */
+  /**
+   * One entry per `save <seconds> <changes>` line.
+   *
+   * Meaning: “after `<seconds>` seconds, if at least `<changes>` keys were
+   * modified, create an RDB snapshot.”
+   *
+   * Example `["900 1", "300 10"]`:
+   * - `save 900 1`: snapshot if *at least 1 write* happened within 15 minutes
+   * - `save 300 10`: snapshot if *at least 10 writes* happened within 5 minutes
+   *
+   * Redis treats multiple `save` lines as OR conditions: if any rule matches,
+   * a background save is triggered.
+   * Only used when `rdbSnapshots=enabled`.
+   */
   save?: string[];
 }
 
@@ -123,7 +121,7 @@ export interface RedisTLSConfig {
    */
   tlsPort?: number;
   /** CA config used to generate the certs mounted into containers. */
-  caConfig?: CAConfig;
+  caConfig?: Pick<CAConfig, 'days' | 'subject' | 'passphrase'>;
 }
 
 export const RedisSingleSchema = z.object({
@@ -249,13 +247,6 @@ export const redisRunConfigSchema = z
 
 export type RedisRunConfig = z.infer<typeof redisRunConfigSchema>;
 
-/**
- * Explicit user-facing config types (mirrors `mongoRunConfig.ts` style).
- *
- * These types are meant for:
- * - authoring `redis-run-config.json` confidently
- * - understanding what each field means without reading implementation details
- */
 export interface RedisRunConfigBase {
   /** Working directory where `redis-out/` (generated config/certs) is written. */
   workingDir: string;

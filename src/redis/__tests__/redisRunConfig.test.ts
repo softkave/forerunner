@@ -50,6 +50,9 @@ describe('redisRunConfigSchema', () => {
   test('cluster: defaults and minimum masters', () => {
     const parsed = redisRunConfigSchema.parse({mode: 'cluster'});
     expect(parsed.mode).toBe('cluster');
+    if (parsed.mode !== 'cluster') {
+      throw new Error('expected cluster mode');
+    }
     expect(parsed.masters).toBe(3);
     expect(parsed.replicasPerMaster).toBe(1);
     expect(parsed.basePort).toBe(7000);

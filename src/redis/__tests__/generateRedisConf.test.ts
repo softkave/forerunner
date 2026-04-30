@@ -38,7 +38,6 @@ describe('generateRedisConf', () => {
     const cfg = redisRunConfigSchema.parse({mode: 'sentinel'});
     const sent = renderSentinelConf({
       redisRunConfig: cfg,
-      sentinelName: 'redis-sentinel-sentinel-1',
       sentinelPort: 26379,
       masterName: 'mymaster',
       masterHost: 'redis-sentinel-master',

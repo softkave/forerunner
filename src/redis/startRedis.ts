@@ -445,9 +445,15 @@ export async function startRedisMain(params: {
 
   // Start sentinels (after master exists)
   if (topology.mode === 'sentinel') {
+    if (updatedConfig.mode !== 'sentinel') {
+      throw new Error(
+        'Internal error: sentinel topology requires mode: "sentinel" run config'
+      );
+    }
+    const sentinelRunConfig = updatedConfig;
     for (const s of topology.sentinels) {
       await startSentinel({
-        redisRunConfig: updatedConfig,
+        redisRunConfig: sentinelRunConfig,
         sentinelName: s.name,
         sentinelPort: s.port,
         volumeName: s.volumeName,
@@ -455,9 +461,9 @@ export async function startRedisMain(params: {
         masterName: topology.masterName,
         masterHost: topology.masterName,
         masterPort: topology.nodes[0]!.port,
-        quorum: updatedConfig.quorum,
-        downAfterMs: updatedConfig.downAfterMs,
-        failoverTimeoutMs: updatedConfig.failoverTimeoutMs,
+        quorum: sentinelRunConfig.quorum,
+        downAfterMs: sentinelRunConfig.downAfterMs,
+        failoverTimeoutMs: sentinelRunConfig.failoverTimeoutMs,
         password,
         logger,
       });
