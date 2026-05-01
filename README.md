@@ -635,7 +635,7 @@ Runs a command with variables loaded from dotenv-style files, merged on top of t
 **Usage:**
 
 ```bash
-softkave-forerunner run-env [options] --cmd <command>
+softkave-forerunner run-env [options] --cmd <command> [--cmd-args <args>]
 ```
 
 **Two modes:**
@@ -647,11 +647,11 @@ softkave-forerunner run-env [options] --cmd <command>
 **Examples:**
 
 ```bash
-softkave-forerunner run-env --cmd "npm run dev"
+softkave-forerunner run-env --cmd npm --cmd-args "run dev"
 
-softkave-forerunner run-env -e .env -e .env.local --cmd "npm run dev"
+softkave-forerunner run-env -e .env -e .env.local --cmd npm --cmd-args "run dev"
 
-softkave-forerunner run-env -w ./my-app -e config/.env --cmd "npm run build"
+softkave-forerunner run-env -w ./my-app -e config/.env --cmd npm --cmd-args "run build"
 ```
 
 **Options:**
@@ -659,11 +659,12 @@ softkave-forerunner run-env -w ./my-app -e config/.env --cmd "npm run build"
 - `-w, --cwd <path>` - Working directory: where the command runs, where relative `--env-file` paths resolve, and where `.env*` discovery runs (default: current directory)
 - `-e, --env-file <path>` - Env file to load; repeat for multiple files in merge order (optional; omit to use discovery / checkbox prompt when several files exist)
 - `--cmd <command>` - Shell command to run (required; quote if it contains multiple words). Named `--cmd` instead of `-c` so it does not collide with `sh -c` or `npx -c`.
+- `--cmd-args <args>` - Extra args passed to the command as a single string. Useful when you want `--cmd` to be just the executable (e.g. `--cmd node`) and pass flags separately.
 - `-s, --silent` - Silent mode (suppress non-essential output such as which env file(s) were used)
 
 **Behavior:** In discovery mode, if no `.env*` files exist in the chosen directory, the command exits with an error (use `-e` to point at explicit files instead). With `-e`, each path must be readable; missing files produce a clear error.
 
-**Migration:** Older versions accepted the child command after `--` (e.g. `run-env -- npm run dev`). Replace that with `--cmd` (e.g. `run-env --cmd "npm run dev"`).
+**Migration:** Older versions accepted the child command after `--` (e.g. `run-env -- npm run dev`). Replace that with `--cmd` (and optionally `--cmd-args`) (e.g. `run-env --cmd npm --cmd-args "run dev"`).
 
 ### Security Management (`security`)
 

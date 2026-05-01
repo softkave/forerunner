@@ -72,4 +72,48 @@ describe('bin run-env', () => {
     const out = await readFile(path.join(dir, 'out.txt'), 'utf-8');
     expect(out).toBe('from-env|from-local|from-local');
   });
+
+  test('supports extra args via --cmd-args (passed as one string)', async () => {
+    const dir = path.join(testDir, 'cmd-args');
+    await ensureDir(dir);
+
+    await writeFile(
+      path.join(dir, '.env'),
+      ['FOO=from-env'].join('\n'),
+      'utf-8'
+    );
+    await writeFile(
+      path.join(dir, '.env.local'),
+      ['BAR=from-local'].join('\n'),
+      'utf-8'
+    );
+
+    const cmd = 'node';
+    const cmdArgs = [
+      '-e',
+      `"require('fs').writeFileSync('out.txt', [process.env.FOO, process.env.BAR].join('|'), 'utf-8')"`,
+    ].join(' ');
+
+    const {exitCode} = await runCli(
+      [
+        'run-env',
+        '-w',
+        dir,
+        '-e',
+        '.env',
+        '-e',
+        '.env.local',
+        '--cmd',
+        cmd,
+        '--cmd-args',
+        cmdArgs,
+      ],
+      process.cwd()
+    );
+
+    expect(exitCode).toBe(0);
+
+    const out = await readFile(path.join(dir, 'out.txt'), 'utf-8');
+    expect(out).toBe('from-env|from-local');
+  });
 });

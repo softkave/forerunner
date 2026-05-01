@@ -995,17 +995,23 @@ program
     '--cmd <command>',
     'Shell command to run (quote if it contains spaces; avoids a -c flag so it does not clash with sh or npx)'
   )
+  .option(
+    '--cmd-args <args>',
+    'Extra args for the command (passed as a single string; quote as needed)'
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
-    const command = String(options.cmd ?? '').trim();
-    if (!command) {
+    const baseCmd = String(options.cmd ?? '').trim();
+    if (!baseCmd) {
       logger.error(
-        'Usage: softkave-forerunner run-env [options] --cmd <command>\nExample: softkave-forerunner run-env --cmd "npm run dev"'
+        'Usage: softkave-forerunner run-env [options] --cmd <command> [--cmd-args <args>]\nExample: softkave-forerunner run-env --cmd npm --cmd-args "run dev"'
       );
       logger.onSilentFail(new Error('Missing or empty --cmd'));
       process.exit(1);
     }
+    const cmdArgs = String(options.cmdArgs ?? '').trim();
+    const command = cmdArgs ? `${baseCmd} ${cmdArgs}` : baseCmd;
     const cwd = options.cwd ? String(options.cwd) : process.cwd();
     const envFilePaths = Array.isArray(options.envFile)
       ? options.envFile
@@ -1013,7 +1019,7 @@ program
     try {
       await runWithEnvMain({
         cwd,
-        command: command.trim(),
+        command,
         silent: options.silent,
         logger,
         ...(envFilePaths?.length ? {envFilePaths} : {}),
