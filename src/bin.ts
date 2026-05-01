@@ -979,9 +979,8 @@ pmProgram
 // ============================================================================
 program
   .command('run-env')
-  .allowExcessArguments()
   .description(
-    'Run a command with selected or explicit .env* files (pass command after --)'
+    'Run a command with selected or explicit .env* files (pass command with --cmd)'
   )
   .option(
     '-w, --cwd <path>',
@@ -992,17 +991,19 @@ program
     'Env file to load (repeat for multiple; later overrides earlier). Skips discovery/prompt when set; paths relative to --cwd unless absolute',
     collectEnvFilePath
   )
+  .requiredOption(
+    '--cmd <command>',
+    'Shell command to run (quote if it contains spaces; avoids a -c flag so it does not clash with sh or npx)'
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
-    const dashIndex = process.argv.indexOf('--');
-    const command =
-      dashIndex >= 0 ? process.argv.slice(dashIndex + 1).join(' ') : '';
-    if (!command.trim()) {
+    const command = String(options.cmd ?? '').trim();
+    if (!command) {
       logger.error(
-        'Usage: softkave-forerunner run-env [options] -- <command> [args...]\nExample: softkave-forerunner run-env -- npm run dev'
+        'Usage: softkave-forerunner run-env [options] --cmd <command>\nExample: softkave-forerunner run-env --cmd "npm run dev"'
       );
-      logger.onSilentFail(new Error('Missing command after --'));
+      logger.onSilentFail(new Error('Missing or empty --cmd'));
       process.exit(1);
     }
     const cwd = options.cwd ? String(options.cwd) : process.cwd();
@@ -1184,7 +1185,7 @@ COMMANDS:
     children-pids          Find all child PIDs of a given parent PID
 
   run-env                  Run a command with selected or explicit .env* files
-                           Usage: run-env [options] -- <command> [args...]
+                           Usage: run-env [options] --cmd <command>
                            Use -e/--env-file for a fixed list (no checkbox prompt)
 
   security                 Security utilities
@@ -1228,10 +1229,10 @@ EXAMPLES:
   softkave-forerunner pm children-pids 1234
 
   # Run a command with .env* files (checkbox if several exist)
-  softkave-forerunner run-env -- npm run dev
+  softkave-forerunner run-env --cmd "npm run dev"
 
   # Run with explicit env files (no prompt; later files override earlier)
-  softkave-forerunner run-env -e .env -e .env.local -- npm run dev
+  softkave-forerunner run-env -e .env -e .env.local --cmd "npm run dev"
 
   # Generate a password
   softkave-forerunner security password

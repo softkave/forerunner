@@ -46,7 +46,6 @@ describe('bin run-env', () => {
       'utf-8'
     );
 
-    // run-env passes the command after `--` as a single string; keep it simple.
     const command = [
       'node',
       '-e',
@@ -54,7 +53,17 @@ describe('bin run-env', () => {
     ].join(' ');
 
     const {exitCode} = await runCli(
-      ['run-env', '-w', dir, '-e', '.env', '-e', '.env.local', '--', command],
+      [
+        'run-env',
+        '-w',
+        dir,
+        '-e',
+        '.env',
+        '-e',
+        '.env.local',
+        '--cmd',
+        command,
+      ],
       process.cwd()
     );
 
