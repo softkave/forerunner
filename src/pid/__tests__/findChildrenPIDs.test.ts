@@ -9,7 +9,10 @@ import {
 import {findChildrenPIDs} from '../findChildrenPIDs.js';
 
 const testDir = '.' + path.sep + 'testdir/findChildrenPIDs';
-const childSpawnerPath = path.join(__dirname, '../testHelpers/childSpawner.ts');
+const childSpawnerPath = path.join(
+  __dirname,
+  '../../testHelpers/childSpawner.ts'
+);
 
 const spawnedChildren: ChildProcess[] = [];
 

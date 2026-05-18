@@ -33,6 +33,11 @@ const mongoRunConfig: MongoRunConfig = {
       roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
       password: generateMongoPassword(),
     },
+    {
+      username: 'test-user-cluster-admin',
+      roles: [{role: 'clusterAdmin', db: 'admin'}],
+      password: generateMongoPassword(),
+    },
   ],
   workingDir: 'testdir/mongo/test-softkave-forerunner-mongo',
   mongoVersion: '8.2.3',

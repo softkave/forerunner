@@ -4,10 +4,13 @@ import {readFile, writeFile} from 'fs/promises';
 import path from 'path';
 import {waitTimeout} from 'softkave-js-utils';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {kill} from 'zx';
 import {getProcessGroupId} from '../../pid/getProcessGroupId.js';
 import {getDummyServerCmd} from '../../utils/dummyServer/run.js';
 import {DummyServerSdk} from '../../utils/dummyServer/sdk.js';
+import {
+  stopDummyServer,
+  waitForDummyServer,
+} from '../../utils/dummyServer/testHelpers.js';
 import {startProcess} from '../startProcess.js';
 
 const testDir = '.' + path.sep + 'testdir/startProcess';
@@ -31,6 +34,7 @@ describe('startProcess', () => {
         testDir,
         faker.number.int({min: 10_000}).toString()
       );
+      await ensureDir(logsFolderpath);
       const {cmd, port} = getDummyServerCmd();
       const sdk = new DummyServerSdk({port});
 
@@ -49,10 +53,8 @@ describe('startProcess', () => {
         cwd: process.cwd(),
       });
 
-      const pidNo = Number(pid);
-
       try {
-        await waitTimeout(1_000);
+        await waitForDummyServer(sdk);
 
         const echoMsg = 'hello, world!';
         const echoResponse = await sdk.postEcho({message: echoMsg});
@@ -66,7 +68,7 @@ describe('startProcess', () => {
           `"${logs}" does not contain "${logMsg}"`
         ).toBeTruthy();
       } finally {
-        await kill(pidNo);
+        await stopDummyServer(sdk);
       }
     }
   );
@@ -81,6 +83,7 @@ describe('startProcess', () => {
         testDir,
         faker.number.int({min: 10_000}).toString()
       );
+      await ensureDir(logsFolderpath);
       const {cmd, port} = getDummyServerCmd();
       const sdk = new DummyServerSdk({port});
 
@@ -91,7 +94,7 @@ describe('startProcess', () => {
       await ensureFile(cmdFilepath);
       await writeFile(cmdFilepath, cmd);
 
-      const {pid, logsFilepath, errorLogsFilepath} = await startProcess({
+      const {logsFilepath, errorLogsFilepath} = await startProcess({
         name: instanceName,
         startCmdFilepath: cmdFilepath,
         runName,
@@ -99,10 +102,8 @@ describe('startProcess', () => {
         cwd: process.cwd(),
       });
 
-      const pidNo = Number(pid);
-
       try {
-        await waitTimeout(1_000);
+        await waitForDummyServer(sdk);
 
         // Verify the process is running and responding
         const echoMsg = 'hello, world!';
@@ -138,7 +139,7 @@ describe('startProcess', () => {
         console.log('Stdout logs:', stdoutLogs);
         console.log('Stderr logs:', stderrLogs);
       } finally {
-        await kill(pidNo);
+        await stopDummyServer(sdk);
       }
     }
   );
@@ -146,12 +147,17 @@ describe('startProcess', () => {
   test(
     'multiple processes each get their own process group (setsid behavior)',
     {timeout: 30_000},
-    async () => {
+    async ctx => {
+      const selfPgid = await getProcessGroupId(process.pid);
+      if (!selfPgid) {
+        ctx.skip();
+      }
       const runName = faker.lorem.word();
       const logsFolderpath = path.join(
         testDir,
         faker.number.int({min: 10_000}).toString()
       );
+      await ensureDir(logsFolderpath);
 
       // Start two processes
       const processes = [];
@@ -188,18 +194,23 @@ describe('startProcess', () => {
       }
 
       try {
-        await waitTimeout(1_000);
+        for (const proc of processes) {
+          await waitForDummyServer(proc.sdk);
+        }
 
         // Verify both processes are running
-        for (const process of processes) {
+        for (const proc of processes) {
           const echoMsg = 'hello, world!';
-          const echoResponse = await process.sdk.postEcho({message: echoMsg});
+          const echoResponse = await proc.sdk.postEcho({message: echoMsg});
           expect(echoMsg).toBe(echoResponse);
         }
 
-        // Verify both processes have PGIDs (they may be different since each gets its own group)
+        // Verify both server processes have PGIDs (use HTTP pid, not the shell wrapper pid)
         const pgids = await Promise.all(
-          processes.map(p => getProcessGroupId(Number(p.pid)))
+          processes.map(async proc => {
+            const {pid: serverPid} = await proc.sdk.getPid();
+            return getProcessGroupId(Number(serverPid));
+          })
         );
         expect(pgids[0]).toBeDefined();
         expect(pgids[1]).toBeDefined();
@@ -210,12 +221,7 @@ describe('startProcess', () => {
         const pgidNumbers = pgids.map(pgid => Number(pgid));
         expect(pgidNumbers[0]).not.toBe(pgidNumbers[1]);
       } finally {
-        // Clean up all processes
-        await Promise.all(
-          processes.map(async process => {
-            await kill(Number(process.pid));
-          })
-        );
+        await Promise.all(processes.map(proc => stopDummyServer(proc.sdk)));
       }
     }
   );

@@ -8,8 +8,8 @@ import {getVersion} from './version.js';
 // Import certs functionality
 import {generateCA} from './certs/caGenerator.js';
 import {generateCert} from './certs/certGenerator.js';
-import {generateSSHKeyFromCliOptions} from './certs/sshKeyGenerator.js';
 import {generateKeyfileFromCliOptions} from './certs/keyfileGenerator.js';
+import {generateSSHKeyFromCliOptions} from './certs/sshKeyGenerator.js';
 import {GenerateCertsCLIOptionsSchema} from './certs/types.js';
 
 // Import mongo functionality
@@ -63,6 +63,10 @@ function collectEnvFilePath(value: string, previous?: string[]): string[] {
 }
 
 // Import security functionality
+import {
+  startProcessCLI,
+  StartProcessCLIOptionsSchema,
+} from './process/index.js';
 import {generateJwtSecret, generatePassword} from './security/index.js';
 
 const program = new Command();
@@ -942,6 +946,58 @@ const pmProgram = program
   .command('pm')
   .description('Process management utilities');
 
+// Start a background process and record its PID
+pmProgram
+  .command('start')
+  .description(
+    'Start a background process from a script file, with logs and PID tracking'
+  )
+  .requiredOption('--name <name>', 'Application name written to the PID file')
+  .option(
+    '--run-name <runName>',
+    'Run name used for log file prefixes (defaults to --name)'
+  )
+  .requiredOption(
+    '--start-cmd <path>',
+    'Path to the start script (run via bash if not executable)'
+  )
+  .requiredOption(
+    '--logs-dir <path>',
+    'Directory where stdout/stderr log files are written'
+  )
+  .option('--cwd <path>', 'Working directory for the started process')
+  .option('--pids-file <path>', 'File path where the process PID is recorded')
+  .option(
+    '-e, --env-file <path>',
+    'Env file to load (repeat for multiple; later overrides earlier). Paths relative to --cwd unless absolute',
+    collectEnvFilePath
+  )
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    const cwd = options.cwd ? String(options.cwd) : process.cwd();
+    const envFilePaths = Array.isArray(options.envFile)
+      ? options.envFile
+      : undefined;
+    try {
+      const cliOptions = StartProcessCLIOptionsSchema.parse({
+        name: options.name,
+        runName: options.runName,
+        startCmd: options.startCmd,
+        cwd,
+        logsDir: options.logsDir,
+        pidsFile: options.pidsFile,
+        envFilePaths,
+        silent: options.silent,
+      });
+      await startProcessCLI({opts: cliOptions, logger});
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
 // Find children PIDs command
 pmProgram
   .command('children-pids')
@@ -1188,6 +1244,7 @@ COMMANDS:
     restore                Restore hosts file from backup
 
   pm                       Process management utilities
+    start                  Start a background process with PID and log tracking
     children-pids          Find all child PIDs of a given parent PID
 
   run-env                  Run a command with selected or explicit .env* files
@@ -1230,6 +1287,11 @@ EXAMPLES:
 
   # Backup hosts file
   softkave-forerunner etc-hosts backup
+
+  # Start a background app instance
+  softkave-forerunner pm start --name my-app \\
+    --start-cmd ./start.sh --cwd /var/run/my-app-0 --logs-dir ./logs \\
+    --pids-file ./pids/my-app-0 -e .env -e .env.local
 
   # Find child processes of a PID
   softkave-forerunner pm children-pids 1234
