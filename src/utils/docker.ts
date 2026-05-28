@@ -40,6 +40,36 @@ export async function volumeExists(volumeName: string): Promise<boolean> {
   }
 }
 
+/**
+ * Runs a one-off container as root with a host directory bind-mounted
+ * read-write, typically to adjust ownership/modes on files used by that image
+ * at runtime.
+ */
+export async function runDockerOneOffAsRoot(params: {
+  image: string;
+  hostBindPath: string;
+  containerMountPath: string;
+  shellCommand: string;
+}): Promise<void> {
+  const {image, hostBindPath, containerMountPath, shellCommand} = params;
+  await execFileAsync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '-v',
+      `${hostBindPath}:${containerMountPath}:rw`,
+      '-u',
+      'root',
+      image,
+      'sh',
+      '-c',
+      shellCommand,
+    ],
+    {encoding: 'utf8'}
+  );
+}
+
 export async function ensureDockerAvailable(): Promise<void> {
   try {
     await execFileAsync('docker', ['info'], {encoding: 'utf8'});

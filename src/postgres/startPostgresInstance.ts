@@ -388,6 +388,10 @@ export async function startPostgresInstance(params: {
   // Generate SSL certificates if needed
   await ensureSSLCertificates({postgresRunConfig, logger});
 
+  if (postgresRunConfig.ssl === 'enabled') {
+    await ensurePostgresSslCertPermissions(postgresRunConfig, {logger});
+  }
+
   // Ensure volume exists
   await ensureVolume({
     volumeName,
@@ -489,7 +493,7 @@ export async function startPostgresInstance(params: {
       clientClosed = true;
 
       if (sslConfChanged) {
-        await ensurePostgresSslCertPermissions(postgresRunConfig);
+        await ensurePostgresSslCertPermissions(postgresRunConfig, {logger});
         await restartPostgresContainer({containerName, logger});
         await waitForPostgresReady({
           postgresRunConfig,

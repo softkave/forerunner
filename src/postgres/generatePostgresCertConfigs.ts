@@ -1,11 +1,13 @@
 import assert from 'assert';
 import fs from 'fs';
-import {chmod} from 'fs/promises';
 import {ensureFile, exists} from 'fs-extra';
+import {chmod} from 'fs/promises';
 import path from 'path';
 import {CAConfig, CertConfig} from '../certs/types.js';
+import {IForeLogger} from '../utils/foreLogger/types.js';
 import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
+import {setBindMountOwnershipForPostgresSslCerts} from './postgresSslCertOwnership.js';
 import {generateRandomPassword} from './utils.js';
 
 /** Cert output directory name, relative to run config `workingDir`. */
@@ -145,14 +147,36 @@ export async function generateCertConfigForPostgres(params: {
   return postgresCertConfig;
 }
 
-/** Postgres refuses SSL when the server private key is group/world-readable. */
+/**
+ * Host-side SSL cert permissions for bind-mounting into the postgres image.
+ * Mode must be 600 and the key must be owned by the container `postgres` user.
+ */
 export async function ensurePostgresSslCertPermissions(
-  postgresRunConfig: PostgresRunConfig
+  postgresRunConfig: PostgresRunConfig,
+  options?: {logger?: IForeLogger}
 ): Promise<void> {
   const certDir = await resolvePostgresCertOutDir(postgresRunConfig);
   const keyPath = path.join(certDir, 'server.key.pem');
-  if (await exists(keyPath)) {
-    await chmod(keyPath, 0o600);
+  if (!(await exists(keyPath))) {
+    return;
+  }
+
+  await chmod(keyPath, 0o600);
+
+  const postgresVersion = postgresRunConfig.postgresVersion;
+  try {
+    await setBindMountOwnershipForPostgresSslCerts({
+      hostCertDir: certDir,
+      postgresVersion,
+    });
+    options?.logger?.log(
+      'Set SSL certificate ownership for Postgres (postgres:postgres)'
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to set SSL certificate ownership for Docker mount at ${certDir}: ${msg}`
+    );
   }
 }
 

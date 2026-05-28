@@ -50,5 +50,5 @@ export async function generatePostgresCertsMain(params: {
     },
     logger,
   });
-  await ensurePostgresSslCertPermissions(postgresRunConfig);
+  await ensurePostgresSslCertPermissions(postgresRunConfig, {logger});
 }
