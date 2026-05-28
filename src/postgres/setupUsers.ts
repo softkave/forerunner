@@ -433,6 +433,7 @@ export async function setupPostgresUsers(params: {
         authMethod,
         requireSSL: sslEnabled,
         connectionTypes: user.connectionTypes,
+        discoverability: postgresRunConfig.discoverability,
       });
       pgHbaEntries.push(entries);
     }

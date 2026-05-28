@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {
   generatePgHbaEntriesForUser,
+  getPgHbaTcpAddresses,
   pgHbaRequiresSSL,
   setPgHbaRequireSSL,
   setPgHbaToScram,
@@ -65,6 +66,45 @@ describe('generatePgHbaEntriesForUser', () => {
     });
     expect(out).toContain('hostssl all eve 127.0.0.1/32 scram-sha-256');
     expect(out).not.toContain('host all eve');
+  });
+
+  test('with discoverability global, allows all IPv4 and IPv6 clients', () => {
+    const out = generatePgHbaEntriesForUser({
+      username: 'frank',
+      databases: undefined,
+      authMethod: 'scram-sha-256',
+      requireSSL: true,
+      discoverability: 'global',
+    });
+    expect(out).toContain('hostssl all frank 0.0.0.0/0 scram-sha-256');
+    expect(out).toContain('hostssl all frank ::/0 scram-sha-256');
+  });
+
+  test('with discoverability local, does not allow all clients', () => {
+    const out = generatePgHbaEntriesForUser({
+      username: 'grace',
+      databases: undefined,
+      authMethod: 'scram-sha-256',
+      discoverability: 'local',
+    });
+    expect(out).not.toContain('0.0.0.0/0');
+    expect(out).not.toContain('::/0');
+  });
+});
+
+describe('getPgHbaTcpAddresses', () => {
+  test('local includes docker bridge ranges only', () => {
+    expect(getPgHbaTcpAddresses('local')).toEqual([
+      '127.0.0.1/32',
+      '::1/128',
+      '172.17.0.0/16',
+      '192.168.65.1/32',
+    ]);
+  });
+
+  test('global adds all-address CIDRs', () => {
+    expect(getPgHbaTcpAddresses('global')).toContain('0.0.0.0/0');
+    expect(getPgHbaTcpAddresses('global')).toContain('::/0');
   });
 });
 

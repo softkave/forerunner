@@ -274,6 +274,7 @@ async function configurePostgresAuthorization(params: {
         authMethod,
         requireSSL: sslEnabled,
         connectionTypes: user.connectionTypes,
+        discoverability: postgresRunConfig.discoverability,
       });
       pgHbaEntries.push(entries);
     }

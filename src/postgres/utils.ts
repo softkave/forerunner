@@ -93,6 +93,27 @@ export function generatePostgresPassword(): string {
   });
 }
 
+/** TCP client address CIDRs used in generated `pg_hba.conf` host/hostssl lines. */
+export function getPgHbaTcpAddresses(
+  discoverability: 'local' | 'global' = 'local'
+): string[] {
+  // Docker networking note:
+  // - On Linux Docker, host->container via published ports often appears as
+  //   172.17.0.1 (docker0 gateway).
+  // - On Docker Desktop (macOS/Windows), host->container often appears as
+  //   192.168.65.1.
+  const addresses = [
+    '127.0.0.1/32',
+    '::1/128',
+    '172.17.0.0/16', // Docker default bridge
+    '192.168.65.1/32', // Docker Desktop host gateway (common)
+  ];
+  if (discoverability === 'global') {
+    addresses.push('0.0.0.0/0', '::/0');
+  }
+  return addresses;
+}
+
 /**
  * Generate pg_hba.conf entries for a user with specific database access
  */
@@ -102,6 +123,8 @@ export function generatePgHbaEntriesForUser(params: {
   authMethod: 'trust' | 'scram-sha-256';
   requireSSL?: boolean;
   connectionTypes?: ('tcp' | 'local')[];
+  /** When `global`, allow remote clients (all IPv4/IPv6). Default `local`. */
+  discoverability?: 'local' | 'global';
 }): string {
   const {
     username,
@@ -109,23 +132,13 @@ export function generatePgHbaEntriesForUser(params: {
     authMethod,
     requireSSL = false,
     connectionTypes = ['tcp', 'local'], // Default: allow both
+    discoverability = 'local',
   } = params;
   const entries: string[] = [];
   const allowTCP = connectionTypes.includes('tcp');
   const allowLocal = connectionTypes.includes('local');
   const connectionType = requireSSL ? 'hostssl' : 'host';
-
-  // Docker networking note:
-  // - On Linux Docker, host->container via published ports often appears as
-  //   172.17.0.1 (docker0 gateway).
-  // - On Docker Desktop (macOS/Windows), host->container often appears as
-  //   192.168.65.1.
-  const tcpAddresses = [
-    '127.0.0.1/32',
-    '::1/128',
-    '172.17.0.0/16', // Docker default bridge
-    '192.168.65.1/32', // Docker Desktop host gateway (common)
-  ];
+  const tcpAddresses = getPgHbaTcpAddresses(discoverability);
 
   if (databases && databases.length > 0) {
     // User has specific database access
