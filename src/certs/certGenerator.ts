@@ -1,7 +1,9 @@
 import {promises as fsp} from 'fs';
 import {join} from 'path';
 import {fs} from 'zx';
+import {fileExists} from '../utils/file.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {spawnInherit} from '../utils/spawnInherit.js';
 import {
   CertConfig,
@@ -9,31 +11,29 @@ import {
   GenerateCertsCLIOptions,
 } from './types.js';
 
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await fsp.access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export class CertGenerator {
   private config: CertConfig;
   private logger: IForeLogger;
+  private cwd?: string;
 
-  constructor(params: {config: CertConfig; logger: IForeLogger}) {
+  constructor(params: {config: CertConfig; logger: IForeLogger; cwd?: string}) {
     this.config = params.config;
     this.logger = params.logger;
+    this.cwd = params.cwd;
   }
 
   /**
    * Generate certificate if it doesn't exist or if force is true
    */
   async generate(force = false): Promise<void> {
-    const certDir = join(this.config.outDir);
-    const keyPath = join(certDir, this.config.files.key);
-    const certPath = join(certDir, this.config.files.cert);
+    let certDir = this.config.outDir;
+    let keyPath = join(certDir, this.config.files.key);
+    let certPath = join(certDir, this.config.files.cert);
+    if (this.cwd) {
+      certDir = resolvePathUnderWorkingDir(this.cwd, certDir);
+      keyPath = resolvePathUnderWorkingDir(this.cwd, keyPath);
+      certPath = resolvePathUnderWorkingDir(this.cwd, certPath);
+    }
 
     if ((await fileExists(keyPath)) && (await fileExists(certPath))) {
       if (force) {
@@ -53,7 +53,10 @@ export class CertGenerator {
 
     // Generate OpenSSL configuration with SAN
     const opensslConfig = this.generateOpenSSLConfig();
-    const configPath = join(certDir, `openssl-${this.config.files.key}.cnf`);
+    let configPath = join(certDir, `openssl-${this.config.files.key}.cnf`);
+    if (this.cwd) {
+      configPath = resolvePathUnderWorkingDir(this.cwd, configPath);
+    }
     await fsp.writeFile(configPath, opensslConfig);
 
     try {
@@ -74,7 +77,10 @@ export class CertGenerator {
 
       // Generate CSR
       this.logger.log('  Generating CSR...');
-      const csrPath = join(certDir, this.config.files.csr);
+      let csrPath = join(certDir, this.config.files.csr);
+      if (this.cwd) {
+        csrPath = resolvePathUnderWorkingDir(this.cwd, csrPath);
+      }
       const csrArgs = this.config.passphrase
         ? [
             'req',
@@ -102,8 +108,12 @@ export class CertGenerator {
 
       // Sign certificate with CA
       this.logger.log('  Signing certificate with CA...');
-      const caKeyPath = join(this.config.ca.dir, 'ca.key.pem');
-      const caCertPath = join(this.config.ca.dir, 'ca.crt.pem');
+      let caKeyPath = join(this.config.ca.dir, 'ca.key.pem');
+      let caCertPath = join(this.config.ca.dir, 'ca.crt.pem');
+      if (this.cwd) {
+        caKeyPath = resolvePathUnderWorkingDir(this.cwd, caKeyPath);
+        caCertPath = resolvePathUnderWorkingDir(this.cwd, caCertPath);
+      }
 
       if (!(await fileExists(caKeyPath)) || !(await fileExists(caCertPath))) {
         throw new Error(`CA files not found at ${this.config.ca.dir}`);
@@ -136,8 +146,12 @@ export class CertGenerator {
 
       // Create full chain
       this.logger.log('  Creating full chain...');
-      const fullchainPath = join(certDir, this.config.files.fullchain);
-      const caChainPath = join(this.config.ca.dir, 'ca-chain.pem');
+      let fullchainPath = join(certDir, this.config.files.fullchain);
+      let caChainPath = join(this.config.ca.dir, 'ca-chain.pem');
+      if (this.cwd) {
+        fullchainPath = resolvePathUnderWorkingDir(this.cwd, fullchainPath);
+        caChainPath = resolvePathUnderWorkingDir(this.cwd, caChainPath);
+      }
 
       {
         const certPem = await fsp.readFile(certPath, 'utf8');
@@ -150,11 +164,13 @@ export class CertGenerator {
 
       if (this.config.files.crtAndKey) {
         this.logger.log('  Creating CRT and key...');
-        const crtAndKeyPath = join(certDir, this.config.files.crtAndKey);
+        let crtAndKeyPath = join(certDir, this.config.files.crtAndKey);
+        if (this.cwd) {
+          crtAndKeyPath = resolvePathUnderWorkingDir(this.cwd, crtAndKeyPath);
+        }
         const certPem = await fsp.readFile(certPath, 'utf8');
         const keyPem = await fsp.readFile(keyPath, 'utf8');
-        await fsp.writeFile(crtAndKeyPath, certPem);
-        await fsp.appendFile(crtAndKeyPath, keyPem);
+        await fsp.writeFile(crtAndKeyPath, certPem + keyPem);
       }
 
       this.logger.log(`✅ Certificate generated successfully at ${certDir}`);
@@ -221,21 +237,33 @@ subjectAltName = @alt_names
    * Get certificate path
    */
   getCertPath(): string {
-    return join(this.config.outDir, this.config.files.cert);
+    let certPath = join(this.config.outDir, this.config.files.cert);
+    if (this.cwd) {
+      certPath = resolvePathUnderWorkingDir(this.cwd, certPath);
+    }
+    return certPath;
   }
 
   /**
    * Get key path
    */
   getKeyPath(): string {
-    return join(this.config.outDir, this.config.files.key);
+    let keyPath = join(this.config.outDir, this.config.files.key);
+    if (this.cwd) {
+      keyPath = resolvePathUnderWorkingDir(this.cwd, keyPath);
+    }
+    return keyPath;
   }
 
   /**
    * Get full chain path
    */
   getFullchainPath(): string {
-    return join(this.config.outDir, this.config.files.fullchain);
+    let fullchainPath = join(this.config.outDir, this.config.files.fullchain);
+    if (this.cwd) {
+      fullchainPath = resolvePathUnderWorkingDir(this.cwd, fullchainPath);
+    }
+    return fullchainPath;
   }
 }
 
@@ -244,14 +272,18 @@ export async function generateCert(params: {
   logger: IForeLogger;
 }) {
   // Read and parse config file
-  if (params.opts.cwd) {
-    process.chdir(params.opts.cwd);
-  }
-  const configContent = await fs.promises.readFile(params.opts.config, 'utf-8');
+  const configPath = params.opts.cwd
+    ? resolvePathUnderWorkingDir(params.opts.cwd, params.opts.config)
+    : params.opts.config;
+  const configContent = await fs.promises.readFile(configPath, 'utf-8');
   const config = CertConfigSchema.parse(JSON.parse(configContent));
 
   // Generate certificate
-  const certGenerator = new CertGenerator({config, logger: params.logger});
+  const certGenerator = new CertGenerator({
+    config,
+    logger: params.logger,
+    cwd: params.opts.cwd,
+  });
   await certGenerator.generate(params.opts.force);
 
   params.logger.log('✅ Certificate generation completed successfully');

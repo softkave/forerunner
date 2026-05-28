@@ -13,7 +13,7 @@ describe('postgresRunConfigSchema', () => {
 
   test('accepts minimal valid config and applies defaults', () => {
     const parsed = postgresRunConfigSchema.parse(baseConfig);
-    expect(parsed.workingDir).toBe(process.cwd());
+    expect(parsed.workingDir).toBe('.');
     expect(parsed.postgresVersion).toBe('16');
     expect(parsed.volumeName).toBe('test-pg');
     expect(parsed.keep).toBe(false);

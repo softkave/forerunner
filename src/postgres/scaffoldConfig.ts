@@ -33,13 +33,8 @@ async function promptForConfig(
     logger.log('PostgreSQL Configuration Scaffold');
     logger.log('Press Enter to use defaults (shown in brackets)');
 
-    const workingDir = await question(
-      rl,
-      `Working directory [${process.cwd()}]: `
-    );
-    if (workingDir.trim()) {
-      config.workingDir = workingDir.trim();
-    }
+    const workingDir = await question(rl, 'Working directory [.]: ');
+    config.workingDir = workingDir.trim() || '.';
 
     const portStr = await question(rl, 'Port [5432]: ');
     if (portStr.trim()) {
@@ -66,9 +61,9 @@ async function promptForConfig(
 
     const keepStr = await question(
       rl,
-      'Keep data across restarts? (y/n) [n]: '
+      'Keep data across restarts? (y/n) [y]: '
     );
-    config.keep = keepStr.trim().toLowerCase() === 'y';
+    config.keep = keepStr.trim() === '' || keepStr.trim().toLowerCase() === 'y';
 
     const discoverabilityStr = await question(
       rl,
@@ -211,7 +206,7 @@ async function promptForConfig(
       let finalPassword: string | undefined;
       if (!adminPassword.trim()) {
         finalPassword = generatePostgresPassword();
-        logger.log(`✅ Auto-generated password: ${finalPassword}`);
+        logger.log('Password auto-generated.');
       } else {
         finalPassword = adminPassword.trim();
       }
@@ -293,7 +288,7 @@ async function promptForConfig(
           finalPassword = password.trim();
         } else {
           finalPassword = generatePostgresPassword();
-          logger.log(`✅ Auto-generated password: ${finalPassword}`);
+          logger.log('Password auto-generated.');
         }
         users.push({
           username: username.trim(),
@@ -317,12 +312,12 @@ async function promptForConfig(
 
 function getDefaultConfig(): PostgresRunConfig {
   return {
-    workingDir: process.cwd(),
+    workingDir: '.',
     port: 5432,
     containerName: 'postgres-db',
     volumeName: 'postgres-db',
     postgresVersion: '16',
-    keep: false,
+    keep: true,
     discoverability: 'local',
     authorization: 'enabled',
     ssl: 'enabled',

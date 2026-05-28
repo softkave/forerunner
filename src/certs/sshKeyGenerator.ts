@@ -1,7 +1,9 @@
 import {promises as fsp} from 'fs';
 import {dirname, join} from 'path';
 import {fs} from 'zx';
+import {fileExists} from '../utils/file.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {spawnInherit} from '../utils/spawnInherit.js';
 import {
   GenerateSSHKeyCLIOptions,
@@ -10,8 +12,15 @@ import {
   SSHKeygenConfigSchema,
 } from './types.js';
 
-async function resolveOutputFilepath(config: SSHKeygenConfig): Promise<string> {
-  const p = config.path.trim();
+async function resolveOutputFilepath(
+  config: SSHKeygenConfig,
+  cwd?: string
+): Promise<string> {
+  let p = config.path.trim();
+  if (cwd) {
+    p = resolvePathUnderWorkingDir(cwd, p);
+  }
+
   if (!p) {
     throw new Error('Path is required');
   }
@@ -47,33 +56,30 @@ async function resolveOutputFilepath(config: SSHKeygenConfig): Promise<string> {
   return p;
 }
 
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await fsp.access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export class SSHKeyGenerator {
   private config: SSHKeygenConfig;
   private logger: IForeLogger;
+  private cwd?: string;
 
-  constructor(params: {config: SSHKeygenConfig; logger: IForeLogger}) {
+  constructor(params: {
+    config: SSHKeygenConfig;
+    logger: IForeLogger;
+    cwd?: string;
+  }) {
     this.config = params.config;
     this.logger = params.logger;
+    this.cwd = params.cwd;
   }
 
   async generate(
     force = false
   ): Promise<{privateKeyPath: string; publicKeyPath: string}> {
-    const privateKeyPath = await resolveOutputFilepath(this.config);
+    const privateKeyPath = await resolveOutputFilepath(this.config, this.cwd);
     const publicKeyPath = `${privateKeyPath}.pub`;
 
     if (
       !force &&
-      ((await pathExists(privateKeyPath)) || (await pathExists(publicKeyPath)))
+      ((await fileExists(privateKeyPath)) || (await fileExists(publicKeyPath)))
     ) {
       this.logger.log(
         `✅ SSH key already exists at ${privateKeyPath}. Use --force to overwrite.`
@@ -157,8 +163,6 @@ export async function generateSSHKey(params: {
   force?: boolean;
   logger: IForeLogger;
 }) {
-  if (params.cwd) process.chdir(params.cwd);
-
   let config: SSHKeygenConfig;
   if (params.config) {
     config = SSHKeygenConfigSchema.parse(params.config);
@@ -173,7 +177,11 @@ export async function generateSSHKey(params: {
     config = SSHKeygenConfigSchema.parse(JSON.parse(configContent));
   }
 
-  const generator = new SSHKeyGenerator({config, logger: params.logger});
+  const generator = new SSHKeyGenerator({
+    config,
+    logger: params.logger,
+    cwd: params.cwd,
+  });
   return await generator.generate(params.force ?? false);
 }
 
@@ -182,13 +190,12 @@ export async function generateSSHKeyFromCliOptions(params: {
   logger: IForeLogger;
 }) {
   const opts = GenerateSSHKeyCLIOptionsSchema.parse(params.opts);
-  if (opts.cwd) process.chdir(opts.cwd);
 
   // If a config file is provided, use it.
   if (opts.config) {
     await generateSSHKey({
       configFilepath: opts.config,
-      cwd: undefined,
+      cwd: opts.cwd,
       force: opts.force,
       logger: params.logger,
     });
@@ -210,6 +217,11 @@ export async function generateSSHKeyFromCliOptions(params: {
     path: opts.path ?? './ssh-keys/',
   };
 
-  await generateSSHKey({config, force: opts.force, logger: params.logger});
+  await generateSSHKey({
+    config,
+    force: opts.force,
+    logger: params.logger,
+    cwd: opts.cwd,
+  });
   params.logger.log('✅ SSH key generation completed successfully');
 }

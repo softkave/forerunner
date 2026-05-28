@@ -4,6 +4,7 @@ import path from 'path';
 import {convertToArray} from 'softkave-js-utils';
 import z from 'zod';
 import {CAConfig} from '../certs/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {MongoUser, MongoUserListSchema} from './user/types.js';
 import {isLocalhostname} from './utils.js';
 
@@ -166,7 +167,10 @@ export function getCachedMongoRunConfigFilepath(params: {
   mongoRunConfig: MongoRunConfig;
 }) {
   const {mongoRunConfig} = params;
-  return path.join(mongoRunConfig.workingDir, 'mongo-run-config.json');
+  return resolvePathUnderWorkingDir(
+    mongoRunConfig.workingDir,
+    'mongo-run-config.json'
+  );
 }
 
 export async function getCachedMongoRunConfig(params: {

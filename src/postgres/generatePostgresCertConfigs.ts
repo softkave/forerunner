@@ -3,31 +3,58 @@ import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
 import path from 'path';
 import {CAConfig, CertConfig} from '../certs/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
 import {generateRandomPassword} from './utils.js';
+
+/** Cert output directory name, relative to run config `workingDir`. */
+export const POSTGRES_CERTS_OUT_DIR = 'postgres-certs-out';
+
+export function getPostgresCertOutDir(): string {
+  return POSTGRES_CERTS_OUT_DIR;
+}
+
+export async function resolvePostgresCertOutDir(
+  postgresRunConfig: PostgresRunConfig
+): Promise<string> {
+  const configPath = getPostgresCertCAConfigFilePath(postgresRunConfig);
+  if (await exists(configPath)) {
+    try {
+      const config = JSON.parse(
+        await fs.promises.readFile(configPath, 'utf8')
+      ) as CAConfig;
+      if (config.outDir) {
+        return resolvePathUnderWorkingDir(
+          postgresRunConfig.workingDir,
+          config.outDir
+        );
+      }
+    } catch {
+      // fall through to default
+    }
+  }
+  return resolvePathUnderWorkingDir(
+    postgresRunConfig.workingDir,
+    POSTGRES_CERTS_OUT_DIR
+  );
+}
 
 export function getPostgresCertCAConfigFilePath(
   postgresRunConfig: PostgresRunConfig
 ) {
-  return path.join(
+  return resolvePathUnderWorkingDir(
     postgresRunConfig.workingDir,
-    'postgres-certs-configs',
-    'postgres-certs-ca-config.json'
+    path.join('postgres-certs-configs', 'postgres-certs-ca-config.json')
   );
 }
 
 export function getPostgresCertConfigFilePath(
   postgresRunConfig: PostgresRunConfig
 ) {
-  return path.join(
+  return resolvePathUnderWorkingDir(
     postgresRunConfig.workingDir,
-    'postgres-certs-configs',
-    'postgres-server-cert-config.json'
+    path.join('postgres-certs-configs', 'postgres-server-cert-config.json')
   );
-}
-
-export function getPostgresCertOutDir(postgresRunConfig: PostgresRunConfig) {
-  return path.join(postgresRunConfig.workingDir, 'postgres-certs-out');
 }
 
 export async function generateCAConfigForPostgres(params: {
@@ -48,7 +75,7 @@ export async function generateCAConfigForPostgres(params: {
   const password = generateRandomPassword();
   const postgresCAConfig: CAConfig = {
     passphrase: params.postgresRunConfig.caConfig.passphrase ?? password,
-    outDir: getPostgresCertOutDir(params.postgresRunConfig),
+    outDir: getPostgresCertOutDir(),
     days: params.postgresRunConfig.caConfig.days,
     subject: params.postgresRunConfig.caConfig.subject,
     files: {
@@ -90,7 +117,7 @@ export async function generateCertConfigForPostgres(params: {
   ];
 
   const postgresCertConfig: CertConfig = {
-    outDir: getPostgresCertOutDir(params.postgresRunConfig),
+    outDir: getPostgresCertOutDir(),
     days: params.caConfig.days,
     subject: {
       ...params.caConfig.subject,

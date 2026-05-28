@@ -4,36 +4,60 @@ import {ensureFile, exists} from 'fs-extra';
 import {uniq} from 'lodash-es';
 import path from 'path';
 import {CAConfig, CertConfig} from '../certs/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {extractHostnames, MongoRunConfig} from './mongoRunConfig.js';
 import {generateMongoPassword, getFirstNonLocalhostBindIp} from './utils.js';
 
-export function getMongoCertCAConfigFilePath(mongoRunConfig: MongoRunConfig) {
-  const dir = path.join(
-    mongoRunConfig.workingDir,
-    'mongo-certs-configs',
-    'mongo-certs-ca-config.json'
-  );
+/** Cert output directory name, relative to run config `workingDir`. */
+export const MONGO_CERTS_OUT_DIR = 'mongo-certs-out';
 
-  return dir;
+export function getMongoCertOutDir(): string {
+  return MONGO_CERTS_OUT_DIR;
+}
+
+export async function resolveMongoCertOutDir(
+  mongoRunConfig: MongoRunConfig
+): Promise<string> {
+  const configPath = getMongoCertCAConfigFilePath(mongoRunConfig);
+  if (await exists(configPath)) {
+    try {
+      const config = JSON.parse(
+        await fs.promises.readFile(configPath, 'utf8')
+      ) as CAConfig;
+      if (config.outDir) {
+        return resolvePathUnderWorkingDir(
+          mongoRunConfig.workingDir,
+          config.outDir
+        );
+      }
+    } catch {
+      // fall through to default
+    }
+  }
+  return resolvePathUnderWorkingDir(
+    mongoRunConfig.workingDir,
+    MONGO_CERTS_OUT_DIR
+  );
+}
+
+export function getMongoCertCAConfigFilePath(mongoRunConfig: MongoRunConfig) {
+  return resolvePathUnderWorkingDir(
+    mongoRunConfig.workingDir,
+    path.join('mongo-certs-configs', 'mongo-certs-ca-config.json')
+  );
 }
 
 export function getMongoCertConfigFilePath(
   mongoRunConfig: MongoRunConfig,
   instanceNumber: number
 ) {
-  const dir = path.join(
+  return resolvePathUnderWorkingDir(
     mongoRunConfig.workingDir,
-    'mongo-certs-configs',
-    `mongo-certs-mongod-${instanceNumber}-config.json`
+    path.join(
+      'mongo-certs-configs',
+      `mongo-certs-mongod-${instanceNumber}-config.json`
+    )
   );
-
-  return dir;
-}
-
-export function getMongoCertOutDir(mongoRunConfig: MongoRunConfig) {
-  const dir = path.join(mongoRunConfig.workingDir, 'mongo-certs-out');
-
-  return dir;
 }
 
 export async function generateCAConfigForMongo(params: {
@@ -55,7 +79,7 @@ export async function generateCAConfigForMongo(params: {
   const mongoCAConfig: CAConfig = {
     ...params.mongoRunConfig.caConfig,
     passphrase: params.mongoRunConfig.caConfig.passphrase || password,
-    outDir: getMongoCertOutDir(params.mongoRunConfig),
+    outDir: getMongoCertOutDir(),
     files: {
       key: 'ca.key.pem',
       cert: 'ca.crt.pem',
@@ -106,7 +130,7 @@ export async function generateCertConfigForMongod(params: {
   );
   const san = uniq(allHostnames.concat(hostnames));
   const mongoCertConfig: CertConfig = {
-    outDir: getMongoCertOutDir(params.mongoRunConfig),
+    outDir: getMongoCertOutDir(),
     days: params.caConfig.days,
     subject: {
       ...params.caConfig.subject,

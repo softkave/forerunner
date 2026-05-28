@@ -1,4 +1,5 @@
 import path from 'path';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
 export function getInstanceRunName(instanceNumber: number) {
@@ -12,20 +13,18 @@ export function getInstancePaths(params: {
   const {instanceNumber, mongoRunConfig} = params;
 
   const instanceRunName = getInstanceRunName(instanceNumber);
-  const instanceRunDir = path.join(
+  const instanceRunDir = resolvePathUnderWorkingDir(
     mongoRunConfig.workingDir,
-    'mongo-run',
-    instanceRunName
+    path.join('mongo-run', instanceRunName)
   );
   const instancePidFilepath = path.join(
     instanceRunDir,
     `${instanceRunName}.pid`
   );
   const instanceLogsDir = path.join(instanceRunDir, `${instanceRunName}-logs`);
-  const startShFilepath = path.join(
+  const startShFilepath = resolvePathUnderWorkingDir(
     mongoRunConfig.workingDir,
-    'start-mongod-scripts',
-    `start-mongod-${instanceNumber}.sh`
+    path.join('start-mongod-scripts', `start-mongod-${instanceNumber}.sh`)
   );
 
   return {

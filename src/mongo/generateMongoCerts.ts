@@ -2,6 +2,7 @@ import {generateCA} from '../certs/caGenerator.js';
 import {generateCert} from '../certs/certGenerator.js';
 import {ConsoleForeLogger} from '../utils/exports.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolveWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {
   generateMongoCertConfigsMain,
   getMongoCertCAConfigFilePath,
@@ -56,17 +57,30 @@ export async function generateMongoCertsMain(params: {
   await generateCA({
     opts: {
       config: caConfig,
+      cwd: resolveWorkingDir(mongoRunConfig.workingDir),
       force: overwriteCA,
     },
     logger,
   });
 
+  console.log({
+    caConfig,
+    wd: mongoRunConfig.workingDir,
+    cwd: resolveWorkingDir(mongoRunConfig.workingDir),
+  });
+
   const overwriteCerts = params.overwriteCerts || overwriteCA;
   for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     const certConfig = getMongoCertConfigFilePath(mongoRunConfig, i);
+    console.log({
+      certConfig,
+      wd: mongoRunConfig.workingDir,
+      cwd: resolveWorkingDir(mongoRunConfig.workingDir),
+    });
     await generateCert({
       opts: {
         config: certConfig,
+        cwd: resolveWorkingDir(mongoRunConfig.workingDir),
         force: overwriteCerts,
       },
       logger,

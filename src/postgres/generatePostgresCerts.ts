@@ -2,6 +2,7 @@ import {generateCA} from '../certs/caGenerator.js';
 import {generateCert} from '../certs/certGenerator.js';
 import {ConsoleForeLogger} from '../utils/exports.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolveWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {
   generatePostgresCertConfigsMain,
   getPostgresCertCAConfigFilePath,
@@ -32,6 +33,7 @@ export async function generatePostgresCertsMain(params: {
   await generateCA({
     opts: {
       config: caConfig,
+      cwd: resolveWorkingDir(postgresRunConfig.workingDir),
       force: overwriteCA,
     },
     logger,
@@ -42,6 +44,7 @@ export async function generatePostgresCertsMain(params: {
   await generateCert({
     opts: {
       config: certConfig,
+      cwd: resolveWorkingDir(postgresRunConfig.workingDir),
       force: overwriteCerts,
     },
     logger,

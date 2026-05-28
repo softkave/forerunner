@@ -10,6 +10,7 @@ import {
 } from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolveWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {spawnInherit} from '../utils/spawnInherit.js';
 import {
   assertMongoInstanceListening,
@@ -18,7 +19,7 @@ import {
   waitForMemberState,
 } from './checkMongoReadyState.js';
 import {getInstanceRunName} from './constants.js';
-import {getMongoCertOutDir} from './generateMongoCertConfigs.js';
+import {resolveMongoCertOutDir} from './generateMongoCertConfigs.js';
 import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {
   generateMongoDockerConfigForMongod,
@@ -76,10 +77,10 @@ function getRunConfigFingerprint(params: {
   const payload = JSON.stringify({
     port,
     image,
-    dataDir: path.resolve(dataDir),
-    systemLogDir: path.resolve(systemLogDir),
-    certsDir: certsDir ? path.resolve(certsDir) : '',
-    configDir: path.resolve(configDir),
+    dataDir,
+    systemLogDir,
+    configDir,
+    certsDir: certsDir ?? '',
     addHost: [...nonLocalhostHostnames].sort(),
     initUser: initEnv ? {u: initEnv.username, p: initEnv.password} : null,
     labels: labels
@@ -186,7 +187,7 @@ export function getDockerContainerName(
   }
   const hash = crypto
     .createHash('sha256')
-    .update(path.resolve(mongoRunConfig.workingDir))
+    .update(resolveWorkingDir(mongoRunConfig.workingDir))
     .digest('hex')
     .slice(0, 12);
   return `mongo-${hash}-mongod-${instanceNumber}`;
@@ -218,7 +219,7 @@ export async function startMongodInstance(params: {
     instanceNumber
   );
   const systemLogDir = path.dirname(systemLogPath);
-  const certsDir = getMongoCertOutDir(mongoRunConfig);
+  const certsDir = await resolveMongoCertOutDir(mongoRunConfig);
   const configDir = getMongodConfigDir(mongoRunConfig);
   const imageTag = mongoRunConfig.mongoVersion ?? kDefaultMongoVersion;
   // Use official mongo image from Docker Hub
@@ -229,17 +230,17 @@ export async function startMongodInstance(params: {
   await ensureDir(configDir);
   // Mongo container runs as user 'mongodb' (UID 999); make data and log dirs
   // writable so it can create files.
-  // await chmod(path.resolve(dataDir), 0o777);
-  // await chmod(path.resolve(systemLogDir), 0o777);
+  // await chmod(dataDir, 0o777);
+  // await chmod(systemLogDir, 0o777);
   await generateMongoDockerConfigForMongod({
     instanceNumber,
     mongoRunConfig,
   });
 
-  logger.log('Data dir:', path.resolve(dataDir));
-  logger.log('System log dir:', path.resolve(systemLogDir));
-  logger.log('Certs dir:', path.resolve(certsDir));
-  logger.log('Config dir:', path.resolve(configDir));
+  logger.log('Data dir:', dataDir);
+  logger.log('System log dir:', systemLogDir);
+  logger.log('Certs dir:', certsDir);
+  logger.log('Config dir:', configDir);
 
   const nonLocalhostHostnames =
     getNonLocalhostInstanceHostnames(mongoRunConfig);
@@ -258,11 +259,11 @@ export async function startMongodInstance(params: {
     port,
     image,
     dataDir,
-    systemLogDir: systemLogDir,
     certsDir,
     configDir,
     nonLocalhostHostnames,
     initEnv,
+    systemLogDir,
     labels: mongoRunConfig.labels,
   });
 
@@ -286,13 +287,13 @@ export async function startMongodInstance(params: {
     '-p',
     `${port}:${port}`,
     '-v',
-    `${path.resolve(dataDir)}:/data/db`,
+    `${dataDir}:/data/db`,
     '-v',
-    `${path.resolve(systemLogDir)}:/var/log/mongodb`,
+    `${systemLogDir}:/var/log/mongodb`,
     '-v',
-    `${path.resolve(certsDir)}:/certs:ro`,
+    `${certsDir}:/certs:ro`,
     '-v',
-    `${path.resolve(configDir)}:/etc/mongodb:ro`,
+    `${configDir}:/etc/mongodb:ro`,
   ];
 
   if (initEnv) {

@@ -1,30 +1,37 @@
-import console from 'console';
 import {promises as fsp} from 'fs';
-import {existsSync} from 'fs';
 import {join} from 'path';
 import {fs} from 'zx';
-import {spawnInherit} from '../utils/spawnInherit.js';
+import {fileExists} from '../utils/file.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
+import {spawnInherit} from '../utils/spawnInherit.js';
 import {CAConfig, CAConfigSchema, GenerateCertsCLIOptions} from './types.js';
 
 export class CAGenerator {
   private config: CAConfig;
   private logger: IForeLogger;
+  private cwd?: string;
 
-  constructor(params: {config: CAConfig; logger: IForeLogger}) {
+  constructor(params: {config: CAConfig; logger: IForeLogger; cwd?: string}) {
     this.config = params.config;
     this.logger = params.logger;
+    this.cwd = params.cwd;
   }
 
   /**
    * Generate CA if it doesn't exist or if force is true
    */
   async generate(force = false): Promise<void> {
-    const caDir = join(this.config.outDir);
-    const keyPath = join(caDir, this.config.files.key);
-    const certPath = join(caDir, this.config.files.cert);
+    let caDir = this.config.outDir;
+    let keyPath = join(caDir, this.config.files.key);
+    let certPath = join(caDir, this.config.files.cert);
+    if (this.cwd) {
+      caDir = resolvePathUnderWorkingDir(this.cwd, caDir);
+      keyPath = resolvePathUnderWorkingDir(this.cwd, keyPath);
+      certPath = resolvePathUnderWorkingDir(this.cwd, certPath);
+    }
 
-    if (existsSync(keyPath) && existsSync(certPath)) {
+    if ((await fileExists(keyPath)) && (await fileExists(certPath))) {
       if (force) {
         await Promise.allSettled([fsp.unlink(keyPath), fsp.unlink(certPath)]);
       } else {
@@ -42,7 +49,12 @@ export class CAGenerator {
 
     // Generate OpenSSL configuration
     const opensslConfig = this.generateOpenSSLConfig();
-    const configPath = join(caDir, `openssl-${this.config.files.key}.cnf`);
+    const configFilename = `openssl-${this.config.files.key}.cnf`;
+    let configPath = join(caDir, configFilename);
+    if (this.cwd) {
+      configPath = resolvePathUnderWorkingDir(this.cwd, configPath);
+    }
+
     await fsp.writeFile(configPath, opensslConfig);
 
     try {
@@ -136,14 +148,16 @@ keyUsage = critical, digitalSignature, cRLSign, keyCertSign
    * Get CA certificate path
    */
   getCertPath(): string {
-    return join(this.config.outDir, this.config.files.cert);
+    const certPath = join(this.config.outDir, this.config.files.cert);
+    return this.cwd ? resolvePathUnderWorkingDir(this.cwd, certPath) : certPath;
   }
 
   /**
    * Get CA key path
    */
   getKeyPath(): string {
-    return join(this.config.outDir, this.config.files.key);
+    const keyPath = join(this.config.outDir, this.config.files.key);
+    return this.cwd ? resolvePathUnderWorkingDir(this.cwd, keyPath) : keyPath;
   }
 }
 
@@ -152,15 +166,18 @@ export async function generateCA(params: {
   logger: IForeLogger;
 }) {
   // Read and parse config file
-  if (params.opts.cwd) {
-    process.chdir(params.opts.cwd);
-  }
-  console.log('cwd', process.cwd());
-  const configContent = await fs.promises.readFile(params.opts.config, 'utf-8');
+  const configPath = params.opts.cwd
+    ? resolvePathUnderWorkingDir(params.opts.cwd, params.opts.config)
+    : params.opts.config;
+  const configContent = await fs.promises.readFile(configPath, 'utf-8');
   const config = CAConfigSchema.parse(JSON.parse(configContent));
 
   // Generate CA
-  const caGenerator = new CAGenerator({config, logger: params.logger});
+  const caGenerator = new CAGenerator({
+    config,
+    logger: params.logger,
+    cwd: params.opts.cwd,
+  });
   await caGenerator.generate(params.opts.force);
 
   params.logger.log('✅ CA generation completed successfully');

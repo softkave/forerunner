@@ -4,6 +4,7 @@ import {first} from 'lodash-es';
 import path from 'path';
 import {expect} from 'vitest';
 import {IForeLogger} from '../utils/exports.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {closeMongoClient, getMongoClient} from './connection.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
@@ -156,9 +157,15 @@ export async function cleanupMongoTest(params: {
   }
 
   if (cleanDirs) {
-    const configsDir = path.join(mongoRunConfig.workingDir, 'mongo-configs');
-    const dataDir = path.join(mongoRunConfig.workingDir, 'mongo-data');
-    const systemLogsDir = path.join(
+    const configsDir = resolvePathUnderWorkingDir(
+      mongoRunConfig.workingDir,
+      'mongo-configs'
+    );
+    const dataDir = resolvePathUnderWorkingDir(
+      mongoRunConfig.workingDir,
+      'mongo-data'
+    );
+    const systemLogsDir = resolvePathUnderWorkingDir(
       mongoRunConfig.workingDir,
       'mongo-system-logs'
     );

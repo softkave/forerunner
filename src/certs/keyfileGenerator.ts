@@ -2,18 +2,11 @@ import crypto from 'crypto';
 import {promises as fsp} from 'fs';
 import {dirname} from 'path';
 import {fs} from 'zx';
+import {fileExists} from '../utils/file.js';
 import type {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import type {GenerateKeyfileCLIOptions, KeyfileConfig} from './types.js';
 import {GenerateKeyfileCLIOptionsSchema, KeyfileConfigSchema} from './types.js';
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await fsp.access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function assertMongoKeyfileConstraints(content: string): void {
   // MongoDB keyFile must be between 6 and 1024 characters.
@@ -41,14 +34,23 @@ function encodeKeyMaterial(params: {
 export class KeyfileGenerator {
   private config: KeyfileConfig;
   private logger: IForeLogger;
+  private cwd?: string;
 
-  constructor(params: {config: KeyfileConfig; logger: IForeLogger}) {
+  constructor(params: {
+    config: KeyfileConfig;
+    logger: IForeLogger;
+    cwd?: string;
+  }) {
     this.config = params.config;
     this.logger = params.logger;
+    this.cwd = params.cwd;
   }
 
   async generate(force = false): Promise<{path: string; bytesWritten: number}> {
-    const path = this.config.path;
+    let path = this.config.path.trim();
+    if (this.cwd) {
+      path = resolvePathUnderWorkingDir(this.cwd, path);
+    }
 
     if (!force && (await fileExists(path))) {
       this.logger.log(
@@ -98,8 +100,6 @@ export async function generateKeyfile(params: {
   force?: boolean;
   logger: IForeLogger;
 }): Promise<{path: string; bytesWritten: number}> {
-  if (params.cwd) process.chdir(params.cwd);
-
   let config: KeyfileConfig;
   if (params.config) {
     config = KeyfileConfigSchema.parse(params.config);
@@ -114,7 +114,11 @@ export async function generateKeyfile(params: {
     config = KeyfileConfigSchema.parse(JSON.parse(configContent));
   }
 
-  const generator = new KeyfileGenerator({config, logger: params.logger});
+  const generator = new KeyfileGenerator({
+    config,
+    logger: params.logger,
+    cwd: params.cwd,
+  });
   return await generator.generate(params.force ?? false);
 }
 
@@ -123,13 +127,13 @@ export async function generateKeyfileFromCliOptions(params: {
   logger: IForeLogger;
 }): Promise<void> {
   const opts = GenerateKeyfileCLIOptionsSchema.parse(params.opts);
-  if (opts.cwd) process.chdir(opts.cwd);
 
   if (opts.config) {
     await generateKeyfile({
       configFilepath: opts.config,
       force: opts.force,
       logger: params.logger,
+      cwd: opts.cwd,
     });
     params.logger.log('✅ Keyfile generation completed successfully');
     return;
@@ -150,6 +154,7 @@ export async function generateKeyfileFromCliOptions(params: {
     },
     force: opts.force,
     logger: params.logger,
+    cwd: opts.cwd,
   });
   params.logger.log('✅ Keyfile generation completed successfully');
 }

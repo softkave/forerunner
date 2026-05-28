@@ -5,7 +5,7 @@ import {promisify} from 'util';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {spawnInherit} from '../utils/spawnInherit.js';
-import {getPostgresCertOutDir} from './generatePostgresCertConfigs.js';
+import {resolvePostgresCertOutDir} from './generatePostgresCertConfigs.js';
 import {generatePostgresCertsMain} from './generatePostgresCerts.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
@@ -137,11 +137,11 @@ function buildDockerEnvVars(params: {
 /**
  * Builds Docker run command arguments
  */
-function buildDockerRunArgs(params: {
+async function buildDockerRunArgs(params: {
   postgresRunConfig: PostgresRunConfig;
   envVars: string[];
   logger: IForeLogger;
-}): string[] {
+}): Promise<string[]> {
   const {postgresRunConfig, envVars, logger} = params;
   const containerName = postgresRunConfig.containerName;
   const volumeName = postgresRunConfig.volumeName;
@@ -173,11 +173,7 @@ function buildDockerRunArgs(params: {
 
   // Mount SSL certificates if SSL is enabled
   if (sslEnabled) {
-    const certsDir = getPostgresCertOutDir(postgresRunConfig);
-    const certsDirResolved = path.resolve(
-      postgresRunConfig.workingDir,
-      certsDir
-    );
+    const certsDirResolved = await resolvePostgresCertOutDir(postgresRunConfig);
     runArgs.push('-v', `${certsDirResolved}:/var/lib/postgresql/certs:ro`);
     logger.log(`Mounting SSL certificates from: ${certsDirResolved}`);
   }
@@ -425,7 +421,11 @@ export async function startPostgresInstance(params: {
 
   // Build Docker command arguments
   const envVars = buildDockerEnvVars({postgresRunConfig});
-  const runArgs = buildDockerRunArgs({postgresRunConfig, envVars, logger});
+  const runArgs = await buildDockerRunArgs({
+    postgresRunConfig,
+    envVars,
+    logger,
+  });
 
   // Start the container
   await startDockerContainer({

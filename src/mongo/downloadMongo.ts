@@ -9,6 +9,7 @@ import {ensureDir, exists} from 'fs-extra';
 import path from 'path';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 
 export const kDefaultMongoVersion = '8.2.3';
 export const kDefaultMongodBinName = 'mongod';
@@ -48,15 +49,18 @@ export function getMongoDownloadDir(params: {
   mongoVersion?: string;
 }) {
   const {workingDir, mongoVersion = kDefaultMongoVersion} = params;
-  const dir = path.join(workingDir, kMongoBinDir, mongoVersion);
-  return dir;
+  return resolvePathUnderWorkingDir(
+    workingDir,
+    path.join(kMongoBinDir, mongoVersion)
+  );
 }
 
 export function getMongodBinFilePath(params: {
   workingDir: string;
   mongoVersion?: string;
 }) {
-  const dir = path.resolve(
+  const dir = resolvePathUnderWorkingDir(
+    params.workingDir,
     path.join(getMongoDownloadDir(params), 'bin', kDefaultMongodBinName)
   );
   return dir;
@@ -169,7 +173,9 @@ export async function downloadMongo(params: {
         `New-Item -ItemType Directory -Path '${tempExtractDir}' -Force;` +
         `[System.IO.Compression.ZipFile]::ExtractToDirectory('${filename}','${tempExtractDir}');` +
         `$extractedDir = Get-ChildItem '${tempExtractDir}' | Select-Object -First 1 | Select-Object -ExpandProperty Name;` +
-        `Move-Item '${tempExtractDir}/$extractedDir/bin' '${getMongoDownloadDir({workingDir, mongoVersion})}';` +
+        `Move-Item '${tempExtractDir}/$extractedDir/bin' '${getMongoDownloadDir(
+          {workingDir, mongoVersion}
+        )}';` +
         `Remove-Item -Recurse -Force '${tempExtractDir}';` +
         `Remove-Item '${filename}';` +
         '}"'
@@ -194,7 +200,10 @@ export async function downloadMongo(params: {
 
     // Move the bin directory to the final location
     await spawnShellInheritNoCapture(
-      `mv ${extractedDirPath}/bin ${getMongoDownloadDir({workingDir, mongoVersion})}`
+      `mv ${extractedDirPath}/bin ${getMongoDownloadDir({
+        workingDir,
+        mongoVersion,
+      })}`
     );
 
     // Clean up

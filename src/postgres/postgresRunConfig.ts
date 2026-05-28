@@ -3,6 +3,7 @@ import {ensureFile} from 'fs-extra';
 import path from 'path';
 import z from 'zod';
 import {CAConfig, CAConfigSchema} from '../certs/types.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 
 /** Connection mode used for `pg_hba.conf` entries. */
 export const PostgresConnectionTypeSchema = z.enum(['tcp', 'local']);
@@ -81,7 +82,7 @@ export const postgresRunConfigSchema = z
   })
   .transform(data => ({
     ...data,
-    workingDir: data.workingDir ?? process.cwd(),
+    workingDir: data.workingDir ?? '.',
     postgresVersion: data.postgresVersion ?? '16',
     volumeName: data.volumeName ?? data.containerName,
     keep: data.keep ?? false,
@@ -198,7 +199,10 @@ export function getCachedPostgresRunConfigFilepath(params: {
   postgresRunConfig: PostgresRunConfig;
 }) {
   const {postgresRunConfig} = params;
-  return path.join(postgresRunConfig.workingDir, 'postgres-run-config.json');
+  return resolvePathUnderWorkingDir(
+    postgresRunConfig.workingDir,
+    'postgres-run-config.json'
+  );
 }
 
 export async function getCachedPostgresRunConfig(params: {

@@ -3,6 +3,7 @@ import {ensureFile, exists} from 'fs-extra';
 import {dump, load} from 'js-yaml';
 import path from 'path';
 import {z} from 'zod';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 
 /** TLS subsection of `net` used by the generated `mongod` config. */
@@ -98,17 +99,14 @@ export function getMongodDockerConfigFilePath(
   /** Instance number (1-based) */
   instanceNumber: number
 ) {
-  return path.resolve(
-    path.join(
-      mongoRunConfig.workingDir,
-      'mongo-configs',
-      `mongod-${instanceNumber}.docker.conf`
-    )
+  return resolvePathUnderWorkingDir(
+    mongoRunConfig.workingDir,
+    path.join('mongo-configs', `mongod-${instanceNumber}.docker.conf`)
   );
 }
 
 export function getMongodConfigDir(mongoRunConfig: MongoRunConfig) {
-  return path.resolve(path.join(mongoRunConfig.workingDir, 'mongo-configs'));
+  return resolvePathUnderWorkingDir(mongoRunConfig.workingDir, 'mongo-configs');
 }
 
 export function getMongodSystemLogFilePath(
@@ -116,13 +114,10 @@ export function getMongodSystemLogFilePath(
   /** Instance number (1-based) */
   instanceNumber: number
 ) {
-  const dir = path.join(
+  return resolvePathUnderWorkingDir(
     mongoRunConfig.workingDir,
-    'mongo-system-logs',
-    `mongod-${instanceNumber}.log`
+    path.join('mongo-system-logs', `mongod-${instanceNumber}.log`)
   );
-
-  return dir;
 }
 
 export function getMongodDataDir(
@@ -130,12 +125,10 @@ export function getMongodDataDir(
   /** Instance number (1-based) */
   instanceNumber: number
 ) {
-  const dir = path.join(
+  return resolvePathUnderWorkingDir(
     mongoRunConfig.workingDir,
-    'mongo-data',
-    `mongod-${instanceNumber}`
+    path.join('mongo-data', `mongod-${instanceNumber}`)
   );
-  return dir;
 }
 
 /**
