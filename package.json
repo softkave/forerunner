@@ -1,6 +1,6 @@
 {
   "name": "softkave-forerunner",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "description": "softkave internal application runner & helpers",
   "author": {
     "email": "ywordk@gmail.com",

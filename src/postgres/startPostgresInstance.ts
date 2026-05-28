@@ -5,7 +5,10 @@ import {promisify} from 'util';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {spawnInherit} from '../utils/spawnInherit.js';
-import {resolvePostgresCertOutDir} from './generatePostgresCertConfigs.js';
+import {
+  ensurePostgresSslCertPermissions,
+  resolvePostgresCertOutDir,
+} from './generatePostgresCertConfigs.js';
 import {generatePostgresCertsMain} from './generatePostgresCerts.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
@@ -300,16 +303,25 @@ async function configurePostgresAuthorization(params: {
 /**
  * Configures PostgreSQL SSL if enabled
  */
+async function restartPostgresContainer(params: {
+  containerName: string;
+  logger: IForeLogger;
+}): Promise<void> {
+  const {containerName, logger} = params;
+  logger.log(`Restarting container ${containerName} to apply SSL settings...`);
+  await execFileAsync('docker', ['restart', containerName], {encoding: 'utf8'});
+}
+
 async function configurePostgresSSL(params: {
   postgresRunConfig: PostgresRunConfig;
   containerName: string;
   client: Client;
   logger: IForeLogger;
-}): Promise<void> {
+}): Promise<boolean> {
   const {postgresRunConfig, containerName, client, logger} = params;
 
   if (postgresRunConfig.ssl !== 'enabled') {
-    return;
+    return false;
   }
 
   const pgHbaContent = await readPgHbaConf(containerName);
@@ -332,11 +344,13 @@ async function configurePostgresSSL(params: {
     : setPgHbaRequireSSL(pgHbaContent);
 
   let configChanged = false;
+  let sslConfChanged = false;
 
   if (confWithSSL !== postgresConfContent) {
     await writePostgresConfig(containerName, confWithSSL);
     logger.log('Updated postgresql.conf (SSL enabled)');
     configChanged = true;
+    sslConfChanged = true;
   }
 
   if (hbaWithSSL !== pgHbaContent) {
@@ -345,10 +359,12 @@ async function configurePostgresSSL(params: {
     configChanged = true;
   }
 
-  if (configChanged) {
+  if (configChanged && !sslConfChanged) {
     await reloadPostgresConfigViaClient(client);
     logger.log('Reloaded PostgreSQL configuration (SSL)');
   }
+
+  return sslConfChanged;
 }
 
 export async function startPostgresInstance(params: {
@@ -460,6 +476,7 @@ export async function startPostgresInstance(params: {
       ssl: false,
     });
 
+    let clientClosed = false;
     try {
       await configurePostgresAuthorization({
         postgresRunConfig,
@@ -468,14 +485,32 @@ export async function startPostgresInstance(params: {
         logger,
       });
 
-      await configurePostgresSSL({
+      const sslConfChanged = await configurePostgresSSL({
         postgresRunConfig,
         containerName,
         client,
         logger,
       });
-    } finally {
       await client.end();
+      clientClosed = true;
+
+      if (sslConfChanged) {
+        await ensurePostgresSslCertPermissions(postgresRunConfig);
+        await restartPostgresContainer({containerName, logger});
+        await waitForPostgresReady({
+          postgresRunConfig,
+          containerName,
+          port,
+          sslEnabled: true,
+          logger,
+          maxAttempts: 10,
+          retryIntervalMs: 1000,
+        });
+      }
+    } finally {
+      if (!clientClosed) {
+        await client.end();
+      }
     }
   }
 }

@@ -1,6 +1,7 @@
 import assert from 'assert';
 import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
+import {chmod} from 'fs/promises';
 import {uniq} from 'lodash-es';
 import path from 'path';
 import {CAConfig, CertConfig} from '../certs/types.js';
@@ -156,6 +157,28 @@ export async function generateCertConfigForMongod(params: {
     JSON.stringify(mongoCertConfig, null, 2)
   );
   return mongoCertConfig;
+}
+
+/**
+ * Mongod refuses to use TLS PEMs that are group/world-readable (same as
+ * Postgres). Applies to server keys and combined cert+key files in
+ * `mongo-certs-out`.
+ */
+export async function ensureMongoSslCertPermissions(
+  mongoRunConfig: MongoRunConfig
+): Promise<void> {
+  const certDir = await resolveMongoCertOutDir(mongoRunConfig);
+  if (!(await exists(certDir))) {
+    return;
+  }
+  const names = await fs.promises.readdir(certDir);
+  await Promise.all(
+    names
+      .filter(
+        name => name.endsWith('.key.pem') || name.endsWith('.crt.key.pem')
+      )
+      .map(name => chmod(path.join(certDir, name), 0o600))
+  );
 }
 
 export async function generateMongoCertConfigsMain(params: {

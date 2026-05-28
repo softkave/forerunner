@@ -74,6 +74,7 @@ export class CertGenerator {
           ]
         : ['genrsa', '-out', keyPath, '2048'];
       await spawnInherit('openssl', genrsaArgs);
+      await fsp.chmod(keyPath, 0o600);
 
       // Generate CSR
       this.logger.log('  Generating CSR...');
@@ -171,6 +172,7 @@ export class CertGenerator {
         const certPem = await fsp.readFile(certPath, 'utf8');
         const keyPem = await fsp.readFile(keyPath, 'utf8');
         await fsp.writeFile(crtAndKeyPath, certPem + keyPem);
+        await fsp.chmod(crtAndKeyPath, 0o600);
       }
 
       this.logger.log(`✅ Certificate generated successfully at ${certDir}`);

@@ -1,5 +1,6 @@
 import assert from 'assert';
 import fs from 'fs';
+import {chmod} from 'fs/promises';
 import {ensureFile, exists} from 'fs-extra';
 import path from 'path';
 import {CAConfig, CertConfig} from '../certs/types.js';
@@ -142,6 +143,17 @@ export async function generateCertConfigForPostgres(params: {
     JSON.stringify(postgresCertConfig, null, 2)
   );
   return postgresCertConfig;
+}
+
+/** Postgres refuses SSL when the server private key is group/world-readable. */
+export async function ensurePostgresSslCertPermissions(
+  postgresRunConfig: PostgresRunConfig
+): Promise<void> {
+  const certDir = await resolvePostgresCertOutDir(postgresRunConfig);
+  const keyPath = path.join(certDir, 'server.key.pem');
+  if (await exists(keyPath)) {
+    await chmod(keyPath, 0o600);
+  }
 }
 
 export async function generatePostgresCertConfigsMain(params: {

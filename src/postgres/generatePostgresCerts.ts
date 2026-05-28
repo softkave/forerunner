@@ -4,6 +4,7 @@ import {ConsoleForeLogger} from '../utils/exports.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {resolveWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {
+  ensurePostgresSslCertPermissions,
   generatePostgresCertConfigsMain,
   getPostgresCertCAConfigFilePath,
   getPostgresCertConfigFilePath,
@@ -49,4 +50,5 @@ export async function generatePostgresCertsMain(params: {
     },
     logger,
   });
+  await ensurePostgresSslCertPermissions(postgresRunConfig);
 }

@@ -19,7 +19,10 @@ import {
   waitForMemberState,
 } from './checkMongoReadyState.js';
 import {getInstanceRunName} from './constants.js';
-import {resolveMongoCertOutDir} from './generateMongoCertConfigs.js';
+import {
+  ensureMongoSslCertPermissions,
+  resolveMongoCertOutDir,
+} from './generateMongoCertConfigs.js';
 import {ensureMongoCertificates} from './generateMongoCerts.js';
 import {
   generateMongoDockerConfigForMongod,
@@ -414,6 +417,7 @@ export async function startMongoMain(params: {
 
   // Generate certificates if not already present
   await ensureMongoCertificates({mongoRunConfig, logger});
+  await ensureMongoSslCertPermissions(mongoRunConfig);
 
   for (let i = 1; i <= mongoRunConfig.ports.length; i++) {
     await startMongodInstance({
