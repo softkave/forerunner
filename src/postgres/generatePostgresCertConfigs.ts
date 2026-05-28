@@ -1,7 +1,6 @@
 import assert from 'assert';
 import fs from 'fs';
 import {ensureFile, exists} from 'fs-extra';
-import {chmod} from 'fs/promises';
 import path from 'path';
 import {CAConfig, CertConfig} from '../certs/types.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
@@ -161,9 +160,9 @@ export async function ensurePostgresSslCertPermissions(
     return;
   }
 
-  await chmod(keyPath, 0o600);
-
-  const postgresVersion = postgresRunConfig.postgresVersion;
+  // Ownership and mode are set inside Docker (host chmod fails after chown to
+  // UID 999).
+  const postgresVersion = postgresRunConfig.postgresVersion ?? '16';
   try {
     await setBindMountOwnershipForPostgresSslCerts({
       hostCertDir: certDir,
