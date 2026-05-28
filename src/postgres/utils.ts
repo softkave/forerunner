@@ -302,30 +302,49 @@ export async function getPostgresClient(params: {
 }
 
 /**
+ * SSL modes to try when probing Postgres readiness.
+ * When `ssl` is enabled in config, try non-SSL first (fresh volume), then SSL
+ * (existing volume with `hostssl`-only pg_hba).
+ */
+export function getPostgresConnectionSslModesToTry(
+  postgresRunConfig: PostgresRunConfig,
+  options?: {requireSsl?: boolean}
+): boolean[] {
+  if (options?.requireSsl) {
+    return [true];
+  }
+  if (postgresRunConfig.ssl === 'enabled') {
+    return [false, true];
+  }
+  return [false];
+}
+
+/**
  * Waits for PostgreSQL to become ready and accept connections
  * @param params.postgresRunConfig - PostgreSQL run configuration
  * @param params.containerName - Docker container name
  * @param params.port - PostgreSQL port
- * @param params.sslEnabled - Whether SSL is enabled
+ * @param params.sslEnabled - When true, only attempt SSL connections
  * @param params.logger - Logger instance
  * @param params.maxAttempts - Maximum number of connection attempts (default: 10)
  * @param params.retryIntervalMs - Interval between retry attempts in milliseconds (default: 1000)
+ * @returns Whether the successful probe used SSL
  * @throws Error if PostgreSQL does not become ready within maxAttempts * retryIntervalMs
  */
 export async function waitForPostgresReady(params: {
   postgresRunConfig: PostgresRunConfig;
   containerName: string;
   port: number;
-  sslEnabled: boolean;
+  sslEnabled?: boolean;
   logger?: IForeLogger;
   maxAttempts?: number;
   retryIntervalMs?: number;
-}): Promise<void> {
+}): Promise<{connectedWithSsl: boolean}> {
   const {
     postgresRunConfig,
     containerName,
     port,
-    sslEnabled,
+    sslEnabled = false,
     logger,
     maxAttempts = 10,
     retryIntervalMs = 1000,
@@ -335,29 +354,34 @@ export async function waitForPostgresReady(params: {
 
   const authUser = getAuthUserFromConfig(postgresRunConfig);
   const firstUser = postgresRunConfig.users?.[0];
+  const sslModes = getPostgresConnectionSslModesToTry(postgresRunConfig, {
+    requireSsl: sslEnabled,
+  });
   let attempts = 0;
 
   while (attempts < maxAttempts) {
     if (await isContainerRunning(containerName)) {
-      try {
-        const clientConfig: ConstructorParameters<typeof Client>[0] = {
-          host: '127.0.0.1',
-          port: port,
-          user: authUser?.username ?? firstUser?.username ?? 'postgres',
-          password: authUser?.password ?? firstUser?.password ?? undefined,
-          database: postgresRunConfig.dbs?.[0] ?? 'postgres',
-          connectionTimeoutMillis: 2000,
-        };
-        if (sslEnabled) {
-          clientConfig.ssl = {rejectUnauthorized: false};
+      for (const useSsl of sslModes) {
+        try {
+          const clientConfig: ConstructorParameters<typeof Client>[0] = {
+            host: '127.0.0.1',
+            port: port,
+            user: authUser?.username ?? firstUser?.username ?? 'postgres',
+            password: authUser?.password ?? firstUser?.password ?? undefined,
+            database: postgresRunConfig.dbs?.[0] ?? 'postgres',
+            connectionTimeoutMillis: 2000,
+          };
+          if (useSsl) {
+            clientConfig.ssl = {rejectUnauthorized: false};
+          }
+          const client = new Client(clientConfig);
+          await client.connect();
+          await client.end();
+          logger?.log(`PostgreSQL is ready${useSsl ? ' (SSL)' : ''}`);
+          return {connectedWithSsl: useSsl};
+        } catch {
+          // Try next SSL mode or wait and retry
         }
-        const client = new Client(clientConfig);
-        await client.connect();
-        await client.end();
-        logger?.log('PostgreSQL is ready');
-        return;
-      } catch {
-        // Not ready yet, continue waiting
       }
     }
     await new Promise(resolve => setTimeout(resolve, retryIntervalMs));
@@ -365,6 +389,8 @@ export async function waitForPostgresReady(params: {
   }
 
   throw new Error(
-    `PostgreSQL container ${containerName} did not become ready within ${maxAttempts} attempts (${maxAttempts * retryIntervalMs}ms)`
+    `PostgreSQL container ${containerName} did not become ready within ${maxAttempts} attempts (${
+      maxAttempts * retryIntervalMs
+    }ms)`
   );
 }

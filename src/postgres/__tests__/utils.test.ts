@@ -1,7 +1,9 @@
 import {describe, expect, test} from 'vitest';
+import type {PostgresRunConfig} from '../postgresRunConfig.js';
 import {
   generatePgHbaEntriesForUser,
   getPgHbaTcpAddresses,
+  getPostgresConnectionSslModesToTry,
   pgHbaRequiresSSL,
   setPgHbaRequireSSL,
   setPgHbaToScram,
@@ -191,5 +193,24 @@ describe('setPostgresConfSSL', () => {
       '/c/ca.pem'
     );
     expect(out).toContain('ssl = on');
+  });
+});
+
+describe('getPostgresConnectionSslModesToTry', () => {
+  test('returns non-SSL only when ssl is disabled', () => {
+    const config = {ssl: 'disabled'} as PostgresRunConfig;
+    expect(getPostgresConnectionSslModesToTry(config)).toEqual([false]);
+  });
+
+  test('tries non-SSL then SSL when ssl is enabled', () => {
+    const config = {ssl: 'enabled'} as PostgresRunConfig;
+    expect(getPostgresConnectionSslModesToTry(config)).toEqual([false, true]);
+  });
+
+  test('returns SSL only when requireSsl is set', () => {
+    const config = {ssl: 'enabled'} as PostgresRunConfig;
+    expect(
+      getPostgresConnectionSslModesToTry(config, {requireSsl: true})
+    ).toEqual([true]);
   });
 });

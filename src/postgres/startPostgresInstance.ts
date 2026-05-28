@@ -400,11 +400,10 @@ export async function startPostgresInstance(params: {
       `Container ${containerName} is already running; skipping new container start`
     );
     if (waitUntilListening) {
-      await waitForPostgresReady({
+      const {connectedWithSsl} = await waitForPostgresReady({
         postgresRunConfig,
         containerName,
         port,
-        sslEnabled: false,
         logger,
         maxAttempts: 10,
         retryIntervalMs: 1000,
@@ -412,7 +411,7 @@ export async function startPostgresInstance(params: {
       const client = await getPostgresClient({
         postgresRunConfig,
         database: 'postgres',
-        ssl: false,
+        ssl: connectedWithSsl,
       });
       try {
         await configurePostgresAuthorization({
@@ -456,24 +455,19 @@ export async function startPostgresInstance(params: {
 
   // Wait and configure if requested
   if (waitUntilListening) {
-    // Wait without SSL first; SSL is configured below and required only after
-    // that
-    await waitForPostgresReady({
+    const {connectedWithSsl} = await waitForPostgresReady({
       postgresRunConfig,
       containerName,
       port,
-      sslEnabled: false,
       logger,
       maxAttempts: 10,
       retryIntervalMs: 1000,
     });
 
-    // Connect without SSL to configure auth and SSL (SSL not enabled in
-    // container yet)
     const client = await getPostgresClient({
       postgresRunConfig,
       database: 'postgres',
-      ssl: false,
+      ssl: connectedWithSsl,
     });
 
     let clientClosed = false;
