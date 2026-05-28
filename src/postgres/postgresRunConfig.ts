@@ -64,7 +64,12 @@ export const postgresRunConfigSchema = z
     port: z.number().int().positive('Port must be a positive integer'),
     authorization: z.enum(['enabled', 'disabled']).optional(),
     ssl: z.enum(['enabled', 'disabled']).optional(),
-    caConfig: CAConfigSchema.optional(),
+    // Only allow CA inputs; `outDir` and `files` are auto-generated later.
+    caConfig: CAConfigSchema.pick({
+      days: true,
+      subject: true,
+      passphrase: true,
+    }).optional(),
     users: PostgresUserListSchema.optional(),
     postgresVersion: z.string().optional(),
     containerName: z.string().min(1, 'containerName is required'),

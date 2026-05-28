@@ -79,13 +79,16 @@ async function promptForConfig(
 
     const authStr = await question(
       rl,
-      'Authorization enabled? (local and TCP require password) (y/n) [n]: '
+      'Authorization enabled? (local and TCP require password) (y/n) [y]: '
     );
     config.authorization =
-      authStr.trim().toLowerCase() === 'y' ? 'enabled' : 'disabled';
+      authStr.trim() === '' || authStr.trim().toLowerCase() === 'y'
+        ? 'enabled'
+        : 'disabled';
 
-    const sslStr = await question(rl, 'SSL enabled? (y/n) [n]: ');
-    const sslEnabled = sslStr.trim().toLowerCase() === 'y';
+    const sslStr = await question(rl, 'SSL enabled? (y/n) [y]: ');
+    const sslEnabled =
+      sslStr.trim() === '' || sslStr.trim().toLowerCase() === 'y';
     if (sslEnabled) {
       config.ssl = 'enabled';
       logger.log('\nSSL Certificate Authority Configuration:');
@@ -108,9 +111,9 @@ async function promptForConfig(
       config.caConfig = {
         days: caDaysStr.trim() ? parseInt(caDaysStr.trim(), 10) : 365,
         subject: {
-          C: caCountry.trim() || 'NG',
-          ST: caState.trim() || 'LA',
-          L: caLocality.trim() || 'Ikeja',
+          C: caCountry.trim() || 'US',
+          ST: caState.trim() || 'CA',
+          L: caLocality.trim() || 'San Francisco',
           O: caOrg.trim() || 'MyOrg',
           CN: caCN.trim() || 'PostgreSQL CA',
         },
@@ -321,8 +324,18 @@ function getDefaultConfig(): PostgresRunConfig {
     postgresVersion: '16',
     keep: false,
     discoverability: 'local',
-    authorization: 'disabled',
-    ssl: 'disabled',
+    authorization: 'enabled',
+    ssl: 'enabled',
+    caConfig: {
+      days: 365,
+      subject: {
+        C: 'US',
+        ST: 'CA',
+        L: 'San Francisco',
+        O: 'MyOrg',
+        CN: 'PostgreSQL CA',
+      },
+    },
     users: [
       {
         username: 'admin',

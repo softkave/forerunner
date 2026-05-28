@@ -85,13 +85,11 @@ export function generatePostgresPassword(): string {
   return generate({
     length: 32,
     numbers: true,
-    symbols: true,
+    // Only include URL-safe (RFC3986 "unreserved") symbols.
+    // See: https://datatracker.ietf.org/doc/html/rfc3986#section-2.3
+    symbols: '-._~',
     uppercase: true,
     strict: true,
-    // Exclude characters that can cause issues in PostgreSQL connection strings
-    // and SQL contexts: ' (single quote), \ (backslash), $ (dollar), ; (semicolon),
-    // " (double quote), ` (backtick)
-    exclude: '\'\\$;"`',
   });
 }
 
