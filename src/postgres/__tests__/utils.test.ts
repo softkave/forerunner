@@ -18,6 +18,7 @@ describe('generatePgHbaEntriesForUser', () => {
     });
     expect(out).toContain('host all alice 127.0.0.1/32 scram-sha-256');
     expect(out).toContain('host all alice ::1/128 scram-sha-256');
+    expect(out).toContain('host all alice 192.168.65.1/32 scram-sha-256');
     expect(out).toContain('local all alice scram-sha-256');
   });
 

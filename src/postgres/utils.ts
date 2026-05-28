@@ -115,12 +115,16 @@ export function generatePgHbaEntriesForUser(params: {
   const allowLocal = connectionTypes.includes('local');
   const connectionType = requireSSL ? 'hostssl' : 'host';
 
-  // Docker bridge: when host connects via -p 127.0.0.1:port:5432, container
-  // sees client as 172.17.0.1
+  // Docker networking note:
+  // - On Linux Docker, host->container via published ports often appears as
+  //   172.17.0.1 (docker0 gateway).
+  // - On Docker Desktop (macOS/Windows), host->container often appears as
+  //   192.168.65.1.
   const tcpAddresses = [
     '127.0.0.1/32',
     '::1/128',
     '172.17.0.0/16', // Docker default bridge
+    '192.168.65.1/32', // Docker Desktop host gateway (common)
   ];
 
   if (databases && databases.length > 0) {
