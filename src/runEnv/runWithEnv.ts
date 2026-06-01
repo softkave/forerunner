@@ -1,6 +1,8 @@
 import {spawn} from 'child_process';
+import {PassThrough} from 'node:stream';
 import type {IForeLogger} from '../utils/foreLogger/types.js';
 import {loadEnvForCwd} from './loadEnvForCwd.js';
+import {RunEnvCommandError} from './runEnvCommandError.js';
 
 export interface RunWithEnvParams {
   cwd: string;
@@ -15,28 +17,78 @@ export interface RunWithEnvParams {
   envFilePaths?: string[];
 }
 
-function spawnCommandInherit(
+function toBuffer(chunk: Buffer | Uint8Array): Buffer {
+  return Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+}
+
+function buffersToUtf8(chunks: readonly Buffer[]): string {
+  if (chunks.length === 0) return '';
+  return Buffer.concat(chunks as readonly Uint8Array[]).toString('utf8');
+}
+
+function teeStream(
+  chunks: Buffer[],
+  destination: NodeJS.WriteStream
+): PassThrough {
+  const pass = new PassThrough();
+  pass.on('data', (chunk: Buffer | Uint8Array) => {
+    chunks.push(toBuffer(chunk));
+  });
+  pass.pipe(destination);
+  return pass;
+}
+
+function spawnCommandWithCapturedOutput(
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
     const child = spawn(command, [], {
       shell: true,
       cwd,
-      stdio: 'inherit',
+      stdio: ['inherit', 'pipe', 'pipe'],
       env,
     });
 
+    child.stdout?.pipe(teeStream(stdoutChunks, process.stdout));
+    child.stderr?.pipe(teeStream(stderrChunks, process.stderr));
+
     child.on('error', err => reject(err));
     child.on('close', (code, signal) => {
+      const stdout = buffersToUtf8(stdoutChunks);
+      const stderr = buffersToUtf8(stderrChunks);
+
       if (signal) {
-        reject(new Error(`Command terminated by signal: ${signal}`));
-      } else if (code !== 0 && code !== null) {
-        reject(new Error(`Command exited with code ${code}`));
-      } else {
-        resolve();
+        reject(
+          new RunEnvCommandError({
+            command,
+            cwd,
+            signal,
+            stdout,
+            stderr,
+          })
+        );
+        return;
       }
+
+      if (code !== 0 && code !== null) {
+        reject(
+          new RunEnvCommandError({
+            command,
+            cwd,
+            exitCode: code,
+            stdout,
+            stderr,
+          })
+        );
+        return;
+      }
+
+      resolve();
     });
   });
 }
@@ -61,5 +113,7 @@ export async function runWithEnvMain(params: RunWithEnvParams): Promise<void> {
     }
   }
 
-  await spawnCommandInherit(command, cwd, env);
+  await spawnCommandWithCapturedOutput(command, cwd, env);
 }
+
+export {RunEnvCommandError} from './runEnvCommandError.js';

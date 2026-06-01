@@ -55,7 +55,7 @@ import {
 } from './postgres/index.js';
 
 // Import run-env functionality
-import {runWithEnvMain} from './runEnv/index.js';
+import {runWithEnvMain, RunEnvCommandError} from './runEnv/index.js';
 
 /** Accumulate multiple `-e, --env-file` flags into an ordered list. */
 function collectEnvFilePath(value: string, previous?: string[]): string[] {
@@ -1081,6 +1081,11 @@ program
         ...(envFilePaths?.length ? {envFilePaths} : {}),
       });
     } catch (error) {
+      if (error instanceof RunEnvCommandError) {
+        logger.error(`❌ ${error.message}`);
+        logger.onSilentFail(error);
+        process.exit(error.exitCode ?? 1);
+      }
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
       process.exit(1);

@@ -159,9 +159,9 @@ async function revokeDatabasePermissions(
           );
           // Note: We can't easily revoke default privileges, but they won't
           // apply if the user doesn't have access to the database
-          logger.log(
-            `Revoked permissions on database ${db} from user ${username}`
-          );
+          // logger.log(
+          //   `Revoked permissions on database ${db} from user ${username}`
+          // );
         } finally {
           await dbClient.end();
         }
