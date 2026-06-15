@@ -162,7 +162,7 @@ export async function ensurePostgresSslCertPermissions(
 
   // Ownership and mode are set inside Docker (host chmod fails after chown to
   // UID 999).
-  const postgresVersion = postgresRunConfig.postgresVersion ?? '16';
+  const postgresVersion = postgresRunConfig.postgresVersion ?? '18';
   try {
     await setBindMountOwnershipForPostgresSslCerts({
       hostCertDir: certDir,

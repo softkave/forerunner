@@ -1,6 +1,5 @@
 import fs from 'fs';
 import {ensureFile} from 'fs-extra';
-import path from 'path';
 import z from 'zod';
 import {CAConfig, CAConfigSchema} from '../certs/types.js';
 import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
@@ -83,7 +82,7 @@ export const postgresRunConfigSchema = z
   .transform(data => ({
     ...data,
     workingDir: data.workingDir ?? '.',
-    postgresVersion: data.postgresVersion ?? '16',
+    postgresVersion: data.postgresVersion ?? '18',
     volumeName: data.volumeName ?? data.containerName,
     keep: data.keep ?? false,
     authorization: data.authorization ?? 'disabled',

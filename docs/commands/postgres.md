@@ -4,6 +4,8 @@
 
 PostgreSQL instance management via Docker. Supports single PostgreSQL instances with configurable authentication, SSL, users, and databases.
 
+**Supported versions**: PostgreSQL **16**, **17**, and **18** only (set via `postgresVersion` in the run config or `--version` on the CLI). Other major versions are not supported.
+
 **Docker is required** for postgres operations (start, stop, setup-users, setup-dbs); instances run as Docker containers.
 
 **Discoverability**: By default, instances use `discoverability: "local"` (bind `127.0.0.1:port`, reachable only from this host). Set `discoverability: "global"` to bind to all interfaces (container discoverable globally).
@@ -73,7 +75,7 @@ softkave-forerunner postgres start [options]
 - `--port <port>` - Port number (required)
 - `--container-name <name>` - Container name (required)
 - `--working-dir <dir>` - Working directory
-- `--version <version>` - PostgreSQL version (default: "16")
+- `--version <version>` - PostgreSQL version (default: `"18"`; supported: `"16"`, `"17"`, `"18"`)
 - `--volume-name <name>` - Volume name (defaults to container name)
 - `--keep` - Keep data across restarts
 - `--username <username>` - Admin username

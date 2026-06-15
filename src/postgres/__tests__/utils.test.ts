@@ -4,6 +4,9 @@ import {
   generatePgHbaEntriesForUser,
   getPgHbaTcpAddresses,
   getPostgresConnectionSslModesToTry,
+  getPostgresDataDirPath,
+  getPostgresMajorVersion,
+  getPostgresVolumeMountPath,
   pgHbaRequiresSSL,
   setPgHbaRequireSSL,
   setPgHbaToScram,
@@ -193,6 +196,39 @@ describe('setPostgresConfSSL', () => {
       '/c/ca.pem'
     );
     expect(out).toContain('ssl = on');
+  });
+});
+
+describe('getPostgresMajorVersion', () => {
+  test('parses major version from semver-like strings', () => {
+    expect(getPostgresMajorVersion('18')).toBe(18);
+    expect(getPostgresMajorVersion('18.4')).toBe(18);
+    expect(getPostgresMajorVersion('17.2')).toBe(17);
+  });
+});
+
+describe('getPostgresVolumeMountPath', () => {
+  test('uses parent directory for PostgreSQL 18+', () => {
+    expect(getPostgresVolumeMountPath('18')).toBe('/var/lib/postgresql');
+    expect(getPostgresVolumeMountPath('19.0')).toBe('/var/lib/postgresql');
+  });
+
+  test('uses data directory for PostgreSQL 17 and below', () => {
+    expect(getPostgresVolumeMountPath('17')).toBe('/var/lib/postgresql/data');
+    expect(getPostgresVolumeMountPath('16.4')).toBe('/var/lib/postgresql/data');
+  });
+});
+
+describe('getPostgresDataDirPath', () => {
+  test('uses versioned docker subdirectory for PostgreSQL 18+', () => {
+    expect(getPostgresDataDirPath('18')).toBe('/var/lib/postgresql/18/docker');
+    expect(getPostgresDataDirPath('19.1')).toBe(
+      '/var/lib/postgresql/19/docker'
+    );
+  });
+
+  test('uses legacy data directory for PostgreSQL 17 and below', () => {
+    expect(getPostgresDataDirPath('17')).toBe('/var/lib/postgresql/data');
   });
 });
 

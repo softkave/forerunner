@@ -21,6 +21,7 @@ import {
   pgHbaRequiresSSL,
   readPgHbaConf,
   readPostgresConfig,
+  getPostgresVolumeMountPath,
   reloadPostgresConfigViaClient,
   setPgHbaRequireSSL,
   setPostgresConfPasswordEncryption,
@@ -156,6 +157,9 @@ async function buildDockerRunArgs(params: {
   const portMapping =
     discoverability === 'local' ? `127.0.0.1:${port}:5432` : `${port}:5432`;
 
+  const volumeMountPath = getPostgresVolumeMountPath(
+    postgresRunConfig.postgresVersion
+  );
   const runArgs: string[] = [
     'run',
     '-d',
@@ -164,7 +168,7 @@ async function buildDockerRunArgs(params: {
     '-p',
     portMapping,
     '-v',
-    `${volumeName}:/var/lib/postgresql/data`,
+    `${volumeName}:${volumeMountPath}`,
     ...envVars,
   ];
 
@@ -253,13 +257,20 @@ async function configurePostgresAuthorization(params: {
   }
 
   // Update postgresql.conf for scram-sha-256
-  const postgresConfContent = await readPostgresConfig(containerName);
+  const postgresConfContent = await readPostgresConfig({
+    containerName,
+    postgresVersion: postgresRunConfig.postgresVersion,
+  });
   const confScram = setPostgresConfPasswordEncryption(postgresConfContent);
 
   let configChanged = false;
 
   if (confScram !== postgresConfContent) {
-    await writePostgresConfig(containerName, confScram);
+    await writePostgresConfig({
+      containerName,
+      postgresVersion: postgresRunConfig.postgresVersion,
+      content: confScram,
+    });
     logger.log('Updated postgresql.conf (password_encryption=scram-sha-256)');
     configChanged = true;
   }
@@ -284,10 +295,17 @@ async function configurePostgresAuthorization(params: {
   }
 
   const newPgHba = pgHbaEntries.join('\n') + '\n';
-  const pgHbaContent = await readPgHbaConf(containerName);
+  const pgHbaContent = await readPgHbaConf({
+    containerName,
+    postgresVersion: postgresRunConfig.postgresVersion,
+  });
 
   if (newPgHba.trim() !== pgHbaContent.trim()) {
-    await writePgHbaConf(containerName, newPgHba);
+    await writePgHbaConf({
+      containerName,
+      postgresVersion: postgresRunConfig.postgresVersion,
+      content: newPgHba,
+    });
     logger.log(
       'Updated pg_hba.conf with user-specific database entries (scram-sha-256)'
     );
@@ -324,8 +342,14 @@ async function configurePostgresSSL(params: {
     return false;
   }
 
-  const pgHbaContent = await readPgHbaConf(containerName);
-  const postgresConfContent = await readPostgresConfig(containerName);
+  const pgHbaContent = await readPgHbaConf({
+    containerName,
+    postgresVersion: postgresRunConfig.postgresVersion,
+  });
+  const postgresConfContent = await readPostgresConfig({
+    containerName,
+    postgresVersion: postgresRunConfig.postgresVersion,
+  });
 
   // Update postgresql.conf with SSL settings
   const certPath = '/var/lib/postgresql/certs/server.crt.pem';
@@ -347,14 +371,22 @@ async function configurePostgresSSL(params: {
   let sslConfChanged = false;
 
   if (confWithSSL !== postgresConfContent) {
-    await writePostgresConfig(containerName, confWithSSL);
+    await writePostgresConfig({
+      containerName,
+      postgresVersion: postgresRunConfig.postgresVersion,
+      content: confWithSSL,
+    });
     logger.log('Updated postgresql.conf (SSL enabled)');
     configChanged = true;
     sslConfChanged = true;
   }
 
   if (hbaWithSSL !== pgHbaContent) {
-    await writePgHbaConf(containerName, hbaWithSSL);
+    await writePgHbaConf({
+      containerName,
+      postgresVersion: postgresRunConfig.postgresVersion,
+      content: hbaWithSSL,
+    });
     logger.log('Updated pg_hba.conf (SSL required for host connections)');
     configChanged = true;
   }

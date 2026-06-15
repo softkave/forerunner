@@ -39,8 +39,8 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 **`postgresVersion`** (string, optional)
 
 - **Description**: PostgreSQL version to use
-- **Example**: `"16"`
-- **Default**: `"16"`
+- **Example**: `"18"`
+- **Default**: `"18"`
 
 **`containerName`** (string, required)
 
@@ -98,7 +98,7 @@ The PostgreSQL commands require a configuration file that specifies port, contai
   "port": 5432,
   "authorization": "enabled",
   "ssl": "disabled",
-  "postgresVersion": "16",
+  "postgresVersion": "18",
   "containerName": "postgres-db",
   "volumeName": "postgres-db",
   "keep": true,

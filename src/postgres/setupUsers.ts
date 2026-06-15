@@ -408,8 +408,14 @@ export async function setupPostgresUsers(params: {
     let pgHbaContent: string;
     let postgresConfContent: string;
     try {
-      pgHbaContent = await readPgHbaConf(containerName);
-      postgresConfContent = await readPostgresConfig(containerName);
+      pgHbaContent = await readPgHbaConf({
+        containerName,
+        postgresVersion: postgresRunConfig.postgresVersion,
+      });
+      postgresConfContent = await readPostgresConfig({
+        containerName,
+        postgresVersion: postgresRunConfig.postgresVersion,
+      });
     } catch (err) {
       logger.log(
         `Could not read pg config: ${
@@ -445,7 +451,11 @@ export async function setupPostgresUsers(params: {
       );
       // Generate new pg_hba.conf with user-specific entries
       const newPgHba = pgHbaEntries.join('\n') + '\n';
-      await writePgHbaConf(containerName, newPgHba);
+      await writePgHbaConf({
+        containerName,
+        postgresVersion: postgresRunConfig.postgresVersion,
+        content: newPgHba,
+      });
       await reloadPostgresConfigViaClient(client);
       logger.log(
         'Updated pg_hba.conf to trust with user-specific entries and reloaded'
@@ -470,8 +480,16 @@ export async function setupPostgresUsers(params: {
       const newPgHba = pgHbaEntries.join('\n') + '\n';
       const updatedConf =
         setPostgresConfPasswordEncryption(postgresConfContent);
-      await writePgHbaConf(containerName, newPgHba);
-      await writePostgresConfig(containerName, updatedConf);
+      await writePgHbaConf({
+        containerName,
+        postgresVersion: postgresRunConfig.postgresVersion,
+        content: newPgHba,
+      });
+      await writePostgresConfig({
+        containerName,
+        postgresVersion: postgresRunConfig.postgresVersion,
+        content: updatedConf,
+      });
       await reloadPostgresConfigViaClient(client);
       logger.log(
         'Updated pg_hba and postgresql.conf to scram-sha-256 with user-specific entries and reloaded'
@@ -494,7 +512,11 @@ export async function setupPostgresUsers(params: {
       const newPgHba = pgHbaEntries.join('\n') + '\n';
       // Only update if content has changed
       if (newPgHba.trim() !== pgHbaContent.trim()) {
-        await writePgHbaConf(containerName, newPgHba);
+        await writePgHbaConf({
+          containerName,
+          postgresVersion: postgresRunConfig.postgresVersion,
+          content: newPgHba,
+        });
         await reloadPostgresConfigViaClient(client);
         logger.log('Updated pg_hba.conf with user-specific database entries');
       }

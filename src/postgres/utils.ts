@@ -13,45 +13,77 @@ export {
   volumeExists,
 } from '../utils/docker.js';
 
-export async function readPostgresConfig(
-  containerName: string
-): Promise<string> {
+/** PostgreSQL 18+ uses versioned data directories under /var/lib/postgresql. */
+export function getPostgresMajorVersion(postgresVersion: string): number {
+  return parseInt(postgresVersion.split('.')[0] ?? postgresVersion, 10);
+}
+
+export function getPostgresVolumeMountPath(postgresVersion: string): string {
+  return getPostgresMajorVersion(postgresVersion) >= 18
+    ? '/var/lib/postgresql'
+    : '/var/lib/postgresql/data';
+}
+
+export function getPostgresDataDirPath(postgresVersion: string): string {
+  const majorVersion = getPostgresMajorVersion(postgresVersion);
+  return majorVersion >= 18
+    ? `/var/lib/postgresql/${majorVersion}/docker`
+    : '/var/lib/postgresql/data';
+}
+
+export async function readPostgresConfig(params: {
+  containerName: string;
+  postgresVersion: string;
+}): Promise<string> {
+  const {containerName, postgresVersion} = params;
+  const dataDir = getPostgresDataDirPath(postgresVersion);
   return await execInContainer(containerName, [
     'cat',
-    '/var/lib/postgresql/data/postgresql.conf',
+    `${dataDir}/postgresql.conf`,
   ]);
 }
 
-export async function writePostgresConfig(
-  containerName: string,
-  content: string
-): Promise<void> {
+export async function writePostgresConfig(params: {
+  containerName: string;
+  postgresVersion: string;
+  content: string;
+}): Promise<void> {
+  const {containerName, postgresVersion, content} = params;
+  const dataDir = getPostgresDataDirPath(postgresVersion);
   // Use base64 encoding to safely pass content through docker exec
   const encoded = Buffer.from(content, 'utf8').toString('base64');
   await execInContainer(containerName, [
     'bash',
     '-c',
-    `echo '${encoded}' | base64 -d > /var/lib/postgresql/data/postgresql.conf`,
+    `echo '${encoded}' | base64 -d > ${dataDir}/postgresql.conf`,
   ]);
 }
 
-export async function readPgHbaConf(containerName: string): Promise<string> {
+export async function readPgHbaConf(params: {
+  containerName: string;
+  postgresVersion: string;
+}): Promise<string> {
+  const {containerName, postgresVersion} = params;
+  const dataDir = getPostgresDataDirPath(postgresVersion);
   return await execInContainer(containerName, [
     'cat',
-    '/var/lib/postgresql/data/pg_hba.conf',
+    `${dataDir}/pg_hba.conf`,
   ]);
 }
 
-export async function writePgHbaConf(
-  containerName: string,
-  content: string
-): Promise<void> {
+export async function writePgHbaConf(params: {
+  containerName: string;
+  postgresVersion: string;
+  content: string;
+}): Promise<void> {
+  const {containerName, postgresVersion, content} = params;
+  const dataDir = getPostgresDataDirPath(postgresVersion);
   // Use base64 encoding to safely pass content through docker exec
   const encoded = Buffer.from(content, 'utf8').toString('base64');
   await execInContainer(containerName, [
     'bash',
     '-c',
-    `echo '${encoded}' | base64 -d > /var/lib/postgresql/data/pg_hba.conf`,
+    `echo '${encoded}' | base64 -d > ${dataDir}/pg_hba.conf`,
   ]);
 }
 

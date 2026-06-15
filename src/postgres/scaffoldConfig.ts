@@ -54,7 +54,7 @@ async function promptForConfig(
       config.volumeName = volumeName.trim();
     }
 
-    const version = await question(rl, 'PostgreSQL version [16]: ');
+    const version = await question(rl, 'PostgreSQL version [18]: ');
     if (version.trim()) {
       config.postgresVersion = version.trim();
     }
@@ -316,7 +316,7 @@ function getDefaultConfig(): PostgresRunConfig {
     port: 5432,
     containerName: 'postgres-db',
     volumeName: 'postgres-db',
-    postgresVersion: '16',
+    postgresVersion: '18',
     keep: true,
     discoverability: 'local',
     authorization: 'enabled',

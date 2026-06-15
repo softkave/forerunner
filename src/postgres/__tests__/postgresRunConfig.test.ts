@@ -14,7 +14,7 @@ describe('postgresRunConfigSchema', () => {
   test('accepts minimal valid config and applies defaults', () => {
     const parsed = postgresRunConfigSchema.parse(baseConfig);
     expect(parsed.workingDir).toBe('.');
-    expect(parsed.postgresVersion).toBe('16');
+    expect(parsed.postgresVersion).toBe('18');
     expect(parsed.volumeName).toBe('test-pg');
     expect(parsed.keep).toBe(false);
     expect(parsed.authorization).toBe('disabled');
@@ -143,7 +143,7 @@ describe('getAuthUserFromConfig', () => {
       keep: false,
       authorization: 'disabled',
       ssl: 'disabled',
-      postgresVersion: '16',
+      postgresVersion: '18',
       discoverability: 'local',
     };
     expect(getAuthUserFromConfig(config)).toBeUndefined();
@@ -159,7 +159,7 @@ describe('getAuthUserFromConfig', () => {
         keep: false,
         authorization: 'disabled',
         ssl: 'disabled',
-        postgresVersion: '16',
+        postgresVersion: '18',
       } as PostgresRunConfig),
       users: [{username: 'admin', password: 'secret'}],
     };
@@ -179,7 +179,7 @@ describe('getAuthUserFromConfig', () => {
         keep: false,
         authorization: 'enabled',
         ssl: 'disabled',
-        postgresVersion: '16',
+        postgresVersion: '18',
       } as PostgresRunConfig),
       users: [
         {username: 'admin', password: 'adminpw'},
@@ -202,7 +202,7 @@ describe('getAuthUserFromConfig', () => {
         keep: false,
         authorization: 'enabled',
         ssl: 'disabled',
-        postgresVersion: '16',
+        postgresVersion: '18',
       } as PostgresRunConfig),
       users: [{username: 'admin', password: 'adminpw'}],
     };
