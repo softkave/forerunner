@@ -65,7 +65,7 @@ softkave-forerunner postgres generate-certs -c postgres-config.json
 softkave-forerunner postgres start -c postgres-config.json
 
 # Start PostgreSQL instance with CLI arguments
-softkave-forerunner postgres start --port 5432 --container-name postgres-db --username admin --password admin-password --db mydb
+softkave-forerunner postgres start --version 18 --port 5432 --container-name postgres-db --username admin --password admin-password --db mydb
 
 # Stop PostgreSQL instance with config file
 softkave-forerunner postgres stop -c postgres-config.json

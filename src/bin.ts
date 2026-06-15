@@ -55,7 +55,7 @@ import {
 } from './postgres/index.js';
 
 // Import run-env functionality
-import {runWithEnvMain, RunEnvCommandError} from './runEnv/index.js';
+import {RunEnvCommandError, runWithEnvMain} from './runEnv/index.js';
 
 /** Accumulate multiple `-e, --env-file` flags into an ordered list. */
 function collectEnvFilePath(value: string, previous?: string[]): string[] {
@@ -1279,7 +1279,7 @@ EXAMPLES:
   softkave-forerunner mongo setup-replica-set -c mongo-config.json
 
   # Start PostgreSQL instance
-  softkave-forerunner postgres start --port 5432 --container-name postgres-db
+  softkave-forerunner postgres start --version 18 --port 5432 --container-name postgres-db
 
   # Stop PostgreSQL instance
   softkave-forerunner postgres stop --container-name postgres-db
