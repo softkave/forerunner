@@ -69,12 +69,13 @@ import {
 } from './process/index.js';
 import {generateJwtSecret, generatePassword} from './security/index.js';
 
+const CLI_VERSION = await getVersion('unknown');
+
 const program = new Command();
 
 program
   .name('softkave-forerunner')
-  .description('Softkave internal application runner & helpers')
-  .version(await getVersion('unknown'));
+  .description('Softkave internal application runner & helpers');
 
 // ============================================================================
 // CERTS SUB-PROGRAM
@@ -1328,6 +1329,16 @@ For more information about a specific command, use:
 // Default action - show help if no command provided
 if (process.argv.length === 2) {
   program.help();
+}
+
+// Root --version/-V prints CLI version only when no subcommand is present.
+// Avoid program.version() so subcommand flags like postgres start --version 16
+// are not swallowed by the global version option.
+const argv = process.argv.slice(2);
+const hasSubcommand = argv.some(arg => !arg.startsWith('-'));
+if (!hasSubcommand && (argv.includes('--version') || argv.includes('-V'))) {
+  console.log(CLI_VERSION);
+  process.exit(0);
 }
 
 program.parse();

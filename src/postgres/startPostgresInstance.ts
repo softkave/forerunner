@@ -1,5 +1,4 @@
 import {execFile} from 'child_process';
-import path from 'path';
 import {Client} from 'pg';
 import {promisify} from 'util';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
@@ -17,11 +16,11 @@ import {
   generatePgHbaEntriesForUser,
   generateRandomPassword,
   getPostgresClient,
+  getPostgresVolumeMountPath,
   isContainerRunning,
   pgHbaRequiresSSL,
   readPgHbaConf,
   readPostgresConfig,
-  getPostgresVolumeMountPath,
   reloadPostgresConfigViaClient,
   setPgHbaRequireSSL,
   setPostgresConfPasswordEncryption,
