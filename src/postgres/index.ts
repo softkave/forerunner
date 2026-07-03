@@ -1,6 +1,7 @@
 export * from './generatePostgresCertConfigs.js';
 export * from './generatePostgresCerts.js';
 export * from './postgresRunConfig.js';
+export * from './printPostgresUri.js';
 export * from './scaffoldConfig.js';
 export * from './setupDatabases.js';
 export * from './setupUsers.js';

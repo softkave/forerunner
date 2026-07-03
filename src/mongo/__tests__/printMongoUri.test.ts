@@ -46,6 +46,8 @@ describe('printMongoUri', () => {
     expect(uri).toMatch(/^mongodb:\/\//);
     expect(uri).toContain(`replicaSet=${mongoRunConfig.replicaSetName}`);
     expect(uri).toContain('serverSelectionTimeoutMs=');
+    expect(uri).toContain('tls=true');
+    expect(uri).toContain('tlsAllowInvalidCertificates=true');
     expect(uri).toContain('27050');
     expect(uri).toContain('27051');
     expect(uri).toContain('27052');

@@ -81,6 +81,46 @@ export async function ensureDockerAvailable(): Promise<void> {
   }
 }
 
+export async function dockerNetworkExists(
+  networkName: string
+): Promise<boolean> {
+  try {
+    await execFileAsync('docker', ['network', 'inspect', networkName], {
+      encoding: 'utf8',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function ensureDockerNetwork(networkName: string): Promise<void> {
+  if (await dockerNetworkExists(networkName)) {
+    return;
+  }
+
+  try {
+    await execFileAsync(
+      'docker',
+      ['network', 'create', '--driver', 'bridge', networkName],
+      {encoding: 'utf8'}
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to create Docker network ${networkName}: ${msg}`);
+  }
+}
+
+export async function removeDockerNetwork(networkName: string): Promise<void> {
+  try {
+    await execFileAsync('docker', ['network', 'rm', networkName], {
+      encoding: 'utf8',
+    });
+  } catch {
+    // Network may still have attached containers or already be removed.
+  }
+}
+
 export async function execInContainer(
   containerName: string,
   command: string[]

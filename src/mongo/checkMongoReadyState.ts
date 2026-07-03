@@ -94,22 +94,28 @@ export async function assertMongoInstancesListening(
 export async function checkMongoReplicaSetReady(
   params: {
     retries?: number;
+    serverSelectionTimeoutMs?: number;
   } & GetMongoClientForReplicaSetParams
 ) {
   const {
     mongoRunConfig,
     logger = new ConsoleForeLogger({silent: true}),
-    retries = 5,
+    retries = 15,
+    serverSelectionTimeoutMs = 5_000,
   } = params;
 
   try {
     await pRetry(
       async () => {
-        const client = await getMongoClientForReplicaSet(params);
+        const client = await getMongoClientForReplicaSet({
+          ...params,
+          serverSelectionTimeoutMs,
+        });
         logger.log('Replica set ready');
         await client.close();
       },
       {
+        minTimeout: 1_000,
         onFailedAttempt: error => {
           const errorMessage =
             error instanceof Error ? error.message : JSON.stringify(error);

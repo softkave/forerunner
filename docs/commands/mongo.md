@@ -6,7 +6,27 @@ MongoDB replica set management. **Only replica sets are supported**; standalone 
 
 **Docker is required** for mongo operations (start, stop, setup-replica-set, restart, etc.); instances run as Docker containers.
 
-**When authorization is enabled:** An admin user (with `userAdminAnyDatabase`) is required in config for user management. A cluster admin user (with `clusterAdmin`) is necessary for replica set and other operations after initial setup (e.g. restart, status, reconfig).
+**When authorization is enabled:** Both an admin user (with `userAdminAnyDatabase`) and a cluster admin user (with `clusterAdmin`) are required in config. The admin user is used for user management, and the cluster admin user is required for replica set operations such as restart, status, and reconfig. If replica-set initialization is enabled on start, forerunner will enforce that both users are present and will create/sync them as part of startup.
+
+#### Quick start from the CLI
+
+Use this when you want to bring up a local MongoDB replica set without creating a JSON config first. Forerunner will build a temporary run config from the flags you provide and then start the instances.
+
+```bash
+softkave-forerunner mongo start \
+  --container-name mymongo \
+  --port 27017 27018 27019 \
+  --user admin \
+  --password secret \
+  --setup-users
+```
+
+**What to know:**
+
+- At least 3 ports are required for a replica set.
+- `--hostname <names...>` lets you provide one non-localhost hostname per instance; if you omit it, Forerunner uses generated `.dev.local` hostnames.
+- `--etc-hosts-setup <mode>` controls how those hostnames are made resolvable: `prompt` (default), `add`, `manual`, or `skip`. If you already manage `/etc/hosts` yourself, prefer `skip` or `manual`.
+- `--setup-users` initializes the configured admin and cluster-admin users after startup.
 
 #### Scaffold MongoDB Configuration
 
@@ -14,7 +34,7 @@ MongoDB replica set management. **Only replica sets are supported**; standalone 
 softkave-forerunner mongo scaffold-config [options]
 ```
 
-**Description**: Generates a MongoDB configuration file interactively or using default values. This command prompts for all necessary configuration options including working directory, MongoDB version, SSL/TLS certificate authority configuration (SSL is always enabled), replica set configuration, instance ports and hostnames, and user authentication settings.
+**Description**: Generates a MongoDB configuration file interactively or using default values. This command prompts for all necessary configuration options including working directory, MongoDB version, SSL/TLS certificate authority configuration (SSL is always enabled), replica set configuration, instance ports and hostnames, and user authentication settings. When authorization is enabled, the scaffold flow now creates both an admin user and a cluster admin user.
 
 **Options:**
 
@@ -38,7 +58,7 @@ softkave-forerunner mongo scaffold-config --defaults -o ./configs/mongo-config.j
 softkave-forerunner mongo validate-config -c <config-path> [options]
 ```
 
-**Description**: Validates the MongoDB configuration file. Checks that the file is valid JSON and that the content conforms to the run config schema. Prints clear validation errors to the console (e.g. missing required fields, invalid values, user/database constraints).
+**Description**: Validates the MongoDB configuration file. Checks that the file is valid JSON and that the content conforms to the run config schema. Prints clear validation errors to the console (e.g. missing required fields, invalid values, user/database constraints). When authorization is enabled, validation also requires both an admin user and a cluster admin user.
 
 **Options:**
 
@@ -78,14 +98,27 @@ softkave-forerunner mongo generate-certs -c <config-path> [options]
 #### Start MongoDB Instances
 
 ```bash
+softkave-forerunner mongo start [options]
 softkave-forerunner mongo start -c <config-path> [options]
 ```
 
 **Description**: Starts MongoDB instances and sets up the replica set (if not already setup). **If not already present**, this command will automatically generate certificate configs and certificates before starting instances. SSL/TLS is always enabled. The replica set is initialized automatically if it hasn't been initialized yet. Use `--setup-users` to also setup users after starting.
 
+When `-c, --config` is omitted, Forerunner uses a temporary in-memory config generated from the CLI flags for local development. This is the quickest way to start a local replica set without writing a config file.
+
 **Options:**
 
-- `-c, --config <path>` - Path to mongo run config file (required)
+- `-c, --config <path>` - Path to mongo run config file (optional; if omitted, a temporary config is generated from CLI flags)
+- `--container-name <name>` - Container name prefix for quick start (required when no config is provided)
+- `--port <ports...>` - Port numbers for the replica set members; at least 3 are required for quick start
+- `--working-dir <path>` - Working directory for data/certs (used by quick start)
+- `--version <version>` - MongoDB version for quick start
+- `--replica-set-name <name>` - Replica set name for quick start
+- `--docker-network <name>` - Docker network name for quick start
+- `--hostname <names...>` - One non-localhost hostname per instance for quick start
+- `--etc-hosts-setup <mode>` - How to resolve generated hostnames: `prompt`, `add`, `manual`, or `skip`
+- `--user <username>` - Admin username (enables auth when paired with `--password`)
+- `--password <password>` - Admin password (enables auth when paired with `--user`)
 - `--no-setup-replica-set` - Skip replica set setup (default: replica set is setup automatically)
 - `--setup-users` - Setup MongoDB users after starting instances (default: false)
 - `-s, --silent` - Silent mode

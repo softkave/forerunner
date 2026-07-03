@@ -79,7 +79,7 @@ export async function generateCAConfigForMongo(params: {
   const password = generateMongoPassword();
   const mongoCAConfig: CAConfig = {
     ...params.mongoRunConfig.caConfig,
-    passphrase: params.mongoRunConfig.caConfig.passphrase || password,
+    passphrase: params.mongoRunConfig.caConfig.passphrase ?? password,
     outDir: getMongoCertOutDir(),
     files: {
       key: 'ca.key.pem',

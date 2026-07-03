@@ -128,3 +128,4 @@ local-*.json
 testdir/
 
 *.DS_Store
+.forerunner-mongo/

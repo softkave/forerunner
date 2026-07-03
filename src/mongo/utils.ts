@@ -65,9 +65,11 @@ export async function getMongoUriForInstance(params: {
   instanceNumber: number;
   username?: string;
   password?: string;
+  database?: string;
   mongoRunConfig: MongoRunConfig;
   logger: IForeLogger;
   preferLocalhost?: boolean;
+  includeTls?: boolean;
 }) {
   const {instanceNumber, mongoRunConfig, logger} = params;
 
@@ -77,15 +79,16 @@ export async function getMongoUriForInstance(params: {
   const bindIp0 = params.preferLocalhost
     ? getFirstLocalhostBindIp({hostnames}) || hostnames[0]
     : hostnames[0];
-  let host = `${bindIp0}:${mongoRunConfig.ports[instanceNumber - 1]}`;
-  let uri = `mongodb://${host}`;
+  const host = `${bindIp0}:${mongoRunConfig.ports[instanceNumber - 1]}`;
+  const uri = buildMongoUri({
+    authority: host,
+    path: params.database,
+    queryParts: [],
+    username: params.username,
+    password: params.password,
+    includeTls: params.includeTls,
+  });
   logger.log('Mongo URI:', uri);
-  if (params.username && params.password) {
-    uri = `mongodb://${encodeURIComponent(
-      params.username
-    )}:${encodeURIComponent(params.password)}@${host}`;
-  }
-
   return uri;
 }
 
@@ -98,13 +101,50 @@ export function compileHostnames(params: {
   return hostnames;
 }
 
+function appendMongoQueryParams(params: {
+  queryParts: string[];
+  includeTls?: boolean;
+}): string {
+  const parts = [...params.queryParts];
+  if (params.includeTls !== false) {
+    parts.push('tls=true', 'tlsAllowInvalidCertificates=true');
+  }
+  return parts.join('&');
+}
+
+function buildMongoUri(params: {
+  authority: string;
+  path?: string;
+  queryParts: string[];
+  username?: string;
+  password?: string;
+  includeTls?: boolean;
+}): string {
+  const query = appendMongoQueryParams({
+    queryParts: params.queryParts,
+    includeTls: params.includeTls,
+  });
+  const path = params.path ? `/${encodeURIComponent(params.path)}` : '';
+  const hostPart = `${params.authority}${path}?${query}`;
+
+  if (params.username && params.password) {
+    const username = encodeURIComponent(params.username);
+    const password = encodeURIComponent(params.password);
+    return `mongodb://${username}:${password}@${hostPart}`;
+  }
+
+  return `mongodb://${hostPart}`;
+}
+
 export async function getMongoUriForReplicaSet(params: {
   username?: string;
   password?: string;
+  database?: string;
   mongoRunConfig: MongoRunConfig;
   serverSelectionTimeoutMs?: number;
   logger: IForeLogger;
   preferLocalhost?: boolean;
+  includeTls?: boolean;
 }) {
   const {mongoRunConfig, serverSelectionTimeoutMs = 5000, logger} = params;
   const hostnamesPerInstance = mongoRunConfig.ports.map((_port, index) => {
@@ -128,7 +168,7 @@ export async function getMongoUriForReplicaSet(params: {
   });
 
   const portsPerInstance = mongoRunConfig.ports;
-  const host = hostnamesPerInstance
+  const authority = hostnamesPerInstance
     .map((hostname, index) => {
       const port = portsPerInstance[index];
       assert.ok(hostname, `hostname must be set for instance ${index}`);
@@ -137,15 +177,18 @@ export async function getMongoUriForReplicaSet(params: {
     })
     .join(',');
 
-  let uriWithoutProtocol = `${host}?replicaSet=${mongoRunConfig.replicaSetName}&serverSelectionTimeoutMs=${serverSelectionTimeoutMs}`;
-  logger.log('Mongo URI:', uriWithoutProtocol);
-  if (params.username && params.password) {
-    const username = encodeURIComponent(params.username);
-    const password = encodeURIComponent(params.password);
-    uriWithoutProtocol = `${username}:${password}@${uriWithoutProtocol}`;
-  }
-
-  const uri = `mongodb://${uriWithoutProtocol}`;
+  const uri = buildMongoUri({
+    authority,
+    path: params.database,
+    queryParts: [
+      `replicaSet=${mongoRunConfig.replicaSetName}`,
+      `serverSelectionTimeoutMs=${serverSelectionTimeoutMs}`,
+    ],
+    username: params.username,
+    password: params.password,
+    includeTls: params.includeTls,
+  });
+  logger.log('Mongo URI:', uri);
   return uri;
 }
 

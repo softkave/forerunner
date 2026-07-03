@@ -2,11 +2,11 @@
 
 import assert from 'assert';
 import {execFile} from 'child_process';
-import {promises as fsp} from 'fs';
+import fs, {promises as fsp} from 'fs';
 import {exists} from 'fs-extra';
+import {promisify} from 'util';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
-import {promisify} from 'util';
 
 const HOSTS_FILE = '/etc/hosts';
 const BACKUP_FILE = '/etc/hosts.backup';
@@ -192,6 +192,79 @@ export async function writeHostsFile(params: {
   }
 }
 
+export async function canWriteHostsFileDirectly(
+  hostsFilePath: string = HOSTS_FILE
+): Promise<boolean> {
+  try {
+    await fsp.access(hostsFilePath, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export type SetHostsEntry = {hostname: string; ip?: string};
+
+export type SetHostsParams = {
+  hostsFilePath?: string;
+  dontExitOnError?: boolean;
+  logger: IForeLogger;
+} & ({hosts: SetHostsEntry[]} | {hostname: string; ip?: string});
+
+export async function setHosts(params: SetHostsParams): Promise<void> {
+  const {
+    hostsFilePath = HOSTS_FILE,
+    dontExitOnError = false,
+    logger = new ConsoleForeLogger({silent: true}),
+  } = params;
+
+  const hosts: SetHostsEntry[] =
+    'hosts' in params
+      ? params.hosts
+      : [{hostname: params.hostname, ip: params.ip}];
+
+  if (hosts.length === 0) {
+    return;
+  }
+
+  const content = await readHostsFile({hostsFilePath, logger});
+  assert.ok(content, 'Hosts file not found');
+  const entries = parseHostsFile({content});
+  let madeChange = false;
+
+  for (const host of hosts) {
+    const ip = host.ip ?? '127.0.0.1';
+    const existingIndex = entries.findIndex(
+      entry => entry.hostname === host.hostname
+    );
+    if (existingIndex !== -1) {
+      if (entries[existingIndex]!.ip === ip) {
+        continue;
+      }
+      entries[existingIndex]!.ip = ip;
+      logger.log(`Updated existing entry for ${host.hostname} to ${ip}`);
+      madeChange = true;
+    } else {
+      entries.push({ip, hostname: host.hostname});
+      logger.log(`Added new entry for ${host.hostname} to ${ip}`);
+      madeChange = true;
+    }
+  }
+
+  if (!madeChange) {
+    return;
+  }
+
+  const newContent = formatHostsFile({entries});
+  await writeHostsFile({
+    content: newContent,
+    hostsFilePath,
+    logger,
+    dontExitOnError,
+  });
+}
+
+/** @deprecated Use `setHosts` with `hostname` (and optional `ip`) instead. */
 export async function setHost(params: {
   hostsFilePath?: string;
   dontExitOnError?: boolean;
@@ -199,45 +272,7 @@ export async function setHost(params: {
   hostname: string;
   ip?: string;
 }): Promise<void> {
-  const {
-    hostsFilePath = HOSTS_FILE,
-    dontExitOnError = false,
-    logger = new ConsoleForeLogger({silent: true}),
-    hostname,
-    ip = '127.0.0.1',
-  } = params;
-
-  logger.log(`Setting ${hostname} to ${ip}`);
-
-  const content = await readHostsFile({hostsFilePath, logger});
-  assert.ok(content, 'Hosts file not found');
-  const entries = parseHostsFile({content});
-  let madeChange = false;
-
-  // Check if hostname already exists
-  const existingIndex = entries.findIndex(entry => entry.hostname === hostname);
-
-  if (existingIndex !== -1) {
-    // Update existing entry
-    entries[existingIndex].ip = ip;
-    logger.log(`Updated existing entry for ${hostname}`);
-    madeChange = true;
-  } else {
-    // Add new entry
-    entries.push({ip, hostname});
-    logger.log(`Added new entry for ${hostname}`);
-    madeChange = true;
-  }
-
-  if (madeChange) {
-    const newContent = formatHostsFile({entries});
-    await writeHostsFile({
-      content: newContent,
-      hostsFilePath,
-      logger,
-      dontExitOnError,
-    });
-  }
+  await setHosts(params);
 }
 
 export async function removeHost(params: {

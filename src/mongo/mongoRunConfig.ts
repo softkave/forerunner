@@ -1,6 +1,5 @@
 import fs from 'fs';
 import {ensureFile} from 'fs-extra';
-import path from 'path';
 import {convertToArray} from 'softkave-js-utils';
 import z from 'zod';
 import {CAConfig} from '../certs/types.js';
@@ -131,12 +130,42 @@ export const mongoRunConfigSchema = z
 
     // Optional Docker labels added to each mongod container on start.
     labels: z.record(z.string().min(1), z.string()).optional(),
+
+    // Optional Docker network for inter-container discovery (container
+    // hostnames).
+    dockerNetwork: z.string().min(1).optional(),
+
+    /** How to handle missing /etc/hosts entries before replica set setup. */
+    etcHostsSetup: z.enum(['prompt', 'add', 'manual', 'skip']).optional(),
+
+    /** IP used when adding /etc/hosts entries (defaults to 127.0.0.1 for
+     *  local Docker; set to the host LAN address when clients reach published
+     *  ports via a non-loopback address). */
+    etcHostsIp: z.string().min(1).optional(),
   })
   .refine(
     data =>
       data.ports.length === data.hostnames.length && data.ports.length >= 3,
     {
       message: 'ports and hostnames must have the same length (minimum 3)',
+    }
+  )
+  .refine(
+    data => {
+      if (data.authorization === 'disabled') {
+        return true;
+      }
+      const hasAdmin = data.users.some(user =>
+        user.roles.some(role => role.role === 'userAdminAnyDatabase')
+      );
+      const hasClusterAdmin = data.users.some(user =>
+        user.roles.some(role => role.role === 'clusterAdmin')
+      );
+      return hasAdmin && hasClusterAdmin;
+    },
+    {
+      message:
+        'When authorization is enabled, both an admin user with the userAdminAnyDatabase role and a cluster admin user with the clusterAdmin role are required',
     }
   );
 
@@ -161,6 +190,13 @@ export interface MongoRunConfig {
   authorization?: 'enabled' | 'disabled';
   /** Optional Docker labels applied to each `mongod` container. */
   labels?: Record<string, string>;
+  /** Optional Docker network for inter-container hostname discovery. */
+  dockerNetwork?: string;
+  /** How to handle missing /etc/hosts entries before replica set setup. */
+  etcHostsSetup?: 'prompt' | 'add' | 'manual' | 'skip';
+  /** IP used when adding /etc/hosts entries (defaults to 127.0.0.1 for local
+   *  Docker; set to the host LAN address for remote clients). */
+  etcHostsIp?: string;
 }
 
 export function getCachedMongoRunConfigFilepath(params: {

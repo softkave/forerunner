@@ -1,11 +1,11 @@
 import assert from 'assert';
 import {remove} from 'fs-extra';
 import {first} from 'lodash-es';
-import path from 'path';
 import {expect} from 'vitest';
+import {removeDockerNetwork} from '../utils/docker.js';
 import {IForeLogger} from '../utils/exports.js';
-import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
+import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
 import {closeMongoClient, getMongoClient} from './connection.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {stopMongoMain} from './stopMongo.js';
@@ -147,8 +147,14 @@ export async function cleanupMongoTest(params: {
   mongoRunConfig: MongoRunConfig;
   cleanInstances?: boolean;
   cleanDirs?: boolean;
+  cleanLogs?: boolean;
 }) {
-  const {mongoRunConfig, cleanDirs = true, cleanInstances = cleanDirs} = params;
+  const {
+    mongoRunConfig,
+    cleanDirs = true,
+    cleanInstances = cleanDirs,
+    cleanLogs,
+  } = params;
 
   // We must clean instances if we're cleaning dirs otherwise the instances will
   // hang and won't close
@@ -156,19 +162,19 @@ export async function cleanupMongoTest(params: {
     await endMongoInstancesForTest({mongoRunConfig});
   }
 
+  if (mongoRunConfig.dockerNetwork) {
+    await removeDockerNetwork(mongoRunConfig.dockerNetwork);
+  }
+
   if (cleanDirs) {
-    const configsDir = resolvePathUnderWorkingDir(
-      mongoRunConfig.workingDir,
-      'mongo-configs'
-    );
-    const dataDir = resolvePathUnderWorkingDir(
-      mongoRunConfig.workingDir,
-      'mongo-data'
-    );
-    const systemLogsDir = resolvePathUnderWorkingDir(
-      mongoRunConfig.workingDir,
-      'mongo-system-logs'
-    );
+    // const configsDir = resolvePathUnderWorkingDir(
+    //   mongoRunConfig.workingDir,
+    //   'mongo-configs'
+    // );
+    // const dataDir = resolvePathUnderWorkingDir(
+    //   mongoRunConfig.workingDir,
+    //   'mongo-data'
+    // );
     // const certsOutDir = path.join(
     //   mongoRunConfig.workingDir,
     //   'mongo-certs-out'
@@ -177,10 +183,17 @@ export async function cleanupMongoTest(params: {
     //   mongoRunConfig.workingDir,
     //   'mongo-certs-configs'
     // );
-    await remove(configsDir);
-    await remove(dataDir);
-    await remove(systemLogsDir);
+    // await remove(configsDir);
+    // await remove(dataDir);
     // await remove(certsOutDir);
     // await remove(certsConfigsDir);
+
+    await remove(mongoRunConfig.workingDir);
+  } else if (cleanLogs) {
+    const systemLogsDir = resolvePathUnderWorkingDir(
+      mongoRunConfig.workingDir,
+      'mongo-system-logs'
+    );
+    await remove(systemLogsDir);
   }
 }

@@ -1,5 +1,9 @@
 import {execFile} from 'child_process';
-import {containerExists, isContainerRunning} from '../utils/docker.js';
+import {
+  containerExists,
+  isContainerRunning,
+  removeDockerNetwork,
+} from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {getInstanceRunName} from './constants.js';
@@ -95,4 +99,8 @@ export async function stopMongoMain(params: {
       logger.log(`mongod-${index + 1} failed to stop: ${errorMessage}`);
     }
   });
+
+  if (mongoRunConfig.dockerNetwork) {
+    await removeDockerNetwork(mongoRunConfig.dockerNetwork);
+  }
 }

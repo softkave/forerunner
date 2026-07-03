@@ -1,3 +1,4 @@
+import dns from 'dns';
 import {MongoClient} from 'mongodb';
 import {ConsoleForeLogger, IForeLogger} from '../utils/exports.js';
 import {
@@ -71,6 +72,9 @@ export async function getMongoClientForInstance(
     preferLocalhost: params.preferLocalhost,
   });
 
+  // Prefer A records when both A and AAAA exist; dual-stack otherwise.
+  dns.setDefaultResultOrder('ipv4first');
+
   const client = new MongoClient(uri, {
     connectTimeoutMS: connectTimeoutMs,
     directConnection: true,
@@ -104,10 +108,14 @@ export async function getMongoClientForReplicaSet(
     preferLocalhost: preferLocalhost,
   });
 
+  // Prefer A records when both A and AAAA exist; dual-stack otherwise.
+  dns.setDefaultResultOrder('ipv4first');
+
   const client = new MongoClient(uri, {
     tls: true,
     tlsAllowInvalidCertificates: true,
     connectTimeoutMS: connectTimeoutMs,
+    serverSelectionTimeoutMS: serverSelectionTimeoutMs,
   });
   await client.connect();
   logger.log(

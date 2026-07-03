@@ -14,8 +14,9 @@ export interface MongoNetTlsConfig {
   certificateKeyFile: string;
   /** CA file path. */
   CAFile: string;
-  /** x509 cluster auth attributes (string form). */
-  clusterAuthX509: {attributes: string};
+  /** x509 cluster auth attributes (only when `security.clusterAuthMode` is
+   * `x509`). */
+  clusterAuthX509?: {attributes: string};
   /** Allow clients without certificates (we use this for dev). */
   allowConnectionsWithoutCertificates: boolean;
 }
@@ -71,9 +72,11 @@ export const MongoConfigSchema = z.object({
         // clusterFile: z.string(),
         CAFile: z.string(),
         // clusterCAFile: z.string(),
-        clusterAuthX509: z.object({
-          attributes: z.string(),
-        }),
+        clusterAuthX509: z
+          .object({
+            attributes: z.string(),
+          })
+          .optional(),
         allowConnectionsWithoutCertificates: z.boolean(),
       })
       .optional(),
@@ -157,6 +160,8 @@ export async function generateMongoDockerConfigForMongod(params: {
     return config as MongoConfig;
   }
 
+  const authEnabled = mongoRunConfig.authorization !== 'disabled';
+
   const config: MongoConfig = {
     systemLog: {
       destination: 'file',
@@ -171,9 +176,13 @@ export async function generateMongoDockerConfigForMongod(params: {
         certificateKeyFile: `/certs/mongod-${instanceNumber}.crt.key.pem`,
         CAFile: '/certs/ca.crt.pem',
         mode: 'requireTLS' as const,
-        clusterAuthX509: {
-          attributes: `O=${mongoRunConfig.caConfig.subject.O}`,
-        },
+        ...(authEnabled
+          ? {
+              clusterAuthX509: {
+                attributes: `O=${mongoRunConfig.caConfig.subject.O}`,
+              },
+            }
+          : {}),
         allowConnectionsWithoutCertificates: true,
       },
     },
@@ -181,10 +190,9 @@ export async function generateMongoDockerConfigForMongod(params: {
       dbPath: '/data/db',
     },
     security: {
-      clusterAuthMode: 'x509' as const,
-      authorization:
-        mongoRunConfig.authorization !== 'disabled' ? 'enabled' : 'disabled',
+      authorization: authEnabled ? 'enabled' : 'disabled',
       transitionToAuth: false,
+      ...(authEnabled ? {clusterAuthMode: 'x509' as const} : {}),
     },
     processManagement: {
       fork: false,

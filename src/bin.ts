@@ -26,6 +26,11 @@ import {
   validateMongoConfig,
 } from './mongo/index.js';
 import {getMongoRunConfig} from './mongo/mongoRunConfig.js';
+import {
+  buildQuickMongoRunConfig,
+  buildQuickMongoStopConfig,
+  parseMongoCliPorts,
+} from './mongo/quickStartConfig.js';
 
 // Import etcHosts functionality
 import {
@@ -33,7 +38,7 @@ import {
   listHostsAndPrint,
   removeHost,
   restoreHostsFile,
-  setHost,
+  setHosts,
 } from './etcHosts/helpers.js';
 
 // Import process management functionality
@@ -46,6 +51,7 @@ import {
   generatePostgresCertsMain,
   getPostgresRunConfig,
   postgresRunConfigSchema,
+  printPostgresUriMain,
   scaffoldPostgresConfig,
   setupDatabases,
   setupPostgresUsers,
@@ -341,7 +347,44 @@ mongoProgram
   .description(
     'Start MongoDB instances and setup replica set (if not already setup)'
   )
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-c, --config <path>', 'Path to mongo run config file')
+  .option(
+    '--container-name <name>',
+    'Container name prefix (required if no config)'
+  )
+  .option(
+    '--port <ports...>',
+    'Port numbers, minimum 3 (required if no config)'
+  )
+  .option(
+    '--working-dir <path>',
+    'Working directory for data/certs (defaults to ./.forerunner-mongo/<container-name>)'
+  )
+  .option('--version <version>', 'MongoDB version')
+  .option(
+    '--replica-set-name <name>',
+    'Replica set name (defaults to <container-name>-rs)'
+  )
+  .option(
+    '--docker-network <name>',
+    'Docker network for inter-container discovery (defaults to <container-name>-net)'
+  )
+  .option(
+    '--hostname <names...>',
+    'Non-localhost hostname per instance (defaults to <container>-mongod-N.dev.local)'
+  )
+  .option(
+    '--etc-hosts-setup <mode>',
+    'How to handle missing /etc/hosts entries: prompt, add, manual, or skip'
+  )
+  .option(
+    '--user <username>',
+    'Admin username (with --password enables auth for quick setup)'
+  )
+  .option(
+    '--password <password>',
+    'Admin password (with --user enables auth for quick setup)'
+  )
   .option(
     '--no-setup-replica-set',
     'Skip replica set setup (default: setup replica set)'
@@ -355,16 +398,43 @@ mongoProgram
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
+      let mongoRunConfig;
+
+      if (options.config) {
+        mongoRunConfig = await getMongoRunConfig({
+          mongoRunConfigFilepath: options.config,
+        });
+      } else {
+        if (!options.containerName || !options.port) {
+          throw new Error(
+            '--container-name and --port (at least 3 ports) are required when --config is not provided'
+          );
+        }
+
+        mongoRunConfig = buildQuickMongoRunConfig({
+          containerName: options.containerName,
+          ports: parseMongoCliPorts(options.port),
+          workingDir: options.workingDir,
+          replicaSetName: options.replicaSetName,
+          mongoVersion: options.version,
+          dockerNetwork: options.dockerNetwork,
+          hostnames: options.hostname,
+          etcHostsSetup: options.etcHostsSetup,
+          user: options.user,
+          password: options.password,
+        });
+      }
+
+      const authEnabled = mongoRunConfig.authorization !== 'disabled';
 
       await startMongoMain({
         mongoRunConfig,
         logger,
         waitUntilListening: true,
+        shouldInitDbRootUser: authEnabled,
         shouldSetupReplicaSet: options.setupReplicaSet ?? true,
         shouldSetupUsers: options.setupUsers ?? false,
+        etcHostsSetup: options.etcHostsSetup,
       });
       logger.log('✅ MongoDB instances started successfully');
     } catch (error) {
@@ -378,14 +448,47 @@ mongoProgram
 mongoProgram
   .command('stop')
   .description('Stop MongoDB instances')
-  .requiredOption('-c, --config <path>', 'Path to mongo run config file')
+  .option('-c, --config <path>', 'Path to mongo run config file')
+  .option(
+    '--container-name <name>',
+    'Container name prefix (required if no config)'
+  )
+  .option(
+    '--port <ports...>',
+    'Port numbers, minimum 3 (required if no config)'
+  )
+  .option(
+    '--working-dir <path>',
+    'Working directory used during quick start (optional)'
+  )
+  .option(
+    '--docker-network <name>',
+    'Docker network to remove after stop (optional)'
+  )
   .option('-s, --silent', 'Silent mode')
   .action(async options => {
     const logger = new ConsoleForeLogger({silent: options.silent});
     try {
-      const mongoRunConfig = await getMongoRunConfig({
-        mongoRunConfigFilepath: options.config,
-      });
+      let mongoRunConfig;
+
+      if (options.config) {
+        mongoRunConfig = await getMongoRunConfig({
+          mongoRunConfigFilepath: options.config,
+        });
+      } else {
+        if (!options.containerName || !options.port) {
+          throw new Error(
+            '--container-name and --port (at least 3 ports) are required when --config is not provided'
+          );
+        }
+
+        mongoRunConfig = buildQuickMongoStopConfig({
+          containerName: options.containerName,
+          ports: parseMongoCliPorts(options.port),
+          workingDir: options.workingDir,
+          dockerNetwork: options.dockerNetwork,
+        });
+      }
 
       await stopMongoMain({mongoRunConfig, logger});
       logger.log('✅ MongoDB instances stopped successfully');
@@ -457,6 +560,7 @@ mongoProgram
   )
   .option('-u, --username <username>', 'Username for authentication')
   .option('-p, --password <password>', 'Password for authentication')
+  .option('--db <database>', 'Database name to include in the URI')
   .option('--prefer-localhost', 'Prefer localhost over other hostnames', false)
   .option(
     '--server-selection-timeout <ms>',
@@ -487,6 +591,7 @@ mongoProgram
         instanceNumber,
         username: options.username,
         password: options.password,
+        database: options.db,
         preferLocalhost: options.preferLocalhost,
         serverSelectionTimeoutMs,
       });
@@ -716,7 +821,38 @@ postgresProgram
         logger,
         waitUntilListening: true,
       });
+      printPostgresUriMain({postgresRunConfig, logger});
       logger.log('✅ PostgreSQL instance started successfully');
+    } catch (error) {
+      logger.error('❌ Error:', error instanceof Error ? error.message : error);
+      logger.onSilentFail(error);
+      process.exit(1);
+    }
+  });
+
+// Print PostgreSQL URI
+postgresProgram
+  .command('print-uri')
+  .description('Print PostgreSQL connection URI using configuration')
+  .requiredOption('-c, --config <path>', 'Path to postgres run config file')
+  .option('-u, --username <username>', 'Username for authentication')
+  .option('-p, --password <password>', 'Password for authentication')
+  .option('--db <database>', 'Database name to include in the URI')
+  .option('-s, --silent', 'Silent mode')
+  .action(async options => {
+    const logger = new ConsoleForeLogger({silent: options.silent});
+    try {
+      const postgresRunConfig = await getPostgresRunConfig({
+        postgresRunConfigFilepath: options.config,
+      });
+
+      printPostgresUriMain({
+        postgresRunConfig,
+        logger,
+        username: options.username,
+        password: options.password,
+        database: options.db,
+      });
     } catch (error) {
       logger.error('❌ Error:', error instanceof Error ? error.message : error);
       logger.onSilentFail(error);
@@ -829,7 +965,7 @@ etcHostsProgram
     const logger = new ConsoleForeLogger({silent: options.silent});
 
     try {
-      await setHost({
+      await setHosts({
         hostname,
         ip,
         hostsFilePath: options.hostsFile,
@@ -1241,6 +1377,7 @@ COMMANDS:
     stop                   Stop PostgreSQL instance
     setup-users            Sync PostgreSQL users from config with instance
     setup-dbs              Setup PostgreSQL databases
+    print-uri              Print PostgreSQL connection URI using configuration
 
   etc-hosts                Manage /etc/hosts file entries
     set                    Set hostname to IP

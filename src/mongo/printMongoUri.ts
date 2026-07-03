@@ -10,8 +10,10 @@ export interface PrintMongoUriOptions {
   instanceNumber?: number;
   username?: string;
   password?: string;
+  database?: string;
   preferLocalhost?: boolean;
   serverSelectionTimeoutMs?: number;
+  includeTls?: boolean;
 }
 
 export async function printMongoUriMain(options: PrintMongoUriOptions) {
@@ -23,30 +25,38 @@ export async function printMongoUriMain(options: PrintMongoUriOptions) {
     username,
     preferLocalhost = false,
     serverSelectionTimeoutMs = 5000,
+    database,
+    includeTls = true,
   } = options;
 
   let uri: string;
   const password =
     options.password ??
-    mongoRunConfig.users?.find(user => user.username === username)?.password;
+    (username
+      ? mongoRunConfig.users?.find(user => user.username === username)?.password
+      : undefined);
 
   if (connectionType === 'instance') {
     uri = await getMongoUriForInstance({
       instanceNumber,
       username,
       password,
+      database,
       mongoRunConfig,
       logger,
       preferLocalhost,
+      includeTls,
     });
   } else {
     uri = await getMongoUriForReplicaSet({
       username,
       password,
+      database,
       mongoRunConfig,
       serverSelectionTimeoutMs,
       logger,
       preferLocalhost,
+      includeTls,
     });
   }
 

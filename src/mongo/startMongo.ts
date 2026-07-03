@@ -6,6 +6,7 @@ import {promisify} from 'util';
 import {
   containerExists,
   ensureDockerAvailable,
+  ensureDockerNetwork,
   isContainerRunning,
 } from '../utils/docker.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
@@ -19,6 +20,7 @@ import {
   waitForMemberState,
 } from './checkMongoReadyState.js';
 import {getInstanceRunName} from './constants.js';
+import {ensureMongoHostnamesResolvable} from './ensureMongoHostnamesResolvable.js';
 import {
   ensureMongoSslCertPermissions,
   resolveMongoCertOutDir,
@@ -35,9 +37,10 @@ import {
   extractHostnamesForDockerBinding,
   MongoRunConfig,
 } from './mongoRunConfig.js';
+import {printMongoUriMain} from './printMongoUri.js';
 import {setupReplicaSet} from './setupReplicaSet.js';
 import {findAdminUser, findClusterAdminUser} from './user/findUtils.js';
-import {setupMongoUsers} from './user/setupUsers.js';
+import {setupMongoUsers, setupUser} from './user/setupUsers.js';
 
 const kDefaultMongoVersion = '8.2.3';
 const kConfigHashLabel = 'forerunner.configHash';
@@ -64,6 +67,7 @@ function getRunConfigFingerprint(params: {
   nonLocalhostHostnames: string[];
   initEnv?: {username: string; password: string};
   labels?: Record<string, string>;
+  dockerNetwork?: string;
 }): string {
   const {
     port,
@@ -75,6 +79,7 @@ function getRunConfigFingerprint(params: {
     nonLocalhostHostnames,
     initEnv,
     labels,
+    dockerNetwork,
   } = params;
 
   const payload = JSON.stringify({
@@ -89,6 +94,7 @@ function getRunConfigFingerprint(params: {
     labels: labels
       ? Object.entries(labels).sort(([a], [b]) => a.localeCompare(b))
       : null,
+    dockerNetwork: dockerNetwork ?? null,
   });
   return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16);
 }
@@ -268,6 +274,7 @@ export async function startMongodInstance(params: {
     initEnv,
     systemLogDir,
     labels: mongoRunConfig.labels,
+    dockerNetwork: mongoRunConfig.dockerNetwork,
   });
 
   const runArgs: string[] = [
@@ -277,6 +284,9 @@ export async function startMongodInstance(params: {
     containerName,
     '--label',
     `${kConfigHashLabel}=${configFingerprint}`,
+    ...(mongoRunConfig.dockerNetwork
+      ? ['--network', mongoRunConfig.dockerNetwork]
+      : []),
     ...(mongoRunConfig.labels
       ? Object.entries(mongoRunConfig.labels).flatMap(([k, v]) => [
           '--label',
@@ -402,6 +412,8 @@ export async function startMongoMain(params: {
   shouldInitDbRootUser?: boolean;
   shouldSetupReplicaSet?: boolean;
   shouldSetupUsers?: boolean;
+  etcHostsSetup?: MongoRunConfig['etcHostsSetup'];
+  printUri?: boolean;
 }) {
   const {
     mongoRunConfig,
@@ -411,9 +423,15 @@ export async function startMongoMain(params: {
     shouldInitDbRootUser = true,
     shouldSetupReplicaSet = true,
     shouldSetupUsers = false,
+    etcHostsSetup,
+    printUri = true,
   } = params;
 
   await ensureDockerAvailable();
+
+  if (mongoRunConfig.dockerNetwork) {
+    await ensureDockerNetwork(mongoRunConfig.dockerNetwork);
+  }
 
   // Generate certificates if not already present
   await ensureMongoCertificates({mongoRunConfig, logger});
@@ -424,24 +442,37 @@ export async function startMongoMain(params: {
       instanceNumber: i,
       mongoRunConfig,
       logger,
-      shouldInitDbRootUser,
+      shouldInitDbRootUser:
+        shouldInitDbRootUser && mongoRunConfig.authorization !== 'disabled',
     });
   }
 
   if (waitUntilListening) {
     logger.log('Waiting for Mongo instances to begin listening...');
-    await assertMongoInstancesListening({mongoRunConfig, logger});
+    await assertMongoInstancesListening({
+      mongoRunConfig,
+      logger,
+      preferLocalhost: true,
+    });
   }
 
   // Setup replica set if requested (default: true)
   if (shouldSetupReplicaSet) {
+    await ensureMongoHostnamesResolvable({
+      mongoRunConfig,
+      mode: etcHostsSetup,
+      logger,
+      verifyMongoTls: true,
+    });
+
+    const authRequired = mongoRunConfig.authorization !== 'disabled';
     const adminUser = findAdminUser({
       users: mongoRunConfig.users,
-      isRequired: true,
+      isRequired: authRequired,
     });
     const clusterAdminUser = findClusterAdminUser({
       users: mongoRunConfig.users,
-      isRequired: true,
+      isRequired: authRequired,
     });
     await setupReplicaSet({
       mongoRunConfig,
@@ -449,30 +480,66 @@ export async function startMongoMain(params: {
       adminUser,
       clusterAdminUser,
     });
+
+    await ensureMongoHostnamesResolvable({
+      mongoRunConfig,
+      mode: 'skip',
+      logger,
+      verifyMongoTls: true,
+    });
+
     // After setting up replica set, always assert it's ready
     logger.log('Waiting for replica set to be ready...');
     await assertMongoReplicaSetReady({
       mongoRunConfig,
       logger,
-      authUser: {
-        username: adminUser.username,
-        password: adminUser.password,
-      },
+      preferLocalhost: false,
+      authUser: adminUser
+        ? {
+            username: adminUser.username,
+            password: adminUser.password,
+          }
+        : undefined,
     });
   } else if (waitUntilReplicaSetReady) {
     // If not setting up but waiting was explicitly requested, assert ready
+    const authRequired = mongoRunConfig.authorization !== 'disabled';
+    const adminUser = findAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: authRequired,
+    });
+    logger.log('Waiting for replica set to be ready...');
+    await assertMongoReplicaSetReady({
+      mongoRunConfig,
+      logger,
+      preferLocalhost: false,
+      authUser: adminUser
+        ? {
+            username: adminUser.username,
+            password: adminUser.password,
+          }
+        : undefined,
+    });
+  }
+
+  if (shouldSetupReplicaSet && mongoRunConfig.authorization !== 'disabled') {
     const adminUser = findAdminUser({
       users: mongoRunConfig.users,
       isRequired: true,
     });
-    logger.log('Waiting for replica set to be ready...');
-    await assertMongoReplicaSetReady({
+    const cluserAdminUser = findClusterAdminUser({
+      users: mongoRunConfig.users,
+      isRequired: true,
+    });
+    await setupUser({
       mongoRunConfig,
       logger,
       authUser: {
         username: adminUser.username,
         password: adminUser.password,
       },
+      connectionType: 'replicaSet',
+      user: cluserAdminUser,
     });
   }
 
@@ -489,6 +556,14 @@ export async function startMongoMain(params: {
         username: adminUser.username,
         password: adminUser.password,
       },
+      connectionType: 'replicaSet',
+    });
+  }
+
+  if (printUri && shouldSetupReplicaSet) {
+    await printMongoUriMain({
+      mongoRunConfig,
+      logger,
       connectionType: 'replicaSet',
     });
   }
