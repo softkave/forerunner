@@ -172,7 +172,9 @@ export function generatePgHbaEntriesForUser(params: {
   const connectionType = requireSSL ? 'hostssl' : 'host';
   const tcpAddresses = getPgHbaTcpAddresses(discoverability);
 
-  if (databases && databases.length > 0) {
+  const hasWildcardDatabaseAccess = databases?.includes('*') ?? false;
+
+  if (databases && databases.length > 0 && !hasWildcardDatabaseAccess) {
     // User has specific database access
     for (const db of databases) {
       if (allowTCP) {

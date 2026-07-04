@@ -2,6 +2,7 @@ import {Client} from 'pg';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
+import {grantDatabasePermissions} from './setupUsers.js';
 import {getPostgresClient} from './utils.js';
 
 async function checkIfDatabaseExists(
@@ -56,6 +57,20 @@ export async function setupDatabases(params: {
         logger.log(`Creating database ${dbName}...`);
         await createDatabase(client, dbName);
         logger.log(`Created database ${dbName}`);
+      }
+
+      for (const user of postgresRunConfig.users ?? []) {
+        const shouldGrantAccess =
+          user.databases?.includes('*') || user.databases?.includes(dbName);
+
+        if (shouldGrantAccess) {
+          await grantDatabasePermissions(
+            postgresRunConfig,
+            user.username,
+            [dbName],
+            logger
+          );
+        }
       }
     }
 

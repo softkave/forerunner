@@ -72,6 +72,104 @@ function pgHbaUsesTrust(content: string): boolean {
   );
 }
 
+function hasWildcardDatabaseAccess(databases?: string[]): boolean {
+  return Boolean(databases?.includes('*'));
+}
+
+function getDatabasesToManage(
+  desiredDatabases: string[] | undefined,
+  allDatabases: string[]
+): string[] {
+  if (hasWildcardDatabaseAccess(desiredDatabases)) {
+    return allDatabases;
+  }
+  return desiredDatabases ?? [];
+}
+
+async function grantSchemaPrivilegesToUser(
+  dbClient: Client,
+  username: string
+): Promise<void> {
+  const schemaResult = await dbClient.query(`
+    SELECT schema_name
+    FROM information_schema.schemata
+    WHERE schema_name NOT IN (
+      'pg_catalog',
+      'information_schema',
+      'pg_toast',
+      'pg_temp_1',
+      'pg_toast_temp_1'
+    )
+    ORDER BY schema_name
+  `);
+
+  for (const row of schemaResult.rows) {
+    const schemaName = row.schema_name as string;
+    await dbClient.query(
+      `GRANT USAGE, CREATE ON SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} TO ${dbClient.escapeIdentifier(username)}`
+    );
+    await dbClient.query(
+      `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} TO ${dbClient.escapeIdentifier(username)}`
+    );
+    await dbClient.query(
+      `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} TO ${dbClient.escapeIdentifier(username)}`
+    );
+    await dbClient.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} GRANT ALL ON TABLES TO ${dbClient.escapeIdentifier(username)}`
+    );
+    await dbClient.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} GRANT ALL ON SEQUENCES TO ${dbClient.escapeIdentifier(username)}`
+    );
+  }
+}
+
+async function revokeSchemaPrivilegesFromUser(
+  dbClient: Client,
+  username: string
+): Promise<void> {
+  const schemaResult = await dbClient.query(`
+    SELECT schema_name
+    FROM information_schema.schemata
+    WHERE schema_name NOT IN (
+      'pg_catalog',
+      'information_schema',
+      'pg_toast',
+      'pg_temp_1',
+      'pg_toast_temp_1'
+    )
+    ORDER BY schema_name
+  `);
+
+  for (const row of schemaResult.rows) {
+    const schemaName = row.schema_name as string;
+    await dbClient.query(
+      `REVOKE ALL ON SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} FROM ${dbClient.escapeIdentifier(username)}`
+    );
+    await dbClient.query(
+      `REVOKE ALL ON ALL TABLES IN SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} FROM ${dbClient.escapeIdentifier(username)}`
+    );
+    await dbClient.query(
+      `REVOKE ALL ON ALL SEQUENCES IN SCHEMA ${dbClient.escapeIdentifier(
+        schemaName
+      )} FROM ${dbClient.escapeIdentifier(username)}`
+    );
+  }
+}
+
 /**
  * Get databases a user currently has CONNECT privilege on. Checks all databases
  * in the config's dbs list
@@ -141,27 +239,7 @@ async function revokeDatabasePermissions(
         });
 
         try {
-          // Revoke schema privileges
-          await dbClient.query(
-            `REVOKE ALL ON SCHEMA public FROM ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
-          await dbClient.query(
-            `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
-          await dbClient.query(
-            `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
-          // Note: We can't easily revoke default privileges, but they won't
-          // apply if the user doesn't have access to the database
-          // logger.log(
-          //   `Revoked permissions on database ${db} from user ${username}`
-          // );
+          await revokeSchemaPrivilegesFromUser(dbClient, username);
         } finally {
           await dbClient.end();
         }
@@ -182,14 +260,19 @@ async function revokeDatabasePermissions(
  * granted while connected to the target database. because schemas are
  * database-scoped in PostgreSQL
  */
-async function grantDatabasePermissions(
+export async function grantDatabasePermissions(
   postgresRunConfig: PostgresRunConfig,
   username: string,
   databases: string[] | undefined,
   logger: IForeLogger
 ): Promise<void> {
-  if (!databases || databases.length === 0) {
-    // No specific databases - user already has access to all (default)
+  const targetDatabases = getDatabasesToManage(
+    databases,
+    postgresRunConfig.dbs ?? []
+  );
+
+  if (targetDatabases.length === 0) {
+    // No specific databases to manage
     return;
   }
 
@@ -200,7 +283,7 @@ async function grantDatabasePermissions(
   });
 
   try {
-    for (const db of databases) {
+    for (const db of targetDatabases) {
       try {
         // Grant CONNECT privilege (cluster-level, can be done from any
         // database)
@@ -226,40 +309,7 @@ async function grantDatabasePermissions(
         });
 
         try {
-          // These grants are scoped to THIS database's public schema only.
-          // Grant usage and create privileges on the public schema (allows user
-          // to use and create objects in the schema)
-          await dbClient.query(
-            `GRANT USAGE, CREATE ON SCHEMA public TO ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
-          // Grant all privileges on all current tables in the public schema
-          await dbClient.query(
-            `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
-          // Grant all privileges on all current sequences in the public schema
-          await dbClient.query(
-            `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
-          // Ensure user gets all privileges on tables created in the future in
-          // the public schema
-          await dbClient.query(
-            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
-          // Ensure user gets all privileges on sequences created in the future
-          // in the public schema
-          await dbClient.query(
-            `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${dbClient.escapeIdentifier(
-              username
-            )}`
-          );
+          await grantSchemaPrivilegesToUser(dbClient, username);
           logger.log(
             `Granted permissions on database ${db} to user ${username}`
           );
@@ -288,15 +338,20 @@ async function syncDatabasePermissions(
   desiredDatabases: string[] | undefined,
   logger: IForeLogger
 ): Promise<void> {
-  // If no specific databases, user should have access to all (default
-  // PostgreSQL behavior). We don't manage "all databases" explicitly, so skip
-  // sync
   if (!desiredDatabases || desiredDatabases.length === 0) {
     return;
   }
 
   // Get all databases from config to check against
   const allDatabases = postgresRunConfig.dbs || [];
+  const databasesToManage = getDatabasesToManage(
+    desiredDatabases,
+    allDatabases
+  );
+
+  if (databasesToManage.length === 0) {
+    return;
+  }
 
   // Get currently granted databases
   const currentDatabases = await getUserDatabases(
@@ -304,7 +359,7 @@ async function syncDatabasePermissions(
     username,
     allDatabases
   );
-  const desiredSet = new Set(desiredDatabases);
+  const desiredSet = new Set(databasesToManage);
 
   // Find databases to revoke (in current but not in desired)
   const toRevoke = Array.from(currentDatabases).filter(
@@ -312,7 +367,7 @@ async function syncDatabasePermissions(
   );
 
   // Find databases to grant (in desired but not in current)
-  const toGrant = desiredDatabases.filter(db => !currentDatabases.has(db));
+  const toGrant = databasesToManage.filter(db => !currentDatabases.has(db));
 
   // Revoke permissions from removed databases
   if (toRevoke.length > 0) {
@@ -342,7 +397,7 @@ async function syncDatabasePermissions(
 
   // Re-grant permissions to existing databases (in case permissions were
   // modified). This ensures permissions are always in sync with config
-  const toRegrant = desiredDatabases.filter(db => currentDatabases.has(db));
+  const toRegrant = databasesToManage.filter(db => currentDatabases.has(db));
   if (toRegrant.length > 0) {
     await grantDatabasePermissions(
       postgresRunConfig,

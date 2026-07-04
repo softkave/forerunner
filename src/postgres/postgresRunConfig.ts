@@ -21,6 +21,7 @@ export interface PostgresUser {
   /**
    * Databases this user can access.
    * If omitted, user can access all databases.
+   * Use "*" to grant access to all existing and future databases.
    */
   databases?: string[];
   /**
@@ -39,10 +40,16 @@ export const PostgresUserSchema = z.object({
   // Optional - if missing, user has no password (trust auth, if no other user
   // has a password)
   password: z.string().optional(),
-  // Optional - list of databases this user can connect to and manage
-  // If not specified, user can access all databases
+  // Optional - list of databases this user can connect to and manage.
+  // If not specified, user can access all databases.
+  // Use "*" to grant access to all existing and future databases.
   databases: z
-    .array(z.string().min(1, 'database name cannot be empty'))
+    .array(
+      z.union([
+        z.literal('*'),
+        z.string().min(1, 'database name cannot be empty'),
+      ])
+    )
     .optional(),
   // Optional - list of connection types allowed for this user
   // 'tcp' = TCP/IP connections (host/hostssl entries in pg_hba.conf)
@@ -126,6 +133,7 @@ export const postgresRunConfigSchema = z
     data.users.forEach((user, userIndex) => {
       if (user.databases) {
         user.databases.forEach((db, dbIndex) => {
+          if (db === '*') return;
           if (!dbSet.has(db)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,

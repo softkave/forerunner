@@ -11,6 +11,7 @@ import {
   checkUserCanConnect,
   checkUserCannotConnect,
   cleanupPostgresTest,
+  runSqlAsUser,
 } from './testHelpers.js';
 
 const logger = new ConsoleForeLogger({silent: true});
@@ -120,6 +121,159 @@ describe.each(POSTGRES_VERSIONS)(
           expect(cannotConnectOther).toBe(true);
         },
         30 * 1000
+      );
+
+      test(
+        'user can create and manage schemas in wildcard-granted databases',
+        async () => {
+          const configWithSchemaUser: PostgresRunConfig = {
+            ...baseConfig,
+            users: [
+              ...baseConfig.users!,
+              {
+                username: 'schemauser',
+                password: 'schema-secret',
+                databases: ['*'],
+              },
+            ],
+          };
+          await setupPostgresUsers({
+            postgresRunConfig: configWithSchemaUser,
+            logger,
+          });
+
+          const schemaName = 'schemauser_test';
+          const renamedSchemaName = 'schemauser_test_renamed';
+
+          await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `CREATE SCHEMA ${schemaName}`,
+          });
+          await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `CREATE TABLE ${schemaName}.demo (id integer primary key, value text)`,
+          });
+          await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `INSERT INTO ${schemaName}.demo (id, value) VALUES (1, 'hello')`,
+          });
+
+          const selectResult = await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `SELECT value FROM ${schemaName}.demo WHERE id = 1`,
+          });
+          expect(selectResult.rows[0]?.value).toBe('hello');
+
+          await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `UPDATE ${schemaName}.demo SET value = 'updated' WHERE id = 1`,
+          });
+
+          const updatedResult = await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `SELECT value FROM ${schemaName}.demo WHERE id = 1`,
+          });
+          expect(updatedResult.rows[0]?.value).toBe('updated');
+
+          await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `ALTER SCHEMA ${schemaName} RENAME TO ${renamedSchemaName}`,
+          });
+
+          const renamedResult = await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `SELECT value FROM ${renamedSchemaName}.demo WHERE id = 1`,
+          });
+          expect(renamedResult.rows[0]?.value).toBe('updated');
+
+          await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `DROP SCHEMA ${renamedSchemaName} CASCADE`,
+          });
+
+          const droppedSchema = await runSqlAsUser({
+            postgresRunConfig: configWithSchemaUser,
+            username: 'schemauser',
+            password: 'schema-secret',
+            database: 'appdb',
+            query: `SELECT 1 FROM information_schema.schemata WHERE schema_name = '${renamedSchemaName}'`,
+          });
+          expect(droppedSchema.rows).toHaveLength(0);
+        },
+        60 * 1000
+      );
+
+      test(
+        'setupDatabases grants access to users with explicit database access',
+        async () => {
+          const configWithExplicitAccess: PostgresRunConfig = {
+            ...baseConfig,
+            dbs: [...(baseConfig.dbs ?? []), 'newdb'],
+            users: [
+              ...baseConfig.users!,
+              {
+                username: 'explicituser',
+                password: 'explicit-secret',
+                databases: ['newdb'],
+              },
+            ],
+          };
+
+          await setupDatabases({
+            postgresRunConfig: configWithExplicitAccess,
+            logger,
+          });
+          await setupPostgresUsers({
+            postgresRunConfig: configWithExplicitAccess,
+            logger,
+          });
+
+          const canConnectNewDb = await checkUserCanConnect({
+            postgresRunConfig: configWithExplicitAccess,
+            username: 'explicituser',
+            password: 'explicit-secret',
+            database: 'newdb',
+            logger,
+          });
+          expect(canConnectNewDb).toBe(true);
+
+          const cannotConnectOtherDb = await checkUserCannotConnect({
+            postgresRunConfig: configWithExplicitAccess,
+            username: 'explicituser',
+            password: 'explicit-secret',
+            database: 'otherdb',
+            logger,
+          });
+          expect(cannotConnectOtherDb).toBe(true);
+        },
+        60 * 1000
       );
 
       test(

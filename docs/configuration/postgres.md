@@ -73,12 +73,12 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 - **Properties**:
   - `username` (string): User login name
   - `password` (string, optional): User password (required when authorization is enabled)
-  - `databases` (array of strings, optional): Databases this user can connect to; must be a subset of `dbs`. If omitted, user can access all databases
+  - `databases` (array of strings, optional): Databases this user can connect to; must be a subset of `dbs`. Use `"*"` to grant access to all configured databases, including newly created databases during setup. If omitted, user can access all databases.
   - `connectionTypes` (array, optional): Allowed connection types: `"tcp"` (host/hostssl) and/or `"local"` (Unix socket). If omitted, both are allowed
 
 **`dbs`** (array of strings, optional)
 
-- **Description**: Databases to create. The first is created via POSTGRES_DB during container startup.
+- **Description**: Databases to create. The first is created via POSTGRES_DB during container startup. During database setup, any matching configured users are created or updated and granted the necessary `CONNECT` and schema-level privileges for these databases.
 - **Example**: `["mydb", "testdb"]`
 
 **`labels`** (object, optional)
@@ -127,4 +127,5 @@ The PostgreSQL commands require a configuration file that specifies port, contai
 
 - **`authorization: "disabled"`**: PostgreSQL uses trust authentication (no password). No users are required.
 - **`authorization: "enabled"`**: PostgreSQL uses scram-sha-256. At least one user with a password is required. pg_hba.conf and postgresql.conf are set for password authentication; setup-users creates/updates users and syncs database permissions and connection types from config.
+- **Database setup behavior**: When a database is created during setup, any configured user whose `databases` list includes that database (or `"*"`) is created if needed and granted `CONNECT` and schema-level privileges for that database. This applies to both explicit database entries and wildcard access.
 - **Discoverability**: By default, instances use `discoverability: "local"` (bind only to `127.0.0.1`). Set `discoverability: "global"` to make the container reachable from all interfaces.

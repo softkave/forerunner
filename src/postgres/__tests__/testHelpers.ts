@@ -75,6 +75,36 @@ export async function checkUserCannotConnect(params: {
   return !connected;
 }
 
+export async function runSqlAsUser(params: {
+  postgresRunConfig: PostgresRunConfig;
+  username: string;
+  password: string;
+  database: string;
+  query: string;
+  logger?: IForeLogger;
+}) {
+  const {postgresRunConfig, username, password, database, query} = params;
+  const client = new Client({
+    host: '127.0.0.1',
+    port: postgresRunConfig.port,
+    user: username,
+    password,
+    database,
+    connectionTimeoutMillis: 3000,
+    ssl:
+      postgresRunConfig.ssl === 'enabled'
+        ? {rejectUnauthorized: false}
+        : undefined,
+  });
+
+  try {
+    await client.connect();
+    return await client.query(query);
+  } finally {
+    await client.end();
+  }
+}
+
 /**
  * Wait until container is not running (for after stop)
  */
