@@ -44,18 +44,24 @@ function spawnCommandWithCapturedOutput(
   env: NodeJS.ProcessEnv
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    const hasTTY =
+      Boolean(process.stdin.isTTY) &&
+      Boolean(process.stdout.isTTY) &&
+      Boolean(process.stderr.isTTY);
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
     const child = spawn(command, [], {
       shell: true,
       cwd,
-      stdio: ['inherit', 'pipe', 'pipe'],
+      stdio: hasTTY ? 'inherit' : ['inherit', 'pipe', 'pipe'],
       env,
     });
 
-    child.stdout?.pipe(teeStream(stdoutChunks, process.stdout));
-    child.stderr?.pipe(teeStream(stderrChunks, process.stderr));
+    if (!hasTTY) {
+      child.stdout?.pipe(teeStream(stdoutChunks, process.stdout));
+      child.stderr?.pipe(teeStream(stderrChunks, process.stderr));
+    }
 
     child.on('error', err => reject(err));
     child.on('close', (code, signal) => {

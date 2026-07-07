@@ -2,7 +2,7 @@
 
 [← Commands](index.md)
 
-Runs a command with variables loaded from dotenv-style files, merged on top of the current process environment. Standard input, output, and error are inherited by the child process.
+Runs a command with variables loaded from dotenv-style files, merged on top of the current process environment. When the parent process has a TTY, standard input, output, and error are inherited by the child process so interactive commands can use the terminal directly; otherwise output is captured so failures can report command output.
 
 **Usage:**
 

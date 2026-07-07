@@ -1,6 +1,6 @@
 {
   "name": "softkave-forerunner",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "description": "softkave application runner & helpers for MongoDB, Postgres, certificates and other services",
   "author": {
     "email": "ywordk@gmail.com",
