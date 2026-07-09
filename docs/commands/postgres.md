@@ -6,7 +6,7 @@ PostgreSQL instance management via Docker. Supports single PostgreSQL instances 
 
 **Supported versions**: PostgreSQL **16**, **17**, and **18** only (set via `postgresVersion` in the run config or `--version` on the CLI). Other major versions are not supported.
 
-**Docker is required** for postgres operations (start, stop, setup-users, setup-dbs); instances run as Docker containers.
+**Docker is required** for postgres operations (start, stop, setup-users, setup-dbs); instances run as Docker containers. If Docker is missing, commands print a platform-specific install link (see [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/), [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), or [Docker Engine for Linux](https://docs.docker.com/engine/install/)).
 
 **Discoverability**: By default, instances use `discoverability: "local"` (bind `127.0.0.1:port`, reachable only from this host). Set `discoverability: "global"` to bind to all interfaces (container discoverable globally).
 
@@ -106,6 +106,11 @@ softkave-forerunner postgres setup-users -c <config-path> [options]
 ```
 
 **Description**: Syncs **every** user listed in the run config with the running instance. The first user is typically created by the container image (`POSTGRES_USER` / `POSTGRES_PASSWORD`); this command still updates that user when present (password, grants, `pg_hba` entries) alongside any additional users. Creates roles that do not exist, updates passwords when provided in config, and syncs each user's database permissions (CONNECT/REVOKE) and connection types (TCP and/or local) to `pg_hba.conf`. If transitioning from trust to password authentication, updates `pg_hba.conf` and `postgresql.conf` for scram-sha-256.
+
+**When to re-run**: Re-run this command whenever databases or schemas change and users need access as defined in config. PostgreSQL grants schema access per schema at sync time — there is no database-wide privilege that covers all current and future schemas. In practice:
+
+- **New databases in config**: Create them with [`setup-dbs`](#setup-postgresql-databases) (or ensure they already exist), then run `setup-users` so matching users receive `CONNECT`, `CREATE`, and schema-level grants.
+- **New schemas in an existing database**: Schemas created by an admin or migration are not accessible to configured users until you re-run `setup-users`, which re-applies grants on every schema that exists at sync time. (Users can still create and use their own schemas without a re-run, because they receive `CREATE` on the database.)
 
 **Prerequisites**: Expects PostgreSQL instance to be running and connects using the admin user from config.
 

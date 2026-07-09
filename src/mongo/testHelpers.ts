@@ -6,10 +6,62 @@ import {removeDockerNetwork} from '../utils/docker.js';
 import {IForeLogger} from '../utils/exports.js';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {resolvePathUnderWorkingDir} from '../utils/resolvePathUnderWorkingDir.js';
-import {closeMongoClient, getMongoClient} from './connection.js';
+import {
+  closeMongoClient,
+  getMongoClient,
+  isConnectedToReplicaSet,
+} from './connection.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
 import {stopMongoMain} from './stopMongo.js';
 import {findAdminUser} from './user/findUtils.js';
+import {MongoUser} from './user/types.js';
+
+export async function assertReplicaSetReadWrite(params: {
+  mongoRunConfig: MongoRunConfig;
+  logger: IForeLogger;
+  authUser?: Pick<MongoUser, 'username' | 'password'>;
+  preferLocalhost?: boolean;
+}) {
+  const {mongoRunConfig, logger, authUser, preferLocalhost = false} = params;
+  const dbName = `forerunner_quickstart_${Date.now()}`;
+  const collectionName = 'items';
+
+  const client = await getMongoClient({
+    mongoRunConfig,
+    logger,
+    authUser,
+    preferLocalhost,
+    connectionType: 'replicaSet',
+  });
+
+  try {
+    expect(isConnectedToReplicaSet(client)).toBe(true);
+    await expect(client.db('admin').command({ping: 1})).resolves.toBeDefined();
+
+    const db = client.db(dbName);
+    await db.createCollection(collectionName);
+
+    const collection = db.collection(collectionName);
+    const insertResult = await collection.insertOne({value: 'initial', n: 1});
+    expect(insertResult.acknowledged).toBe(true);
+
+    const updateResult = await collection.updateOne(
+      {_id: insertResult.insertedId},
+      {$set: {value: 'updated', n: 2}}
+    );
+    expect(updateResult.modifiedCount).toBe(1);
+
+    const doc = await collection.findOne({_id: insertResult.insertedId});
+    expect(doc).toMatchObject({value: 'updated', n: 2});
+  } finally {
+    try {
+      await client.db(dbName).dropDatabase();
+    } catch {
+      // Ignore cleanup errors if setup failed before the database was created.
+    }
+    await closeMongoClient(client, /** params */ {});
+  }
+}
 
 export async function checkAdminCanConnect(params: {
   mongoRunConfig: MongoRunConfig;

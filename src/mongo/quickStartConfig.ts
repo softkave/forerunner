@@ -19,7 +19,10 @@ export function getQuickStartContainerHostname(
   return `${containerName}-mongod-${instanceNumber}`;
 }
 
-/** Stable dev hostname derived from container name (deterministic). */
+/** Default quick-start hostname suffix (RFC 2606 `.test`; avoids macOS mDNS on `.local`). */
+export const DEFAULT_QUICK_START_HOSTNAME_SUFFIX = '.mongo.test';
+
+/** Stable quick-start hostname derived from container name (deterministic). */
 export function getDefaultDevHostname(
   containerName: string,
   instanceNumber: number
@@ -27,7 +30,7 @@ export function getDefaultDevHostname(
   return `${getQuickStartContainerHostname(
     containerName,
     instanceNumber
-  )}.dev.local`;
+  )}${DEFAULT_QUICK_START_HOSTNAME_SUFFIX}`;
 }
 
 function buildDefaultHostnames(
@@ -115,12 +118,11 @@ export function buildQuickMongoRunConfig(params: {
           {
             username: user!,
             password: password!,
-            roles: [{role: 'userAdminAnyDatabase', db: 'admin'}],
-          },
-          {
-            username: 'cluster-admin',
-            password: password!,
-            roles: [{role: 'clusterAdmin', db: 'admin'}],
+            roles: [
+              {role: 'userAdminAnyDatabase', db: 'admin'},
+              {role: 'readWriteAnyDatabase', db: 'admin'},
+              {role: 'clusterAdmin', db: 'admin'},
+            ],
           },
         ]
       : [],

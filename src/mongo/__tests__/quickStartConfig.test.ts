@@ -37,14 +37,14 @@ describe('quickStartConfig', () => {
 
   test('getDefaultDevHostname is stable for the same container name', () => {
     expect(getDefaultDevHostname('my-mongo', 1)).toBe(
-      'my-mongo-mongod-1.dev.local'
+      'my-mongo-mongod-1.mongo.test'
     );
     expect(getDefaultDevHostname('my-mongo', 1)).toBe(
-      'my-mongo-mongod-1.dev.local'
+      'my-mongo-mongod-1.mongo.test'
     );
   });
 
-  test('buildQuickMongoRunConfig uses stable dev.local hostnames with local resolution', () => {
+  test('buildQuickMongoRunConfig uses stable mongo.test hostnames with local resolution', () => {
     const config = buildQuickMongoRunConfig({
       containerName: 'dev-mongo',
       ports: [27100, 27101, 27102],
@@ -60,11 +60,11 @@ describe('quickStartConfig', () => {
     expect(config.users).toEqual([]);
 
     const instanceOneHostnames = extractHostnames(config.hostnames[0]);
-    expect(instanceOneHostnames).toContain('dev-mongo-mongod-1.dev.local');
+    expect(instanceOneHostnames).toContain('dev-mongo-mongod-1.mongo.test');
     expect(instanceOneHostnames).toContain('localhost');
 
     const instanceThreeHostnames = extractHostnames(config.hostnames[2]);
-    expect(instanceThreeHostnames).toContain('dev-mongo-mongod-3.dev.local');
+    expect(instanceThreeHostnames).toContain('dev-mongo-mongod-3.mongo.test');
   });
 
   test('buildQuickMongoRunConfig accepts custom hostnames', () => {
@@ -88,10 +88,14 @@ describe('quickStartConfig', () => {
     });
 
     expect(config.authorization).toBe('enabled');
-    expect(config.users).toHaveLength(2);
+    expect(config.users).toHaveLength(1);
     expect(config.users[0]?.username).toBe('admin');
-    expect(config.users[1]?.username).toBe('cluster-admin');
-    expect(config.users[1]?.password).toBe('secret');
+    expect(config.users[0]?.password).toBe('secret');
+    expect(config.users[0]?.roles).toEqual([
+      {role: 'userAdminAnyDatabase', db: 'admin'},
+      {role: 'readWriteAnyDatabase', db: 'admin'},
+      {role: 'clusterAdmin', db: 'admin'},
+    ]);
   });
 
   test('buildQuickMongoStopConfig builds minimal config for stop', () => {

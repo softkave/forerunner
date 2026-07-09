@@ -3,7 +3,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
 import {grantDatabasePermissions} from './setupUsers.js';
-import {getPostgresClient} from './utils.js';
+import {ensureDockerAvailable, getPostgresClient} from './utils.js';
 
 async function checkIfDatabaseExists(
   client: Client,
@@ -26,6 +26,8 @@ export async function setupDatabases(params: {
 }) {
   const {postgresRunConfig, logger = new ConsoleForeLogger({silent: true})} =
     params;
+
+  await ensureDockerAvailable();
 
   if (!postgresRunConfig.dbs || postgresRunConfig.dbs.length === 0) {
     logger.log('No databases in config; skipping database setup');

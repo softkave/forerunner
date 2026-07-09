@@ -1,6 +1,7 @@
 import {execFile} from 'child_process';
 import {
   containerExists,
+  ensureDockerAvailable,
   isContainerRunning,
   removeDockerNetwork,
 } from '../utils/docker.js';
@@ -76,6 +77,8 @@ export async function stopMongoMain(params: {
     logger = new ConsoleForeLogger({silent: true}),
     force = false,
   } = params;
+
+  await ensureDockerAvailable();
 
   const results = await Promise.allSettled(
     Array.from({length: mongoRunConfig.ports.length}, async (_, i) => {

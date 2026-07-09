@@ -4,6 +4,7 @@ import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
+  ensureDockerAvailable,
   generatePgHbaEntriesForUser,
   generateRandomPassword,
   getPostgresClient,
@@ -445,6 +446,8 @@ export async function setupPostgresUsers(params: {
 }) {
   const {postgresRunConfig, logger = new ConsoleForeLogger({silent: true})} =
     params;
+
+  await ensureDockerAvailable();
 
   if (!postgresRunConfig.users || postgresRunConfig.users.length === 0) {
     logger.log('No users in config; skipping user setup');

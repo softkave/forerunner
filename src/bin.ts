@@ -371,7 +371,7 @@ mongoProgram
   )
   .option(
     '--hostname <names...>',
-    'Non-localhost hostname per instance (defaults to <container>-mongod-N.dev.local)'
+    'Non-localhost hostname per instance (defaults to <container>-mongod-N.mongo.test)'
   )
   .option(
     '--etc-hosts-setup <mode>',

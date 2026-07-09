@@ -1,6 +1,7 @@
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
+import {ensureDockerAvailable} from '../utils/docker.js';
 import {containerExists, isContainerRunning, volumeExists} from './utils.js';
 import {spawnInherit} from '../utils/spawnInherit.js';
 
@@ -18,6 +19,8 @@ export async function stopPostgresInstance(params: {
     force = false,
     removeVolume = false,
   } = params;
+
+  await ensureDockerAvailable();
 
   if (!(await containerExists(containerName))) {
     logger.log(`Container ${containerName} does not exist`);

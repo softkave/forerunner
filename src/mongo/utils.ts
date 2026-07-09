@@ -76,10 +76,10 @@ export async function getMongoUriForInstance(params: {
   const hostnames = compileHostnames({
     hostnames: mongoRunConfig.hostnames[instanceNumber - 1],
   });
-  const bindIp0 = params.preferLocalhost
+  const logicalHostname = params.preferLocalhost
     ? getFirstLocalhostBindIp({hostnames}) || hostnames[0]
-    : hostnames[0];
-  const host = `${bindIp0}:${mongoRunConfig.ports[instanceNumber - 1]}`;
+    : getFirstNonLocalhostBindIp({hostnames}) || hostnames[0];
+  const host = `${logicalHostname}:${mongoRunConfig.ports[instanceNumber - 1]}`;
   const uri = buildMongoUri({
     authority: host,
     path: params.database,

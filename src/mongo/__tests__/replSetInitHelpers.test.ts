@@ -114,7 +114,7 @@ describe('replSetInitHelpers', () => {
       members: [{_id: 0, host: 'host:27017'}],
     });
     expect(script).toContain('system.replset.findOne()');
-    expect(script).toContain(`e.code === ${kMongoErrorAlreadyInitialized}`);
+    expect(script).toContain(`e.code == ${kMongoErrorAlreadyInitialized}`);
     expect(script).toContain(`'${kMongoErrorNameAlreadyInitialized}'`);
     expect(script).toContain('"rs0"');
   });
@@ -144,6 +144,7 @@ describe('replSetInitHelpers', () => {
         '[{"_id":0,"host":"mongo-1.dev.local:27017"}]\n'
       )
     ).toEqual([{_id: 0, host: 'mongo-1.dev.local:27017'}]);
+    expect(parseReplicaSetMembersOutput('[]')).toEqual([]);
   });
 
   test('buildReplicaSetReconfigScript uses force reconfig', () => {

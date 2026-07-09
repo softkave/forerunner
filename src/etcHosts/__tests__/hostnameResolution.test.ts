@@ -57,7 +57,7 @@ describe('hostnameResolution', () => {
     expect(missing).toEqual([]);
   });
 
-  test('getHostnamesNeedingHostsEntry skips when /etc/hosts already maps targetIp', async () => {
+  test('getHostnamesNeedingHostsEntry skips when hostname and port are reachable', async () => {
     const hostsFilePath = await (async () => {
       const {mkdtemp, writeFile} = await import('fs/promises');
       const os = await import('os');
@@ -65,46 +65,38 @@ describe('hostnameResolution', () => {
       const dir = await mkdtemp(path.join(os.tmpdir(), 'forerunner-hosts-'));
       await writeFile(
         path.join(dir, 'hosts'),
-        '127.0.0.1\tmongo-1.dev.local\n',
+        '127.0.0.1\tmongo-1.mongo.test\n',
         'utf8'
       );
       return path.join(dir, 'hosts');
     })();
 
-    vi.spyOn(reachability, 'canReachTcpPort').mockResolvedValue(false);
+    vi.spyOn(reachability, 'canReachTcpPort').mockResolvedValue(true);
 
     const missing = await getHostnamesNeedingHostsEntry({
-      hostnamePorts: [{hostname: 'mongo-1.dev.local', port: 27017}],
+      hostnamePorts: [{hostname: 'mongo-1.mongo.test', port: 27017}],
       hostsFilePath,
       targetIp: '127.0.0.1',
     });
 
     expect(missing).toEqual([]);
+    expect(reachability.canReachTcpPort).toHaveBeenCalledWith({
+      host: 'mongo-1.mongo.test',
+      port: 27017,
+      timeoutMs: 2_000,
+    });
   });
 
-  test('getHostnamesNeedingHostsEntry flags wrong /etc/hosts mapping', async () => {
-    const hostsFilePath = await (async () => {
-      const {mkdtemp, writeFile} = await import('fs/promises');
-      const os = await import('os');
-      const path = await import('path');
-      const dir = await mkdtemp(path.join(os.tmpdir(), 'forerunner-hosts-'));
-      await writeFile(
-        path.join(dir, 'hosts'),
-        '172.17.0.1\tmongo-1.dev.local\n',
-        'utf8'
-      );
-      return path.join(dir, 'hosts');
-    })();
-
+  test('getHostnamesNeedingHostsEntry flags unreachable hostnames', async () => {
     vi.spyOn(reachability, 'canReachTcpPort').mockResolvedValue(false);
 
     const missing = await getHostnamesNeedingHostsEntry({
-      hostnamePorts: [{hostname: 'mongo-1.dev.local', port: 27017}],
-      hostsFilePath,
+      hostnamePorts: [{hostname: 'mongo-1.mongo.test', port: 27017}],
+      hostsFilePath: '/does-not-exist-for-test',
       targetIp: '127.0.0.1',
     });
 
-    expect(missing).toEqual(['mongo-1.dev.local']);
+    expect(missing).toEqual(['mongo-1.mongo.test']);
   });
 
   test('getHostnamesNeedingHostsEntry accepts LAN IP when port is reachable', async () => {

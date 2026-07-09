@@ -69,9 +69,11 @@ export function isMongoAuthProbeUnavailableError(message: string): boolean {
 
 export type ReplicaSetMemberConfig = {_id: number; host: string};
 
-/** Probe whether local.system.replset has a config document. */
-export const kReplSetConfigProbeScript =
-  "db.getSiblingDB('local').system.replset.findOne() !== null";
+/** Probe whether local.system.replset has a usable config document. */
+export const kReplSetConfigProbeScript = `(() => {
+  const doc = db.getSiblingDB('local').system.replset.findOne();
+  return doc !== null && Array.isArray(doc.members) && doc.members.length > 0;
+})()`;
 
 /** Whether replSetGetStatus reports at least one PRIMARY member. */
 export const kReplSetHasPrimaryScript = `JSON.stringify(
@@ -82,9 +84,13 @@ export const kReplSetHasPrimaryScript = `JSON.stringify(
 
 /** Read persisted replica set member hostnames from local.system.replset. */
 export const kReplSetMembersReadScript = `JSON.stringify(
-  db.getSiblingDB('local').system.replset.findOne().members.map(
-    m => ({_id: m._id, host: m.host})
-  )
+  (() => {
+    const doc = db.getSiblingDB('local').system.replset.findOne();
+    if (!doc || !Array.isArray(doc.members)) {
+      return [];
+    }
+    return doc.members.map(m => ({_id: m._id, host: m.host}));
+  })()
 )`;
 
 export function replicaSetMembersMatch(
@@ -144,7 +150,7 @@ export function buildReplicaSetInitiateScript(config: {
     rs.initiate(config);
   } catch (e) {
     if (
-      e.code === ${kMongoErrorAlreadyInitialized} ||
+      e.code == ${kMongoErrorAlreadyInitialized} ||
       e.codeName === '${kMongoErrorNameAlreadyInitialized}'
     ) {
       return;

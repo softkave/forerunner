@@ -46,7 +46,7 @@ export async function ensureMongoHostnamesResolvable(params: {
   mongoRunConfig: MongoRunConfig;
   mode?: EtcHostsSetupMode;
   logger: IForeLogger;
-  /** When true, verify each dev.local hostname with a Mongo TLS connection. */
+  /** When true, verify each quick-start hostname with a Mongo TLS connection. */
   verifyMongoTls?: boolean;
 }): Promise<void> {
   const {mongoRunConfig, mode, logger, verifyMongoTls = false} = params;
@@ -71,6 +71,7 @@ export async function ensureMongoHostnamesResolvable(params: {
     preferLocalhost: false,
     retries: 3,
   });
+
   if (!reachable) {
     throw new Error(
       'Replica set hostnames are not reachable via Mongo TLS after /etc/hosts setup'

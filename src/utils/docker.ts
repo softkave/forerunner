@@ -70,13 +70,26 @@ export async function runDockerOneOffAsRoot(params: {
   );
 }
 
+export function getDockerInstallMessage(): string {
+  switch (process.platform) {
+    case 'darwin':
+      return 'Install Docker Desktop for Mac: https://docs.docker.com/desktop/setup/install/mac-install/';
+    case 'win32':
+      return 'Install Docker Desktop for Windows: https://docs.docker.com/desktop/setup/install/windows-install/';
+    case 'linux':
+      return 'Install Docker Engine for Linux: https://docs.docker.com/engine/install/';
+    default:
+      return 'Install Docker: https://docs.docker.com/get-docker/';
+  }
+}
+
 export async function ensureDockerAvailable(): Promise<void> {
   try {
     await execFileAsync('docker', ['info'], {encoding: 'utf8'});
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Docker is not available. Please ensure Docker is installed and running: ${msg}`
+      `Docker is not available. Please ensure Docker is installed and running.\n${getDockerInstallMessage()}\nDetails: ${msg}`
     );
   }
 }

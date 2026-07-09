@@ -18,32 +18,6 @@ export function findHostnameInHostsEntries(params: {
   return params.entries.find(entry => entry.hostname === params.hostname);
 }
 
-/** IP from /etc/hosts only (no DNS fallback). */
-export async function lookupHostsFileIp(params: {
-  hostname: string;
-  hostsFilePath?: string;
-}): Promise<string | undefined> {
-  const {hostname, hostsFilePath} = params;
-
-  if (isLocalHostname(hostname)) {
-    return '127.0.0.1';
-  }
-
-  try {
-    const content = await fsp.readFile(
-      hostsFilePath ?? DEFAULT_HOSTS_FILE,
-      'utf8'
-    );
-    const entry = findHostnameInHostsEntries({
-      hostname,
-      entries: parseHostsFile({content}),
-    });
-    return entry?.ip;
-  } catch {
-    return undefined;
-  }
-}
-
 export async function lookupHostnameAddress(params: {
   hostname: string;
   hostsFilePath?: string;
@@ -98,9 +72,9 @@ export async function getUnresolvableHostnames(params: {
 /**
  * Hostnames that need a /etc/hosts entry pointing at `targetIp`.
  *
- * A hostname is considered OK when the published TCP port is reachable at its
- * current resolution (IPv4 or IPv6 via DNS or /etc/hosts). When not reachable,
- * an entry is needed unless /etc/hosts already maps the name to `targetIp`.
+ * A hostname is considered OK when the published TCP port is reachable via the
+ * hostname itself (resolved through /etc/hosts or DNS). Otherwise an entry is
+ * needed.
  */
 export async function getHostnamesNeedingHostsEntry(params: {
   hostnamePorts: HostnamePort[];
@@ -108,52 +82,19 @@ export async function getHostnamesNeedingHostsEntry(params: {
   targetIp: string;
   connectTimeoutMs?: number;
 }): Promise<string[]> {
-  const {
-    hostnamePorts,
-    hostsFilePath,
-    targetIp,
-    connectTimeoutMs = 2_000,
-  } = params;
+  const {hostnamePorts, connectTimeoutMs = 2_000} = params;
   const missing: string[] = [];
 
   for (const {hostname, port} of hostnamePorts) {
-    const needsEntry = await hostnameNeedsHostsEntry({
-      hostname,
+    const reachable = await canReachTcpPort({
+      host: hostname,
       port,
-      hostsFilePath,
-      targetIp,
-      connectTimeoutMs,
+      timeoutMs: connectTimeoutMs,
     });
-    if (needsEntry) {
+    if (!reachable) {
       missing.push(hostname);
     }
   }
 
   return [...new Set(missing)];
-}
-
-async function hostnameNeedsHostsEntry(params: {
-  hostname: string;
-  port: number;
-  hostsFilePath?: string;
-  targetIp: string;
-  connectTimeoutMs: number;
-}): Promise<boolean> {
-  const {hostname, port, hostsFilePath, targetIp, connectTimeoutMs} = params;
-
-  const ipInHostsFile = await lookupHostsFileIp({hostname, hostsFilePath});
-  if (ipInHostsFile === targetIp) {
-    return false;
-  }
-  if (ipInHostsFile !== undefined) {
-    return true;
-  }
-
-  if (
-    await canReachTcpPort({host: hostname, port, timeoutMs: connectTimeoutMs})
-  ) {
-    return false;
-  }
-
-  return true;
 }

@@ -14,7 +14,7 @@ import {
 } from '../quickStartConfig.js';
 import {startMongoMain} from '../startMongo.js';
 import {stopMongoMain} from '../stopMongo.js';
-import {cleanupMongoTest} from '../testHelpers.js';
+import {assertReplicaSetReadWrite, cleanupMongoTest} from '../testHelpers.js';
 
 const logger = new ConsoleForeLogger({silent: true});
 
@@ -30,9 +30,9 @@ afterAll(async () => {
   }
 });
 
-describe('mongo quick start with dev.local hostnames', () => {
+describe('mongo quick start with mongo.test hostnames', () => {
   test(
-    'starts replica set without config file using dev.local hostnames',
+    'starts replica set without config file using mongo.test hostnames',
     async () => {
       const containerName = 'test-mongo-quick';
       const ports = await Promise.all([getPort(), getPort(), getPort()]);
@@ -80,9 +80,15 @@ describe('mongo quick start with dev.local hostnames', () => {
         preferLocalhost: false,
       });
 
+      await assertReplicaSetReadWrite({
+        mongoRunConfig,
+        logger,
+        preferLocalhost: false,
+      });
+
       for (let i = 1; i <= ports.length; i++) {
         expect(getDefaultDevHostname(containerName, i)).toBe(
-          `${containerName}-mongod-${i}.dev.local`
+          `${containerName}-mongod-${i}.mongo.test`
         );
       }
 
@@ -94,7 +100,7 @@ describe('mongo quick start with dev.local hostnames', () => {
     40 * 1000
   );
 
-  test.only(
+  test(
     'starts replica set with auth when user and password are provided',
     async () => {
       const containerName = 'test-mongo-auth';
@@ -125,6 +131,16 @@ describe('mongo quick start with dev.local hostnames', () => {
       });
 
       await assertMongoReplicaSetReady({
+        mongoRunConfig,
+        logger,
+        preferLocalhost: false,
+        authUser: {
+          username: 'admin',
+          password: 'admin-secret',
+        },
+      });
+
+      await assertReplicaSetReadWrite({
         mongoRunConfig,
         logger,
         preferLocalhost: false,

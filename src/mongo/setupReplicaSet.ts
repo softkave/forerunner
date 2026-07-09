@@ -1,7 +1,7 @@
 import assert from 'assert';
 import {execFile} from 'child_process';
-import {promisify} from 'util';
 import {waitTimeout} from 'softkave-js-utils';
+import {promisify} from 'util';
 import {ConsoleForeLogger} from '../utils/foreLogger/ConsoleForeLogger.js';
 import {IForeLogger} from '../utils/foreLogger/types.js';
 import {MongoRunConfig} from './mongoRunConfig.js';
@@ -16,11 +16,15 @@ import {
   kReplSetHasPrimaryScript,
   kReplSetMembersReadScript,
   parseReplicaSetMembersOutput,
-  replicaSetMembersMatch,
   ReplicaSetMemberConfig,
+  replicaSetMembersMatch,
 } from './replSetInitHelpers.js';
 import {getDockerContainerName, startMongoMain} from './startMongo.js';
-import {compileHostnames, getFirstNonLocalhostBindIp} from './utils.js';
+import {
+  compileHostnames,
+  getFirstLocalhostBindIp,
+  getFirstNonLocalhostBindIp,
+} from './utils.js';
 
 const kMongoshFirstInstance = 1;
 const kReplSetInitProbeMaxAttempts = 5;
@@ -45,12 +49,15 @@ function buildMembers(
 function getMongoshConnectionUri(params: {
   mongoRunConfig: MongoRunConfig;
   authUser?: {username: string; password: string};
+  preferLocalhost?: boolean;
 }): string {
-  const {mongoRunConfig, authUser} = params;
+  const {mongoRunConfig, authUser, preferLocalhost = false} = params;
   const hostnames = compileHostnames({
     hostnames: mongoRunConfig.hostnames[0],
   });
-  const hostname = getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0];
+  const hostname = preferLocalhost
+    ? (getFirstLocalhostBindIp({hostnames}) ?? hostnames[0])
+    : (getFirstNonLocalhostBindIp({hostnames}) ?? hostnames[0]);
   assert.ok(hostname, `hostname must be set for instance 1`);
   const port = mongoRunConfig.ports[0];
   const auth =
@@ -199,7 +206,10 @@ function buildReplicaSetProbeCredentials(params: {
   if (adminUser) {
     credentials.push({
       label: 'admin',
-      uri: getMongoshConnectionUri({mongoRunConfig, authUser: adminUser}),
+      uri: getMongoshConnectionUri({
+        mongoRunConfig,
+        authUser: adminUser,
+      }),
     });
   }
   if (credentials.length === 0) {
@@ -273,6 +283,12 @@ async function reconfigReplicaSetIfMembersChanged(params: {
     uri,
     logger,
   });
+  if (currentMembers.length === 0) {
+    logger.log(
+      'No persisted replica set config found; skipping reconfiguration'
+    );
+    return false;
+  }
   if (replicaSetMembersMatch(expectedMembers, currentMembers)) {
     return false;
   }
@@ -363,20 +379,30 @@ export async function setupReplicaSet(params: {
   const mongoshUri = probe.uri;
 
   if (probe.status === 'initialized') {
-    await reconfigReplicaSetIfMembersChanged({
-      mongoRunConfig,
-      uri: mongoshUri,
-      replicaSetName,
-      expectedMembers: members,
-      logger,
-    });
-    await waitForReplicaSetPrimary({
-      mongoRunConfig,
+    const persistedMembers = await getPersistedReplicaSetMembers({
+      containerName,
       uri: mongoshUri,
       logger,
     });
-    logger.log('Replica set is already initialized');
-    return {alreadyInitialized: true};
+    if (persistedMembers.length > 0) {
+      await reconfigReplicaSetIfMembersChanged({
+        mongoRunConfig,
+        uri: mongoshUri,
+        replicaSetName,
+        expectedMembers: members,
+        logger,
+      });
+      await waitForReplicaSetPrimary({
+        mongoRunConfig,
+        uri: mongoshUri,
+        logger,
+      });
+      logger.log('Replica set is already initialized');
+      return {alreadyInitialized: true};
+    }
+    logger.log(
+      'Replica set probe reported initialized but no persisted config was found; initiating...'
+    );
   }
 
   logger.log('Initializing replica set...');
@@ -393,13 +419,20 @@ export async function setupReplicaSet(params: {
   } catch (err) {
     const msg = getMongoshErrorMessage(err);
     if (isMongoAlreadyInitializedError(msg)) {
-      await reconfigReplicaSetIfMembersChanged({
-        mongoRunConfig,
+      const persistedMembers = await getPersistedReplicaSetMembers({
+        containerName,
         uri: mongoshUri,
-        replicaSetName,
-        expectedMembers: members,
         logger,
       });
+      if (persistedMembers.length > 0) {
+        await reconfigReplicaSetIfMembersChanged({
+          mongoRunConfig,
+          uri: mongoshUri,
+          replicaSetName,
+          expectedMembers: members,
+          logger,
+        });
+      }
       await waitForReplicaSetPrimary({
         mongoRunConfig,
         uri: mongoshUri,

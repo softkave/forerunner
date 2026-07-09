@@ -4,7 +4,7 @@
 
 MongoDB replica set management. **Only replica sets are supported**; standalone (single-node) instances are not supported.
 
-**Docker is required** for mongo operations (start, stop, setup-replica-set, restart, etc.); instances run as Docker containers.
+**Docker is required** for mongo operations (start, stop, setup-replica-set, restart, etc.); instances run as Docker containers. If Docker is missing, commands print a platform-specific install link (see [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/), [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), or [Docker Engine for Linux](https://docs.docker.com/engine/install/)).
 
 **When authorization is enabled:** Both an admin user (with `userAdminAnyDatabase`) and a cluster admin user (with `clusterAdmin`) are required in config. The admin user is used for user management, and the cluster admin user is required for replica set operations such as restart, status, and reconfig. If replica-set initialization is enabled on start, forerunner will enforce that both users are present and will create/sync them as part of startup.
 
@@ -24,7 +24,7 @@ softkave-forerunner mongo start \
 **What to know:**
 
 - At least 3 ports are required for a replica set.
-- `--hostname <names...>` lets you provide one non-localhost hostname per instance; if you omit it, Forerunner uses generated `.dev.local` hostnames.
+- `--hostname <names...>` lets you provide one non-localhost hostname per instance; if you omit it, Forerunner uses generated `.mongo.test` hostnames.
 - `--etc-hosts-setup <mode>` controls how those hostnames are made resolvable: `prompt` (default), `add`, `manual`, or `skip`. If you already manage `/etc/hosts` yourself, prefer `skip` or `manual`.
 - `--setup-users` initializes the configured admin and cluster-admin users after startup.
 
