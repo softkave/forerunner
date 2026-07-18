@@ -2,6 +2,11 @@
 
 [← Commands](index.md)
 
+## Commands
+
+- [`start`](#start-background-process) — Start a background process with PID and log tracking
+- [`children-pids`](#find-children-pids) — Find all child PIDs of a parent PID
+
 **Platform support:** `pm children-pids` only works on Linux and macOS. `pm start` is supported on Linux and macOS (background detached processes).
 
 #### Start background process

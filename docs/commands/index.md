@@ -33,6 +33,7 @@ Command reference for the Forerunner CLI.
 - [`postgres stop`](postgres.md#stop-postgresql-instance) — Stop PostgreSQL instance
 - [`postgres setup-users`](postgres.md#setup-postgresql-users) — Setup PostgreSQL users
 - [`postgres setup-dbs`](postgres.md#setup-postgresql-databases) — Setup PostgreSQL databases
+- [`postgres print-uri`](postgres.md#print-postgresql-uri) — Print PostgreSQL connection URI
 
 ### Hosts file management
 

@@ -2,11 +2,24 @@
 
 [← Commands](index.md)
 
+## Commands
+
+- [`scaffold-config`](#scaffold-configuration) — Generate PostgreSQL configuration file
+- [`validate-config`](#validate-postgresql-configuration) — Validate PostgreSQL configuration file
+- [`generate-certs`](#generate-certificates) — Generate PostgreSQL certificates
+- [`start`](#start-postgresql-instance) — Start PostgreSQL instance
+- [`stop`](#stop-postgresql-instance) — Stop PostgreSQL instance
+- [`setup-users`](#setup-postgresql-users) — Setup PostgreSQL users
+- [`setup-dbs`](#setup-postgresql-databases) — Setup PostgreSQL databases
+- [`print-uri`](#print-postgresql-uri) — Print PostgreSQL connection URI
+
 PostgreSQL instance management via Docker. Supports single PostgreSQL instances with configurable authentication, SSL, users, and databases.
 
 **Supported versions**: PostgreSQL **16**, **17**, and **18** only (set via `postgresVersion` in the run config or `--version` on the CLI). Other major versions are not supported.
 
 **Docker is required** for postgres operations (start, stop, setup-users, setup-dbs); instances run as Docker containers. If Docker is missing, commands print a platform-specific install link (see [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/), [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), or [Docker Engine for Linux](https://docs.docker.com/engine/install/)).
+
+**Connecting**: When SSL is enabled, instances use self-generated certificates. Connect with `sslmode=require&sslrejectunauthorized=false` in the URI, or generate a ready-to-use URI with [`postgres print-uri`](#print-postgresql-uri) (includes those params when `ssl: "enabled"`).
 
 **Discoverability**: By default, instances use `discoverability: "local"` (bind `127.0.0.1:port`, reachable only from this host). Set `discoverability: "global"` to bind to all interfaces (container discoverable globally).
 
@@ -127,3 +140,19 @@ softkave-forerunner postgres setup-dbs -c <config-path> [options]
 **Prerequisites**: Expects PostgreSQL instance to be running and connects using the admin user from config.
 
 **Options**: `-c, --config <path>` (required), `-s, --silent`
+
+#### Print PostgreSQL URI
+
+```bash
+softkave-forerunner postgres print-uri -c <config-path> [options]
+```
+
+**Description**: Prints the PostgreSQL connection URI for the given config. When `ssl: "enabled"`, the URI includes `sslmode=require&sslrejectunauthorized=false` so clients can connect with the self-generated certificates.
+
+**Options**:
+
+- `-c, --config <path>` - Path to postgres run config file (required)
+- `-u, --username <username>` - Username for authentication
+- `-p, --password <password>` - Password for authentication
+- `--db <database>` - Database name to include in the URI
+- `-s, --silent` - Silent mode

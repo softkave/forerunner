@@ -2,6 +2,11 @@
 
 [← Commands](index.md)
 
+## Commands
+
+- [`password`](#generate-password) — Generate production-grade password(s)
+- [`jwt-secret`](#generate-jwt-secret) — Generate production-grade JWT secret(s)
+
 Security utilities for generating production-grade passwords and JWT secrets.
 
 #### Generate Password

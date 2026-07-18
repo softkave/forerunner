@@ -2,6 +2,13 @@
 
 [← Commands](index.md)
 
+## Commands
+
+- [`ca`](#generate-certificate-authority) — Generate Certificate Authority
+- [`cert`](#generate-certificate) — Generate signed certificate
+- [`ssh-key`](#generate-ssh-keypair) — Generate an SSH keypair
+- [`keyfile`](#generate-keyfile) — Generate a keyfile (e.g. MongoDB keyFile)
+
 Generate and manage SSL/TLS certificates for development and infrastructure.
 
 #### Generate Certificate Authority

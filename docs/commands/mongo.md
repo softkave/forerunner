@@ -2,9 +2,24 @@
 
 [← Commands](index.md)
 
+## Commands
+
+- [`scaffold-config`](#scaffold-mongodb-configuration) — Generate MongoDB configuration file
+- [`validate-config`](#validate-mongodb-configuration) — Validate MongoDB configuration file
+- [`setup-replica-set`](#setup-replica-set-deprecated) — Setup replica set (deprecated)
+- [`generate-certs`](#generate-certificates) — Generate MongoDB certificate configs and certificates
+- [`start`](#start-mongodb-instances) — Start MongoDB instances
+- [`stop`](#stop-mongodb-instances) — Stop MongoDB instances
+- [`setup-users`](#setup-mongodb-users) — Setup MongoDB users
+- [`print-uri`](#print-mongodb-uri) — Print MongoDB connection URI
+- [`replica-set-status`](#print-replica-set-status) — Print replica set status
+- [`restart`](#restart-mongodb-rolling-restart) — Rolling restart of replica set members
+
 MongoDB replica set management. **Only replica sets are supported**; standalone (single-node) instances are not supported.
 
 **Docker is required** for mongo operations (start, stop, setup-replica-set, restart, etc.); instances run as Docker containers. If Docker is missing, commands print a platform-specific install link (see [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/), [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), or [Docker Engine for Linux](https://docs.docker.com/engine/install/)).
+
+**Connecting**: Instances use self-generated TLS certificates. Connect with `tls=true&tlsAllowInvalidCertificates=true` in the URI, or generate a ready-to-use URI with [`mongo print-uri`](#print-mongodb-uri) (includes those params by default).
 
 **When authorization is enabled:** Both an admin user (with `userAdminAnyDatabase`) and a cluster admin user (with `clusterAdmin`) are required in config. The admin user is used for user management, and the cluster admin user is required for replica set operations such as restart, status, and reconfig. If replica-set initialization is enabled on start, forerunner will enforce that both users are present and will create/sync them as part of startup.
 
@@ -189,7 +204,7 @@ Members:
 softkave-forerunner mongo print-uri -c <config-path> [options]
 ```
 
-**Description**: Prints the MongoDB connection URI for the given config (replica set or single instance).
+**Description**: Prints the MongoDB connection URI for the given config (replica set or single instance). The URI includes `tls=true&tlsAllowInvalidCertificates=true` by default so clients can connect with the self-generated certificates.
 
 **Options**:
 
@@ -198,6 +213,7 @@ softkave-forerunner mongo print-uri -c <config-path> [options]
 - `--instance-number <number>` - Instance number for instance connection type (default: "1")
 - `-u, --username <username>` - Username for authentication
 - `-p, --password <password>` - Password for authentication
+- `--db <database>` - Database name to include in the URI
 - `--prefer-localhost` - Prefer localhost over other hostnames (default: false)
 - `--server-selection-timeout <ms>` - Server selection timeout in milliseconds (default: "5000")
 - `-s, --silent` - Silent mode

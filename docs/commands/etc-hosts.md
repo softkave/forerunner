@@ -2,6 +2,14 @@
 
 [← Commands](index.md)
 
+## Commands
+
+- [`set`](#set-host-entry) — Set host entry
+- [`remove`](#remove-host-entry) — Remove host entry
+- [`list`](#list-host-entries) — List host entries
+- [`backup`](#backup-hosts-file) — Backup hosts file
+- [`restore`](#restore-hosts-file) — Restore hosts file
+
 Manage `/etc/hosts` file entries for local development.
 
 **Platform Support:** These commands only work on Mac/Linux systems.
