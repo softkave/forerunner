@@ -5,9 +5,10 @@ import {IForeLogger} from '../utils/foreLogger/types.js';
 import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
   ensureDockerAvailable,
-  generatePgHbaEntriesForUser,
+  generatePgHbaConfContent,
   generateRandomPassword,
   getPostgresClient,
+  pgHbaConfNeedsUpdate,
   readPgHbaConf,
   readPostgresConfig,
   reloadPostgresConfigViaClient,
@@ -485,30 +486,13 @@ export async function setupPostgresUsers(params: {
     }
 
     // Generate pg_hba.conf entries for all users with database-specific access
-    const sslEnabled = postgresRunConfig.ssl === 'enabled';
-    const authMethod = authEnabled ? 'scram-sha-256' : 'trust';
-    const pgHbaEntries: string[] = [];
-
-    // Generate entries for each user
-    for (const user of postgresRunConfig.users) {
-      const entries = generatePgHbaEntriesForUser({
-        username: user.username,
-        databases: user.databases,
-        authMethod,
-        requireSSL: sslEnabled,
-        connectionTypes: user.connectionTypes,
-        discoverability: postgresRunConfig.discoverability,
-      });
-      pgHbaEntries.push(entries);
-    }
+    const newPgHba = generatePgHbaConfContent(postgresRunConfig);
 
     // Authorization was enabled, now disabled: set pg_hba to trust and reload
     if (!authEnabled && pgHbaContent && pgHbaUsesScram(pgHbaContent)) {
       logger.log(
         'Transitioning from scram to trust (authorization disabled)...'
       );
-      // Generate new pg_hba.conf with user-specific entries
-      const newPgHba = pgHbaEntries.join('\n') + '\n';
       await writePgHbaConf({
         containerName,
         postgresVersion: postgresRunConfig.postgresVersion,
@@ -534,8 +518,6 @@ export async function setupPostgresUsers(params: {
         logger
       );
       didSyncForScramTransition = true;
-      // Generate new pg_hba.conf with user-specific entries
-      const newPgHba = pgHbaEntries.join('\n') + '\n';
       const updatedConf =
         setPostgresConfPasswordEncryption(postgresConfContent);
       await writePgHbaConf({
@@ -565,11 +547,9 @@ export async function setupPostgresUsers(params: {
     }
 
     // Update pg_hba.conf with user-specific database entries if not already
-    // done
-    if (!didSyncForScramTransition && authEnabled) {
-      const newPgHba = pgHbaEntries.join('\n') + '\n';
-      // Only update if content has changed
-      if (newPgHba.trim() !== pgHbaContent.trim()) {
+    // done (including missing IPv4/IPv6 CIDRs on re-run)
+    if (!didSyncForScramTransition) {
+      if (pgHbaConfNeedsUpdate(pgHbaContent, newPgHba)) {
         await writePgHbaConf({
           containerName,
           postgresVersion: postgresRunConfig.postgresVersion,

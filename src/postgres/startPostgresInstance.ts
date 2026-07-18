@@ -13,7 +13,6 @@ import {PostgresRunConfig} from './postgresRunConfig.js';
 import {
   containerExists,
   ensureDockerAvailable,
-  generatePgHbaEntriesForUser,
   generateRandomPassword,
   getPostgresClient,
   getPostgresVolumeMountPath,
@@ -25,6 +24,7 @@ import {
   setPgHbaRequireSSL,
   setPostgresConfPasswordEncryption,
   setPostgresConfSSL,
+  syncPgHbaConfFromConfig,
   volumeExists,
   waitForPostgresReady,
   writePgHbaConf,
@@ -228,19 +228,18 @@ async function configurePostgresAuthorization(params: {
 }): Promise<void> {
   const {postgresRunConfig, containerName, client, logger} = params;
   const authEnabled = postgresRunConfig.authorization === 'enabled';
-  const firstUser = postgresRunConfig.users?.[0];
+  const users = postgresRunConfig.users;
 
-  if (!authEnabled || !firstUser) {
+  if (!users?.length) {
     return;
   }
 
-  const postgresSuperuser = postgresRunConfig.users?.find(
-    u => u.username === 'postgres'
-  );
+  const firstUser = users[0];
+  const postgresSuperuser = users.find(u => u.username === 'postgres');
 
   // Set postgres superuser password if not in users list (only if role exists;
   // when POSTGRES_USER is set, the image may not create the postgres role)
-  if (!postgresSuperuser?.password) {
+  if (authEnabled && firstUser && !postgresSuperuser?.password) {
     const roleCheck = await client.query(
       "SELECT 1 FROM pg_roles WHERE rolname = 'postgres'"
     );
@@ -255,59 +254,33 @@ async function configurePostgresAuthorization(params: {
     }
   }
 
-  // Update postgresql.conf for scram-sha-256
-  const postgresConfContent = await readPostgresConfig({
-    containerName,
-    postgresVersion: postgresRunConfig.postgresVersion,
-  });
-  const confScram = setPostgresConfPasswordEncryption(postgresConfContent);
-
   let configChanged = false;
 
-  if (confScram !== postgresConfContent) {
-    await writePostgresConfig({
+  if (authEnabled) {
+    // Update postgresql.conf for scram-sha-256
+    const postgresConfContent = await readPostgresConfig({
       containerName,
       postgresVersion: postgresRunConfig.postgresVersion,
-      content: confScram,
     });
-    logger.log('Updated postgresql.conf (password_encryption=scram-sha-256)');
-    configChanged = true;
-  }
+    const confScram = setPostgresConfPasswordEncryption(postgresConfContent);
 
-  // Generate pg_hba.conf entries with database-specific access
-  const sslEnabled = postgresRunConfig.ssl === 'enabled';
-  const authMethod = 'scram-sha-256';
-  const pgHbaEntries: string[] = [];
-
-  if (postgresRunConfig.users) {
-    for (const user of postgresRunConfig.users) {
-      const entries = generatePgHbaEntriesForUser({
-        username: user.username,
-        databases: user.databases,
-        authMethod,
-        requireSSL: sslEnabled,
-        connectionTypes: user.connectionTypes,
-        discoverability: postgresRunConfig.discoverability,
+    if (confScram !== postgresConfContent) {
+      await writePostgresConfig({
+        containerName,
+        postgresVersion: postgresRunConfig.postgresVersion,
+        content: confScram,
       });
-      pgHbaEntries.push(entries);
+      logger.log('Updated postgresql.conf (password_encryption=scram-sha-256)');
+      configChanged = true;
     }
   }
 
-  const newPgHba = pgHbaEntries.join('\n') + '\n';
-  const pgHbaContent = await readPgHbaConf({
+  const {changed: pgHbaChanged} = await syncPgHbaConfFromConfig({
+    postgresRunConfig,
     containerName,
-    postgresVersion: postgresRunConfig.postgresVersion,
+    logger,
   });
-
-  if (newPgHba.trim() !== pgHbaContent.trim()) {
-    await writePgHbaConf({
-      containerName,
-      postgresVersion: postgresRunConfig.postgresVersion,
-      content: newPgHba,
-    });
-    logger.log(
-      'Updated pg_hba.conf with user-specific database entries (scram-sha-256)'
-    );
+  if (pgHbaChanged) {
     configChanged = true;
   }
 

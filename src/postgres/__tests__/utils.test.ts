@@ -1,12 +1,14 @@
 import {describe, expect, test} from 'vitest';
 import type {PostgresRunConfig} from '../postgresRunConfig.js';
 import {
+  generatePgHbaConfContent,
   generatePgHbaEntriesForUser,
   getPgHbaTcpAddresses,
   getPostgresConnectionSslModesToTry,
   getPostgresDataDirPath,
   getPostgresMajorVersion,
   getPostgresVolumeMountPath,
+  pgHbaConfNeedsUpdate,
   pgHbaRequiresSSL,
   setPgHbaRequireSSL,
   setPgHbaToScram,
@@ -110,6 +112,48 @@ describe('getPgHbaTcpAddresses', () => {
   test('global adds all-address CIDRs', () => {
     expect(getPgHbaTcpAddresses('global')).toContain('0.0.0.0/0');
     expect(getPgHbaTcpAddresses('global')).toContain('::/0');
+  });
+});
+
+describe('generatePgHbaConfContent', () => {
+  test('includes both IPv4 and IPv6 host entries per user', () => {
+    const content = generatePgHbaConfContent({
+      authorization: 'enabled',
+      ssl: 'disabled',
+      discoverability: 'local',
+      users: [{username: 'alice', password: 'secret'}],
+    } as PostgresRunConfig);
+
+    expect(content).toContain('host all alice 127.0.0.1/32 scram-sha-256');
+    expect(content).toContain('host all alice ::1/128 scram-sha-256');
+  });
+});
+
+describe('pgHbaConfNeedsUpdate', () => {
+  test('returns false when current already has all expected lines', () => {
+    const expected =
+      'host all alice 127.0.0.1/32 scram-sha-256\nhost all alice ::1/128 scram-sha-256\n';
+    expect(pgHbaConfNeedsUpdate(expected, expected)).toBe(false);
+  });
+
+  test('returns true when IPv6 entries are missing from current', () => {
+    const current = 'host all alice 127.0.0.1/32 scram-sha-256\n';
+    const expected =
+      'host all alice 127.0.0.1/32 scram-sha-256\nhost all alice ::1/128 scram-sha-256\n';
+    expect(pgHbaConfNeedsUpdate(current, expected)).toBe(true);
+  });
+
+  test('returns true when IPv4 entries are missing from current', () => {
+    const current = 'host all alice ::1/128 scram-sha-256\n';
+    const expected =
+      'host all alice 127.0.0.1/32 scram-sha-256\nhost all alice ::1/128 scram-sha-256\n';
+    expect(pgHbaConfNeedsUpdate(current, expected)).toBe(true);
+  });
+
+  test('returns false when expected is empty', () => {
+    expect(pgHbaConfNeedsUpdate('host all all 127.0.0.1/32 trust', '')).toBe(
+      false
+    );
   });
 });
 

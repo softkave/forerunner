@@ -203,6 +203,98 @@ export function generatePgHbaEntriesForUser(params: {
   return entries.join('\n');
 }
 
+/** Build the full `pg_hba.conf` body from a run config's users. */
+export function generatePgHbaConfContent(
+  postgresRunConfig: PostgresRunConfig
+): string {
+  const authEnabled = postgresRunConfig.authorization === 'enabled';
+  const authMethod = authEnabled ? 'scram-sha-256' : 'trust';
+  const sslEnabled = postgresRunConfig.ssl === 'enabled';
+  const users = postgresRunConfig.users;
+
+  if (!users?.length) {
+    return '';
+  }
+
+  const pgHbaEntries = users.map(user =>
+    generatePgHbaEntriesForUser({
+      username: user.username,
+      databases: user.databases,
+      authMethod,
+      requireSSL: sslEnabled,
+      connectionTypes: user.connectionTypes,
+      discoverability: postgresRunConfig.discoverability,
+    })
+  );
+
+  return pgHbaEntries.join('\n') + '\n';
+}
+
+/**
+ * Returns true when `expected` contains host/hostssl lines missing from
+ * `current` (e.g. IPv6 CIDRs added after an older IPv4-only pg_hba).
+ */
+export function pgHbaConfNeedsUpdate(
+  current: string,
+  expected: string
+): boolean {
+  const expectedLines = expected
+    .trim()
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (expectedLines.length === 0) {
+    return false;
+  }
+
+  if (current.trim() === expected.trim()) {
+    return false;
+  }
+
+  const currentLines = new Set(
+    current
+      .trim()
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+  );
+
+  return expectedLines.some(line => !currentLines.has(line));
+}
+
+/** Sync generated `pg_hba.conf` when required IPv4/IPv6 entries are missing. */
+export async function syncPgHbaConfFromConfig(params: {
+  postgresRunConfig: PostgresRunConfig;
+  containerName: string;
+  logger?: IForeLogger;
+}): Promise<{changed: boolean; content: string}> {
+  const {postgresRunConfig, containerName, logger} = params;
+  const expected = generatePgHbaConfContent(postgresRunConfig);
+
+  if (!expected) {
+    return {changed: false, content: ''};
+  }
+
+  const current = await readPgHbaConf({
+    containerName,
+    postgresVersion: postgresRunConfig.postgresVersion,
+  });
+
+  if (!pgHbaConfNeedsUpdate(current, expected)) {
+    return {changed: false, content: current};
+  }
+
+  await writePgHbaConf({
+    containerName,
+    postgresVersion: postgresRunConfig.postgresVersion,
+    content: expected,
+  });
+  logger?.log('Updated pg_hba.conf with user-specific database entries');
+
+  return {changed: true, content: expected};
+}
+
 export function setPgHbaToScram(content: string): string {
   return content
     .replace(/^(local\s+all\s+all\s+)\S+$/gm, '$1scram-sha-256')
